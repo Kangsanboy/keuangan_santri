@@ -1,103 +1,94 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-} from "react";
-import { supabase } from "@/lib/supabase";
-import { Session, User } from "@supabase/supabase-js";
-import { toast } from "@/components/ui/use-toast";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
-/* =======================
-   TYPES
-======================= */
-
-type Profile = {
+interface UserProfile {
   id: string;
   email: string;
-  role: "admin" | "editor" | "viewer";
-};
+  role: "admin" | "viewer";
+  created_at: string;
+}
 
-type AuthContextType = {
+interface AuthContextType {
   user: User | null;
   session: Session | null;
-  profile: Profile | null;
+  profile: UserProfile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    role: "admin" | "viewer"
+  ) => Promise<any>;
+  signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
-};
-
-/* =======================
-   CONTEXT
-======================= */
+  isAdmin: boolean;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/* =======================
-   PROVIDER
-======================= */
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+};
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { toast } = useToast();
+
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* =======================
-     FETCH PROFILE
-  ======================= */
-
+  // 🔹 Fetch profile dari public.users
   const fetchProfile = async (userId: string) => {
+  try {
     const { data, error } = await supabase
       .from("users")
-      .select("id, email, role")
+      .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle(); // ✅ AMAN
 
     if (error) {
-      console.error("Fetch profile error:", error);
+      console.warn("Profile fetch warning:", error.message);
       setProfile(null);
       return;
     }
 
-    setProfile(data as Profile);
-  };
+    if (!data) {
+      console.warn("Profile not found");
+      setProfile(null);
+      return;
+    }
 
-  /* =======================
-     INIT & LISTENER
-  ======================= */
+    setProfile(data);
+  } catch (err) {
+    console.error("Fetch profile error:", err);
+    setProfile(null);
+  }
+};
 
+  // 🔹 INIT SESSION
   useEffect(() => {
-    let mounted = true;
-
     const init = async () => {
-      setLoading(true);
-
       const { data } = await supabase.auth.getSession();
-      const session = data.session;
 
-      if (!mounted) return;
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
 
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
+      if (data.session?.user) {
+        await fetchProfile(data.session.user.id);
       }
 
-      if (mounted) setLoading(false);
+      setLoading(false);
     };
 
     init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        if (!mounted) return;
-
-        setLoading(true);
         setSession(session);
         setUser(session?.user ?? null);
 
@@ -107,36 +98,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null);
         }
 
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
     );
 
-    return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
-    };
+    return () => listener.subscription.unsubscribe();
   }, []);
 
-  /* =======================
-     AUTH ACTIONS
-  ======================= */
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  // 🔐 AUTH ACTIONS
+  const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName,
+          role,
+        },
+      },
     });
 
     if (error) {
-      toast({
-        title: "Login gagal",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
+      toast({ title: "Registrasi gagal", description: error.message, variant: "destructive" });
+      return { data: null, error };
+    }
+
+    toast({ title: "Registrasi berhasil", description: "Silakan login." });
+    return { data, error: null };
+  };
+
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      toast({ title: "Login gagal", description: error.message, variant: "destructive" });
+      return { data: null, error };
+      await supabase.auth.refreshSession();
     }
 
     toast({ title: "Login berhasil" });
+    return { data, error: null };
   };
 
   const signOut = async () => {
@@ -146,30 +147,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
-  /* =======================
-     PROVIDER VALUE
-  ======================= */
-
-  const value: AuthContextType = {
-    user,
-    session,
-    profile,
-    loading,
-    signIn,
-    signOut,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-/* =======================
-   HOOK
-======================= */
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return context;
-}
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        signUp,
+        signIn,
+        signOut,
+        isAdmin: profile?.role === "admin",
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
