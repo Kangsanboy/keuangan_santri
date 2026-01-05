@@ -18,10 +18,12 @@ const App = () => (
         <HashRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/santri" element={<Index />} />
+            <Route path="/keuangan" element={<Index />} />
+            <Route path="/users" element={<Index />} />
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </HashRouter>
+            </Routes>
+            </HashRouter>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
