@@ -20,11 +20,14 @@ interface Santri {
   nama_lengkap: string;
 }
 
+type UIType = "pemasukan" | "pengeluaran";
+type DBType = "income" | "expense";
+
 const TransactionForm = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [type, setType] = useState<"pemasukan" | "pengeluaran">("pemasukan");
+  const [type, setType] = useState<UIType>("pemasukan");
   const [kelas, setKelas] = useState<number | null>(null);
   const [gender, setGender] = useState<"ikhwan" | "akhwat" | null>(null);
   const [santriId, setSantriId] = useState<string | null>(null);
@@ -33,20 +36,20 @@ const TransactionForm = () => {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* 🔹 Reset gender & santri saat kelas berubah */
+  /* reset saat kelas berubah */
   useEffect(() => {
     setGender(null);
     setSantriId(null);
     setSantriList([]);
   }, [kelas]);
 
-  /* 🔹 Reset santri saat gender berubah */
+  /* reset saat gender berubah */
   useEffect(() => {
     setSantriId(null);
     setSantriList([]);
   }, [gender]);
 
-  /* 🔹 Ambil santri sesuai kelas & gender */
+  /* ambil santri */
   useEffect(() => {
     const fetchSantri = async () => {
       if (!kelas || !gender) return;
@@ -74,7 +77,7 @@ const TransactionForm = () => {
     fetchSantri();
   }, [kelas, gender]);
 
-  /* 🔹 Simpan transaksi */
+  /* simpan transaksi */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -96,18 +99,22 @@ const TransactionForm = () => {
       return;
     }
 
+    const dbType: DBType =
+      type === "pemasukan" ? "income" : "expense";
+
     setLoading(true);
 
     try {
       const { error } = await supabase
         .from("transactions_2025_12_01_21_34")
         .insert({
-          user_id: user?.id,
+          user_id: user!.id,
           santri_id: santriId,
-          type,
+          type: dbType,
           amount: Number(amount),
           description,
-          transaction_date: new Date().toISOString().split("T")[0],
+          category: "santri",
+          transaction_date: new Date().toISOString().slice(0, 10),
         });
 
       if (error) throw error;
@@ -117,14 +124,13 @@ const TransactionForm = () => {
         description: "Transaksi berhasil disimpan",
       });
 
-      /* 🔔 kasih tahu halaman keuangan */
       window.dispatchEvent(new Event("refresh-keuangan"));
 
-      /* reset sebagian */
       setAmount("");
       setDescription("");
       setSantriId(null);
-    } catch {
+    } catch (err) {
+      console.error(err);
       toast({
         title: "Error",
         description: "Gagal menyimpan transaksi",
@@ -143,10 +149,9 @@ const TransactionForm = () => {
 
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Jenis */}
           <div className="space-y-2">
             <Label>Jenis Transaksi</Label>
-            <Select value={type} onValueChange={(v) => setType(v as any)}>
+            <Select value={type} onValueChange={(v) => setType(v as UIType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -157,7 +162,6 @@ const TransactionForm = () => {
             </Select>
           </div>
 
-          {/* Kelas */}
           <div className="space-y-2">
             <Label>Kelas</Label>
             <Select onValueChange={(v) => setKelas(Number(v))}>
@@ -174,7 +178,6 @@ const TransactionForm = () => {
             </Select>
           </div>
 
-          {/* Gender */}
           <div className="space-y-2">
             <Label>Gender</Label>
             <Select
@@ -192,7 +195,6 @@ const TransactionForm = () => {
             </Select>
           </div>
 
-          {/* Santri */}
           <div className="space-y-2">
             <Label>Santri</Label>
             <Select
@@ -201,13 +203,7 @@ const TransactionForm = () => {
               disabled={santriList.length === 0}
             >
               <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    !kelas || !gender
-                      ? "Pilih kelas & gender dulu"
-                      : "Pilih santri"
-                  }
-                />
+                <SelectValue placeholder="Pilih santri" />
               </SelectTrigger>
               <SelectContent>
                 {santriList.map((s) => (
@@ -219,24 +215,20 @@ const TransactionForm = () => {
             </Select>
           </div>
 
-          {/* Nominal */}
           <div className="space-y-2">
             <Label>Nominal</Label>
             <Input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="Masukkan nominal"
             />
           </div>
 
-          {/* Keterangan */}
           <div className="space-y-2">
             <Label>Keterangan</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Opsional"
             />
           </div>
 
