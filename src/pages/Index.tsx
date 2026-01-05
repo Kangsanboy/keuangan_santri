@@ -59,46 +59,47 @@ const Index = () => {
 
   /* ================= AMBIL DATA KEUANGAN ================= */
   const fetchKeuangan = async () => {
-    const today = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(today.getDate() - 6);
+  const today = new Date();
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(today.getDate() - 6);
 
-    const { data, error } = await supabase
-      .from("transactions_2025_12_01_21_34")
-      .select("amount, type, transaction_date");
+  const { data, error } = await supabase
+    .from("transactions_2025_12_01_21_34")
+    .select("amount, type, transaction_date");
 
-    if (error || !data) return;
+  if (error || !data) return;
 
-    /* TOTAL */
-    const masuk = data
-      .filter((d) => d.type === "pemasukan")
-      .reduce((s, d) => s + d.amount, 0);
+  /* ================= TOTAL KESELURUHAN ================= */
+  const totalIncome = data
+    .filter((d) => d.type === "income")
+    .reduce((sum, d) => sum + Number(d.amount), 0);
 
-    const keluar = data
-      .filter((d) => d.type === "pengeluaran")
-      .reduce((s, d) => s + d.amount, 0);
+  const totalExpense = data
+    .filter((d) => d.type === "expense")
+    .reduce((sum, d) => sum + Number(d.amount), 0);
 
-    setTotalMasuk(masuk);
-    setTotalKeluar(keluar);
+  setTotalMasuk(totalIncome);
+  setTotalKeluar(totalExpense);
 
-    /* 7 HARI */
-    const mingguIni = data.filter((d) => {
-      const tgl = new Date(d.transaction_date);
-      return tgl >= sevenDaysAgo && tgl <= today;
-    });
+  /* ================= 7 HARI TERAKHIR ================= */
+  const last7Days = data.filter((d) => {
+    const tgl = new Date(d.transaction_date);
+    return tgl >= sevenDaysAgo && tgl <= today;
+  });
 
-    const masuk7 = mingguIni
-      .filter((d) => d.type === "pemasukan")
-      .reduce((s, d) => s + d.amount, 0);
+  const income7 = last7Days
+    .filter((d) => d.type === "income")
+    .reduce((sum, d) => sum + Number(d.amount), 0);
 
-    const keluar7 = mingguIni
-      .filter((d) => d.type === "pengeluaran")
-      .reduce((s, d) => s + d.amount, 0);
+  const expense7 = last7Days
+    .filter((d) => d.type === "expense")
+    .reduce((sum, d) => sum + Number(d.amount), 0);
 
-    setMingguanMasuk(masuk7);
-    setMingguanKeluar(keluar7);
-    setRataKeluar(Math.round(keluar7 / 7));
-  };
+  setMingguanMasuk(income7);
+  setMingguanKeluar(expense7);
+  setRataKeluar(expense7 ? Math.round(expense7 / 7) : 0);
+};
+
 
   /* ================= EXPORT EXCEL ================= */
   const exportExcel = async () => {
