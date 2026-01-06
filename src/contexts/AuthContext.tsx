@@ -11,8 +11,8 @@ type Role = "admin" | "viewer";
 
 interface AuthContextType {
   user: any;
-  loading: boolean;
   role: Role | null;
+  loading: boolean;
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
@@ -27,62 +27,59 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   /* ================= AMBIL ROLE ================= */
   const fetchRole = async (userId: string) => {
-  const { data, error } = await supabase
-    .from("user_profiles_2025_12_01_21_34")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle();
+    const { data, error } = await supabase
+      .from("user_profiles_2025_12_01_21_34")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-  if (error) {
-    console.error("fetchRole error:", error.message);
-    setRole("viewer");
-    return;
-  }
+    if (error || !data) {
+      console.warn("Role tidak ditemukan, default viewer");
+      return "viewer" as Role;
+    }
 
-  if (!data) {
-    console.warn("Profile tidak ditemukan untuk user:", userId);
-    setRole("viewer");
-    return;
-  }
+    return data.role as Role;
+  };
 
-  setRole(data.role);
-};
   /* ================= INIT AUTH ================= */
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
-    const init = async () => {
+    const initAuth = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        if (!mounted) return;
-
-        const session = data.session;
-        setUser(session?.user ?? null);
+        if (!active) return;
 
         if (session?.user) {
-          await fetchRole(session.user.id); // ⬅️ TUNGGU ROLE
+          setUser(session.user);
+          const fetchedRole = await fetchRole(session.user.id);
+          if (active) setRole(fetchedRole);
         } else {
+          setUser(null);
           setRole(null);
         }
       } catch (err) {
         console.error("Auth init error:", err);
       } finally {
-        if (mounted) setLoading(false); // ⬅️ PASTI SELESAI
+        if (active) setLoading(false);
       }
     };
 
-    init();
+    initAuth();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
+    const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        if (!mounted) return;
-
-        setUser(session?.user ?? null);
+        if (!active) return;
 
         if (session?.user) {
-          await fetchRole(session.user.id);
+          setUser(session.user);
+          const fetchedRole = await fetchRole(session.user.id);
+          if (active) setRole(fetchedRole);
         } else {
+          setUser(null);
           setRole(null);
         }
 
@@ -91,18 +88,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
+      active = false;
+      subscription.subscription.unsubscribe();
     };
   }, []);
 
-  /* ================= AUTH ACTION ================= */
+  /* ================= ACTION ================= */
   const signIn = async (email: string, password: string) => {
-    const res = await supabase.auth.signInWithPassword({
+    return await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return res;
   };
 
   const signOut = async () => {
@@ -117,8 +113,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     <AuthContext.Provider
       value={{
         user,
-        loading,
         role,
+        loading,
         isAdmin,
         signIn,
         signOut,
