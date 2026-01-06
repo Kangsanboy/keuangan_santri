@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SaldoKelas from "@/pages/SaldoKelas";
+import AuthCallback from "@/pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
