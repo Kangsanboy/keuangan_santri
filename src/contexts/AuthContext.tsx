@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 interface UserProfile {
   id: string;
   email: string;
+  full_name: string | null;
   role: "admin" | "viewer";
   created_at: string;
 }
@@ -34,7 +35,9 @@ export const useAuth = () => {
   return ctx;
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { toast } = useToast();
 
   const [user, setUser] = useState<User | null>(null);
@@ -42,68 +45,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ================= FETCH PROFILE ================= */
+  /* ================= FETCH PROFILE (NON BLOCKING) ================= */
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
 
-    if (error || !data) {
-      setProfile(null);
-      return;
-    }
-
-    setProfile(data);
-  };
-
-  /* ================= INIT AUTH (RELOAD SAFE) ================= */
-  useEffect(() => {
-    let mounted = true;
-
-    const initAuth = async () => {
-      setLoading(true);
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      } else {
+      if (error || !data) {
         setProfile(null);
+        return;
       }
 
-      setLoading(false); // 🔥 HANYA DI SINI
+      setProfile(data);
+    } catch {
+      setProfile(null);
+    }
+  };
+
+  /* ================= INIT SESSION ================= */
+  useEffect(() => {
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
+
+      // 🔥 PENTING: loading DIMATIKAN DI SINI
+      setLoading(false);
+
+      if (data.session?.user) {
+        fetchProfile(data.session.user.id); // ❌ TANPA await
+      }
     };
 
-    initAuth();
+    init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!mounted) return;
-
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        setLoading(false);
 
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          fetchProfile(session.user.id); // ❌ TANPA await
         } else {
           setProfile(null);
         }
       }
     );
 
-    return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
-    };
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   /* ================= AUTH ACTIONS ================= */
@@ -122,22 +116,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (error) {
-      toast({ title: "Registrasi gagal", description: error.message, variant: "destructive" });
+      toast({
+        title: "Registrasi gagal",
+        description: error.message,
+        variant: "destructive",
+      });
       return { data: null, error };
     }
 
-    toast({ title: "Registrasi berhasil", description: "Silakan login" });
+    toast({
+      title: "Registrasi berhasil",
+      description: "Silakan login",
+    });
+
     return { data, error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } =
+      await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      toast({ title: "Login gagal", description: error.message, variant: "destructive" });
+      toast({
+        title: "Login gagal",
+        description: error.message,
+        variant: "destructive",
+      });
       return { data: null, error };
     }
 
