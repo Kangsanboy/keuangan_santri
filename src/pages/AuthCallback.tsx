@@ -12,7 +12,6 @@ const AuthCallback = () => {
 
   return () => clearTimeout(timer);
 }, [navigate]);
-      }
     };
 
     handleAuth();
