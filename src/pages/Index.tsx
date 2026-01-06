@@ -1,39 +1,33 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import AuthPage from "@/components/AuthPage";
 import Header from "@/components/Header";
 import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
 import UserManagement from "@/components/UserManagement";
 import FinanceChart from "@/components/FinanceChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-/* 🔹 NAMA BULAN */
-const NAMA_BULAN = [
-  "Januari",
-  "Februari",
-  "Maret",
-  "April",
-  "Mei",
-  "Juni",
-  "Juli",
-  "Agustus",
-  "September",
-  "Oktober",
-  "November",
-  "Desember",
-];
+/* ================= TYPES ================= */
+interface RekapSaldo {
+  kelas: number;
+  gender: "ikhwan" | "akhwat";
+  saldo: number;
+}
+
+/* ================= STYLE ================= */
+const cardStyle =
+  "border-2 border-green-500/60 rounded-2xl bg-white shadow-sm";
 
 const Index = () => {
   const { user, loading, isAdmin } = useAuth();
@@ -41,70 +35,78 @@ const Index = () => {
 
   const tab = searchParams.get("tab") || "transactions";
   const kelas = searchParams.get("kelas");
+  const navigate = useNavigate();
 
   /* ================= STATE ================= */
+  const [rekapSaldo, setRekapSaldo] = useState<RekapSaldo[]>([]);
   const [totalMasuk, setTotalMasuk] = useState(0);
   const [totalKeluar, setTotalKeluar] = useState(0);
+  const [masuk7Hari, setMasuk7Hari] = useState(0);
+  const [keluar7Hari, setKeluar7Hari] = useState(0);
+  const [keluarHariIni, setKeluarHariIni] = useState(0);
 
-  const [mingguanMasuk, setMingguanMasuk] = useState(0);
-  const [mingguanKeluar, setMingguanKeluar] = useState(0);
-  const [rataKeluar, setRataKeluar] = useState(0);
-
-  const [bulan, setBulan] = useState<number>(
-    new Date().getMonth() + 1
-  );
-  const [tahun, setTahun] = useState<number>(
-    new Date().getFullYear()
-  );
-
-  /* ================= AMBIL DATA KEUANGAN ================= */
+  /* ================= AMBIL DATA ================= */
   const fetchKeuangan = async () => {
-  const today = new Date();
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(today.getDate() - 6);
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 6);
+    const todayStr = today.toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
-    .from("transactions_2025_12_01_21_34")
-    .select("amount, type, transaction_date");
+    const { data } = await supabase
+      .from("transactions_2025_12_01_21_34")
+      .select("amount, type, transaction_date");
 
-  if (error || !data) return;
+    if (!data) return;
 
-  /* ================= TOTAL KESELURUHAN ================= */
-  const totalIncome = data
-    .filter((d) => d.type === "income")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    let masuk = 0,
+      keluar = 0,
+      masuk7 = 0,
+      keluar7 = 0,
+      keluarToday = 0;
 
-  const totalExpense = data
-    .filter((d) => d.type === "expense")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    data.forEach((d) => {
+      const tgl = new Date(d.transaction_date);
 
-  setTotalMasuk(totalIncome);
-  setTotalKeluar(totalExpense);
+      if (d.type === "income") masuk += d.amount;
+      if (d.type === "expense") keluar += d.amount;
 
-  /* ================= 7 HARI TERAKHIR ================= */
-  const last7Days = data.filter((d) => {
-    const tgl = new Date(d.transaction_date);
-    return tgl >= sevenDaysAgo && tgl <= today;
-  });
+      if (tgl >= sevenDaysAgo && tgl <= today) {
+        if (d.type === "income") masuk7 += d.amount;
+        if (d.type === "expense") keluar7 += d.amount;
+      }
 
-  const income7 = last7Days
-    .filter((d) => d.type === "income")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+      if (d.type === "expense" && d.transaction_date === todayStr) {
+        keluarToday += d.amount;
+      }
+    });
 
-  const expense7 = last7Days
-    .filter((d) => d.type === "expense")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    setTotalMasuk(masuk);
+    setTotalKeluar(keluar);
+    setMasuk7Hari(masuk7);
+    setKeluar7Hari(keluar7);
+    setKeluarHariIni(keluarToday);
+  };
 
-  setMingguanMasuk(income7);
-  setMingguanKeluar(expense7);
-  setRataKeluar(expense7 ? Math.round(expense7 / 7) : 0);
-};
+  const fetchRekapSaldo = async () => {
+    const { data } = await supabase.rpc(
+      "get_saldo_rekap_kelas_gender"
+    );
+    setRekapSaldo(data || []);
+  };
 
+  /* ================= EXPORT EXCEL (FIX ERROR) ================= */
+  const exportExcelBulanan = async () => {
+    const now = new Date();
+    const bulan = now.getMonth();
+    const tahun = now.getFullYear();
 
-  /* ================= EXPORT EXCEL ================= */
-  const exportExcel = async () => {
-    const awal = `${tahun}-${String(bulan).padStart(2, "0")}-01`;
-    const akhir = `${tahun}-${String(bulan).padStart(2, "0")}-31`;
+    const namaBulan = [
+      "Januari","Februari","Maret","April","Mei","Juni",
+      "Juli","Agustus","September","Oktober","November","Desember",
+    ][bulan];
+
+    const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
+    const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-31`;
 
     const { data, error } = await supabase
       .from("transactions_2025_12_01_21_34")
@@ -123,7 +125,7 @@ const Index = () => {
       .order("transaction_date");
 
     if (error || !data) {
-      alert("Gagal export data");
+      console.error("Gagal export:", error);
       return;
     }
 
@@ -136,35 +138,25 @@ const Index = () => {
       Keterangan: d.description,
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      `Laporan ${NAMA_BULAN[bulan - 1]}`
-    );
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Laporan");
 
     XLSX.writeFile(
-      workbook,
-      `laporan-keuangan-${NAMA_BULAN[bulan - 1]}-${tahun}.xlsx`
+      wb,
+      `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`
     );
   };
 
-  /* ================= EFFECT ================= */
   useEffect(() => {
     fetchKeuangan();
-    window.addEventListener("refresh-keuangan", fetchKeuangan);
-    return () => {
-      window.removeEventListener("refresh-keuangan", fetchKeuangan);
-    };
+    fetchRekapSaldo();
   }, []);
 
-  /* ================= AUTH ================= */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary" />
+        <div className="animate-spin h-12 w-12 border-b-2 border-green-600 rounded-full" />
       </div>
     );
   }
@@ -175,114 +167,128 @@ const Index = () => {
     <div className="min-h-screen bg-gray-50">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {tab === "transactions" && (
+      <main className="max-w-7xl mx-auto px-3 md:px-4 py-6 space-y-6">
+        {tab === "transactions" && isAdmin && (
           <>
-            {/* 🔥 RINGKASAN */}
-            <div className="grid md:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground">
-                    Pemasukan 7 Hari
-                  </div>
-                  <div className="text-xl font-bold text-green-600">
-                    Rp {mingguanMasuk.toLocaleString("id-ID")}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground">
-                    Pengeluaran 7 Hari
-                  </div>
-                  <div className="text-xl font-bold text-red-600">
-                    Rp {mingguanKeluar.toLocaleString("id-ID")}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground">
-                    Rata-rata / Hari
-                  </div>
-                  <div className="text-xl font-bold text-orange-600">
-                    Rp {rataKeluar.toLocaleString("id-ID")}
-                  </div>
-                </CardContent>
-              </Card>
+            {/* ================= JUDUL ================= */}
+            <div className="text-center space-y-2">
+              <h1 className="text-xl md:text-2xl font-bold text-green-700">
+                SALDO SANTRI PPS AL-JAWAHIR
+              </h1>
+              <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto">
+                Monitoring data saldo santri Pondok Pesantren Salafiyah
+                Al-Jawahir secara real-time, akurat, dan terintegrasi.
+              </p>
             </div>
 
-            {/* 📊 GRAFIK */}
-            <FinanceChart
-              pemasukan={totalMasuk}
-              pengeluaran={totalKeluar}
-            />
+            {/* ================= SALDO PER KELAS ================= */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {[7, 8, 9, 10, 11, 12].map((kls) => {
+                const ikhwan =
+                  rekapSaldo.find(
+                    (r) => r.kelas === kls && r.gender === "ikhwan"
+                  )?.saldo || 0;
 
-            {/* ===== EXPORT EXCEL ===== */}
-            <Card>
+                const akhwat =
+                  rekapSaldo.find(
+                    (r) => r.kelas === kls && r.gender === "akhwat"
+                  )?.saldo || 0;
+
+                return (
+                  <Card
+                  key={kls}
+                  className={`${cardStyle} cursor-pointer transition hover:shadow-md hover:border-green-600`}
+                  onClick={() => navigate(`/saldo-kelas/${kls}`)}
+>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-center text-base">
+                        Kelas {kls}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span>Ikhwan</span>
+                        <span className="text-green-600">
+                          Rp {ikhwan.toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Akhwat</span>
+                        <span className="text-pink-600">
+                          Rp {akhwat.toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                      <div className="border-t pt-1 flex justify-between font-semibold">
+                        <span>Total</span>
+                        <span>
+                          Rp {(ikhwan + akhwat).toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                      <div className="text-xs text-center text-gray-500 mt-1">
+  Klik untuk melihat detail santri
+</div>
+
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* ================= RINGKASAN ================= */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-700" },
+                { title: "Pemasukan 7 Hari", value: masuk7Hari, color: "text-green-600" },
+                { title: "Pengeluaran 7 Hari", value: keluar7Hari, color: "text-red-600" },
+                { title: "Pengeluaran Hari Ini", value: keluarHariIni, color: "text-orange-600" },
+              ].map((item) => (
+                <Card key={item.title} className={cardStyle}>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-center text-xs md:text-sm">
+                      {item.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`text-lg md:text-xl font-bold text-center ${item.color}`}>
+                      Rp {item.value.toLocaleString("id-ID")}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* ================= GRAFIK ================= */}
+            <Card className={cardStyle}>
               <CardHeader>
-                <CardTitle>📊 Laporan Keuangan Bulanan</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Unduh laporan keuangan bulanan dalam format Excel
-                </p>
+                <CardTitle className="text-center">
+                  Grafik Keuangan Mingguan
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col md:flex-row md:items-end gap-4">
-                  <div className="flex-1">
-                    <label className="text-sm text-muted-foreground">
-                      Bulan
-                    </label>
-                    <Select
-                      value={bulan.toString()}
-                      onValueChange={(v) => setBulan(Number(v))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 12 }).map((_, i) => (
-                          <SelectItem
-                            key={i + 1}
-                            value={(i + 1).toString()}
-                          >
-                            Bulan {i + 1}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex-1">
-                    <label className="text-sm text-muted-foreground">
-                      Tahun
-                    </label>
-                    <Select
-                      value={tahun.toString()}
-                      onValueChange={(v) => setTahun(Number(v))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[2024, 2025, 2026].map((y) => (
-                          <SelectItem key={y} value={y.toString()}>
-                            {y}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="md:pt-6">
-                    <Button onClick={exportExcel}>Export Excel</Button>
-                  </div>
-                </div>
+                <FinanceChart
+                  pemasukan={masuk7Hari}
+                  pengeluaran={keluar7Hari}
+                />
               </CardContent>
             </Card>
 
-            {/* ➕ FORM */}
+            {/* ================= EXPORT ================= */}
+            <Card className={cardStyle}>
+              <CardHeader>
+                <CardTitle className="text-center">
+                  Unduh Laporan Keuangan Bulanan
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <Button
+                  onClick={exportExcelBulanan}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  Export Excel
+                </Button>
+              </CardContent>
+            </Card>
+
             <TransactionForm />
           </>
         )}
