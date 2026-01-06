@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   /* ================= AMBIL ROLE ================= */
   const fetchRole = async (userId: string) => {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("user_profiles_2025_12_01_21_34")
     .select("role")
     .eq("user_id", userId)
     .maybeSingle();
@@ -47,7 +47,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   setRole(data.role);
 };
-
   /* ================= INIT AUTH ================= */
   useEffect(() => {
     let mounted = true;
