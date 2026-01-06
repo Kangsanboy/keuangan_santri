@@ -68,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
   let mounted = true;
 
-  const initAuth = async () => {
+  const init = async () => {
     try {
       const { data } = await supabase.auth.getSession();
 
@@ -80,14 +80,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (data.session?.user) {
         await fetchProfile(data.session.user.id);
       }
-    } catch (err) {
-      console.error("Auth init error", err);
+    } catch (e) {
+      console.error("Auth init error", e);
     } finally {
-      if (mounted) setLoading(false); // 🔥 WAJIB
+      if (mounted) setLoading(false); // ⬅️ INI KUNCI
     }
   };
 
-  initAuth();
+  init();
 
   const { data: listener } = supabase.auth.onAuthStateChange(
     async (_event, session) => {
@@ -102,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setProfile(null);
       }
 
-      setLoading(false); // 🔥 PASTI DISET
+      setLoading(false); // ⬅️ JANGAN LUPA
     }
   );
 
