@@ -6,6 +6,7 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import SaldoKelas from "@/pages/SaldoKelas";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
             <Route path="/keuangan" element={<Index />} />
             <Route path="/users" element={<Index />} />
             <Route path="*" element={<NotFound />} />
+            <Route path="/saldo-kelas/:kelas" element={<SaldoKelas />} />
             </Routes>
             </HashRouter>
       </TooltipProvider>
