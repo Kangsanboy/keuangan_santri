@@ -30,7 +30,7 @@ const cardStyle =
   "border-2 border-green-500/60 rounded-2xl bg-white shadow-sm";
 
 const Index = () => {
-  const { isAdmin } = useAuth();
+  const { user, role, isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
 
   const tab = searchParams.get("tab") || "transactions";
@@ -160,6 +160,13 @@ const Index = () => {
       <main className="max-w-7xl mx-auto px-3 md:px-4 py-6 space-y-6">
         {tab === "transactions" && isAdmin && (
           <>
+            if (!user) return <AuthPage />;
+
+return (
+  <>
+    {isAdmin ? <AdminDashboard /> : <ViewerDashboard />}
+  </>
+);
             {/* ================= JUDUL ================= */}
             <div className="text-center space-y-2">
               <h1 className="text-xl md:text-2xl font-bold text-green-700">
