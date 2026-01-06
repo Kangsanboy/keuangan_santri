@@ -153,7 +153,7 @@ const Index = () => {
     fetchRekapSaldo();
   }, []);
 
-  if (loading || role === null) {
+  if (loading || role === "admin" | "viewer") {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
