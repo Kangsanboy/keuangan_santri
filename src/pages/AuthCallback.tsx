@@ -7,17 +7,12 @@ const AuthCallback = () => {
 
   useEffect(() => {
     const handleAuth = async () => {
-      const { data, error } =
-        await supabase.auth.getSession();
-
-      if (error) {
-        navigate("/login");
-        return;
-      }
+      const { data } = await supabase.auth.getSession();
 
       if (data.session) {
-        // ✅ email confirmed & user logged in
-        navigate("/"); // atau dashboard
+        navigate("/");
+      } else {
+        navigate("/login");
       }
     };
 
