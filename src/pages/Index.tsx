@@ -153,13 +153,7 @@ const Index = () => {
     fetchRekapSaldo();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-12 w-12 border-b-2 border-green-600 rounded-full" />
-      </div>
-    );
-  }
+  if (loading) return null;
 
   if (!user) return <AuthPage />;
 
