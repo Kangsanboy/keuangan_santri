@@ -153,7 +153,7 @@ const Index = () => {
     fetchRekapSaldo();
   }, []);
 
-  if (loading) {
+  if (loading || role === null) {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -161,7 +161,7 @@ const Index = () => {
   );
 }
 
-  if (!user) return <AuthPage />;
+if (!user) return <AuthPage />;
 
   return (
     <div className="min-h-screen bg-gray-50">
