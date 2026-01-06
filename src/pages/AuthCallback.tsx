@@ -6,13 +6,12 @@ const AuthCallback = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handleAuth = async () => {
-      const { data } = await supabase.auth.getSession();
+  const timer = setTimeout(() => {
+    navigate("/");
+  }, 500);
 
-      if (data.session) {
-        navigate("/");
-      } else {
-        navigate("/login");
+  return () => clearTimeout(timer);
+}, [navigate]);
       }
     };
 
