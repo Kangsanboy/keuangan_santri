@@ -27,20 +27,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   /* ================= AMBIL ROLE ================= */
   const fetchRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-    if (error) {
-      console.error("Gagal ambil role:", error.message);
-      setRole("viewer"); // fallback terakhir
-      return;
-    }
+  if (error) {
+    console.error("fetchRole error:", error.message);
+    setRole("viewer");
+    return;
+  }
 
-    setRole(data.role);
-  };
+  if (!data) {
+    console.warn("Profile tidak ditemukan untuk user:", userId);
+    setRole("viewer");
+    return;
+  }
+
+  setRole(data.role);
+};
 
   /* ================= INIT AUTH ================= */
   useEffect(() => {
