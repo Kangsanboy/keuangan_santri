@@ -131,10 +131,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      toast({ title: "Login gagal", description: error.message, variant: "destructive" });
-      return { data: null, error };
-      await supabase.auth.refreshSession();
-    }
+  toast({
+    title: "Login gagal",
+    description: error.message,
+    variant: "destructive",
+  });
+  return { data: null, error };
+}
 
     toast({ title: "Login berhasil" });
     return { data, error: null };
