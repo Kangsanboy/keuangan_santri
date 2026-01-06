@@ -7,7 +7,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SaldoKelas from "@/pages/SaldoKelas";
-import AuthCallback from "@/pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -25,7 +24,6 @@ const App = () => (
             <Route path="/users" element={<Index />} />
             <Route path="*" element={<NotFound />} />
             <Route path="/saldo-kelas/:kelas" element={<SaldoKelas />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
             </Routes>
             </HashRouter>
       </TooltipProvider>
