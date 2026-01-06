@@ -30,7 +30,7 @@ const cardStyle =
   "border-2 border-green-500/60 rounded-2xl bg-white shadow-sm";
 
 const Index = () => {
-  const { user, loading, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
 
   const tab = searchParams.get("tab") || "transactions";
@@ -152,16 +152,6 @@ const Index = () => {
     fetchKeuangan();
     fetchRekapSaldo();
   }, []);
-
-  if (loading || role === "admin" | "viewer") {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-    </div>
-  );
-}
-
-if (!user) return <AuthPage />;
 
   return (
     <div className="min-h-screen bg-gray-50">
