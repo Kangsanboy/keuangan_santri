@@ -30,7 +30,7 @@ const cardStyle =
   "border-2 border-green-500/60 rounded-2xl bg-white shadow-sm";
 
 const Index = () => {
-  const { user, role, isAdmin } = useAuth();
+  const { user, loading, isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
 
   const tab = searchParams.get("tab") || "transactions";
@@ -153,6 +153,16 @@ const Index = () => {
     fetchRekapSaldo();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-12 w-12 border-b-2 border-green-600 rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) return <AuthPage />;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -160,13 +170,6 @@ const Index = () => {
       <main className="max-w-7xl mx-auto px-3 md:px-4 py-6 space-y-6">
         {tab === "transactions" && isAdmin && (
           <>
-            if (!user) return <AuthPage />;
-
-return (
-  <>
-    {isAdmin ? <AdminDashboard /> : <ViewerDashboard />}
-  </>
-);
             {/* ================= JUDUL ================= */}
             <div className="text-center space-y-2">
               <h1 className="text-xl md:text-2xl font-bold text-green-700">
