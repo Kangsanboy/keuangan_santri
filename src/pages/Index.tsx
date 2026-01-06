@@ -153,7 +153,13 @@ const Index = () => {
     fetchRekapSaldo();
   }, []);
 
-  if (loading) return null;
+  if (loading) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+    </div>
+  );
+}
 
   if (!user) return <AuthPage />;
 
