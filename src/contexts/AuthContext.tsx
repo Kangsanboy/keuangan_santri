@@ -42,53 +42,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fetch profile dari public.users
+  /* ================= FETCH PROFILE ================= */
   const fetchProfile = async (userId: string) => {
-  try {
     const { data, error } = await supabase
       .from("users")
       .select("*")
       .eq("id", userId)
-      .maybeSingle(); // ✅ AMAN
+      .maybeSingle();
 
-    if (error) {
-      console.warn("Profile fetch warning:", error.message);
-      setProfile(null);
-      return;
-    }
-
-    if (!data) {
-      console.warn("Profile not found");
+    if (error || !data) {
       setProfile(null);
       return;
     }
 
     setProfile(data);
-  } catch (err) {
-    console.error("Fetch profile error:", err);
-    setProfile(null);
-  }
-};
+  };
 
-  // 🔹 INIT SESSION
+  /* ================= INIT AUTH (RELOAD SAFE) ================= */
   useEffect(() => {
-    const init = async () => {
-      const { data } = await supabase.auth.getSession();
+    let mounted = true;
 
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+    const initAuth = async () => {
+      setLoading(true);
 
-      if (data.session?.user) {
-        await fetchProfile(data.session.user.id);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      setSession(session);
+      setUser(session?.user ?? null);
+
+      if (session?.user) {
+        await fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
       }
 
-      setLoading(false);
+      setLoading(false); // 🔥 HANYA DI SINI
     };
 
-    init();
+    initAuth();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
+
         setSession(session);
         setUser(session?.user ?? null);
 
@@ -97,24 +97,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setProfile(null);
         }
-
-        setLoading(false);
       }
     );
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  // 🔐 AUTH ACTIONS
-  const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
+  /* ================= AUTH ACTIONS ================= */
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    role: "admin" | "viewer"
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name: fullName,
-          role,
-        },
+        data: { full_name: fullName, role },
       },
     });
 
@@ -123,17 +126,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { data: null, error };
     }
 
-    toast({ title: "Registrasi berhasil", description: "Silakan login." });
+    toast({ title: "Registrasi berhasil", description: "Silakan login" });
     return { data, error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
       toast({ title: "Login gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
-      await supabase.auth.refreshSession();
     }
 
     toast({ title: "Login berhasil" });
