@@ -74,7 +74,3 @@ const FinanceChart = ({ pemasukan, pengeluaran }: Props) => {
 };
 
 export default FinanceChart;
-};
-
-
-export default FinanceChart;
