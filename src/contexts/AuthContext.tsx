@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 interface UserProfile {
   id: string;
   email: string;
+  full_name: string | null;
   role: "admin" | "viewer";
   created_at: string;
 }
@@ -34,7 +35,9 @@ export const useAuth = () => {
   return ctx;
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { toast } = useToast();
 
   const [user, setUser] = useState<User | null>(null);
@@ -42,35 +45,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fetch profile dari public.users
+  /* ================= FETCH PROFILE (NON BLOCKING) ================= */
   const fetchProfile = async (userId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle(); // ✅ AMAN
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
 
-    if (error) {
-      console.warn("Profile fetch warning:", error.message);
+      if (error || !data) {
+        setProfile(null);
+        return;
+      }
+
+      setProfile(data);
+    } catch {
       setProfile(null);
-      return;
     }
+  };
 
-    if (!data) {
-      console.warn("Profile not found");
-      setProfile(null);
-      return;
-    }
-
-    setProfile(data);
-  } catch (err) {
-    console.error("Fetch profile error:", err);
-    setProfile(null);
-  }
-};
-
-  // 🔹 INIT SESSION
+  /* ================= INIT SESSION ================= */
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getSession();
@@ -78,62 +73,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(data.session);
       setUser(data.session?.user ?? null);
 
-      if (data.session?.user) {
-        await fetchProfile(data.session.user.id);
-      }
-
+      // 🔥 PENTING: loading DIMATIKAN DI SINI
       setLoading(false);
+
+      if (data.session?.user) {
+        fetchProfile(data.session.user.id); // ❌ TANPA await
+      }
     };
 
     init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        setLoading(false);
 
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          fetchProfile(session.user.id); // ❌ TANPA await
         } else {
           setProfile(null);
         }
-
-        setLoading(false);
       }
     );
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // 🔐 AUTH ACTIONS
-  const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
+  /* ================= AUTH ACTIONS ================= */
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    role: "admin" | "viewer"
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name: fullName,
-          role,
-        },
+        data: { full_name: fullName, role },
       },
     });
 
     if (error) {
-      toast({ title: "Registrasi gagal", description: error.message, variant: "destructive" });
+      toast({
+        title: "Registrasi gagal",
+        description: error.message,
+        variant: "destructive",
+      });
       return { data: null, error };
     }
 
-    toast({ title: "Registrasi berhasil", description: "Silakan login." });
+    toast({
+      title: "Registrasi berhasil",
+      description: "Silakan login",
+    });
+
     return { data, error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } =
+      await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      toast({ title: "Login gagal", description: error.message, variant: "destructive" });
+      toast({
+        title: "Login gagal",
+        description: error.message,
+        variant: "destructive",
+      });
       return { data: null, error };
-      await supabase.auth.refreshSession();
     }
 
     toast({ title: "Login berhasil" });
@@ -160,6 +169,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin: profile?.role === "admin",
       }}
     >
+      {children}
+    </AuthContext.Provider>
+  );
+};
       {children}
     </AuthContext.Provider>
   );
