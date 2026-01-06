@@ -66,38 +66,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   /* ================= INIT SESSION ================= */
   useEffect(() => {
-    const init = async () => {
+  let mounted = true;
+
+  const initAuth = async () => {
+    try {
       const { data } = await supabase.auth.getSession();
 
-      setSession(data.session);
+      if (!mounted) return;
+
+      setSession(data.session ?? null);
       setUser(data.session?.user ?? null);
 
       if (data.session?.user) {
         await fetchProfile(data.session.user.id);
       }
+    } catch (err) {
+      console.error("Auth init error", err);
+    } finally {
+      if (mounted) setLoading(false); // 🔥 WAJIB
+    }
+  };
 
-      setLoading(false);
-    };
+  initAuth();
 
-    init();
+  const { data: listener } = supabase.auth.onAuthStateChange(
+    async (_event, session) => {
+      if (!mounted) return;
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      setSession(session ?? null);
+      setUser(session?.user ?? null);
 
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
-        }
-
-        setLoading(false);
+      if (session?.user) {
+        await fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
       }
-    );
 
-    return () => listener.subscription.unsubscribe();
-  }, []);
+      setLoading(false); // 🔥 PASTI DISET
+    }
+  );
+
+  return () => {
+    mounted = false;
+    listener.subscription.unsubscribe();
+  };
+}, []);
 
   /* ================= AUTH ACTIONS ================= */
 
