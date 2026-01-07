@@ -44,32 +44,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 🔹 Fetch profile dari tabel YANG BENAR
   // 🔹 Fetch profile dari tabel YANG BENAR
+  // 🔹 Update Fungsi Fetch Profile
   const fetchProfile = async (userId: string) => {
     try {
-      console.log("Fetching profile for:", userId);
+      console.log("Mencari profil untuk user_id:", userId); // Debugging
       
       const { data, error } = await supabase
         .from("user_profiles_2025_12_01_21_34") 
         .select("*")
-        .eq("user_id", userId) // <--- UBAH INI! Jangan 'id', tapi 'user_id'
+        .eq("user_id", userId) // <--- PERUBAHAN KRUSIAL DI SINI (Jangan pakai 'id')
         .maybeSingle(); 
 
       if (error) {
-        console.warn("Profile fetch error:", error.message);
-        setProfile(null); // Stop loading walau error
+        console.warn("Error ambil profil:", error.message);
+        setProfile(null);
         return;
       }
 
       if (!data) {
-        console.warn("Profile not found in table");
-        setProfile(null); // Stop loading walau data kosong
+        console.warn("Profil tidak ditemukan (Data kosong). Cek apakah user_id ada di tabel?");
+        setProfile(null);
         return;
       }
 
-      console.log("Profile loaded:", data);
+      console.log("Profil ditemukan:", data); // Kalau ini muncul, loading pasti hilang
       setProfile(data as UserProfile);
     } catch (err) {
-      console.error("Fetch profile exception:", err);
+      console.error("Fetch profile crash:", err);
       setProfile(null);
     }
   };
