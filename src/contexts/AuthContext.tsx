@@ -46,38 +46,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔹 Fetch profile dari tabel YANG BENAR
   // 🔹 Update Fungsi Fetch Profile
   const fetchProfile = async (userId: string) => {
-    try {
-      console.log("Mencoba ambil data user id:", user.id);
-      
-      const { data, error } = await supabase
-  .from('users')        // Pastikan nama tabel 'users'
-  .select('*')
-  .eq('id', user.id)    // Pastikan kolom 'id'
-  .single();
+   try {
+  console.log("🚀 Memulai pencarian profil untuk:", user.id);
 
-// LOG HASILNYA (Ini yang paling penting sekarang)
-console.log("Hasil Data Database:", data);
-console.log("Error Database:", error);
+  // PASTIKAN NAMA TABELNYA 'users' (sesuai gambar database abang)
+  const { data, error } = await supabase
+    .from('users') 
+    .select('*')
+    .eq('id', user.id)
+    .single();
 
-if (error) {
-  console.error("❌ Error Database:", error.message);
-  setLoading(false);
-  return;
+  if (error) {
+    console.error("❌ Error Database:", error.message);
+    setLoading(false);
+    return;
+  }
+
+  // INI PENGAMAN: Kalau data kosong, stop di sini (JANGAN LANJUT)
+  if (!data) {
+    console.warn("⚠️ Data user KOSONG! (Cek apakah user_id ada di tabel 'users')");
+    setLoading(false);
+    return;
+  }
+
+  // Kalau sukses sampai sini, cek isinya
+  console.log("✅ Data ditemukan:", data);
+
+  // Masukkan data ke aplikasi (sesuaikan nama variabel state abang)
+  // Contoh: setProfile(data); atau setUserData(data);
+  
+  // Cek Role-nya apa
+  console.log("🧐 Role user ini adalah:", data.role || data.roles || "Role tidak terbaca");
+
+} catch (err) {
+  console.error("🔥 Fetch profile crash:", err);
 }
-
-if (!data) {
-  console.warn("⚠️ Data user tidak ditemukan di tabel 'users'!");
-  console.log("Pastikan user_id ini ada di tabel:", user.id);
-  setLoading(false);
-  return; // BERHENTI DI SINI BIAR GAK CRASH
-}
-      
-// Jika sukses
-console.log("✅ Data ditemukan:", data);
 setLoading(false);
-    } catch (err) {
-      console.error("Fetch profile crash:", err);
-      setProfile(null);
     }
   };
 
