@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -15,13 +15,8 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string,
-    role: "admin" | "viewer"
-  ) => Promise<any>;
-  signIn: (email: string, password: string) => Promise<any>;
+  signUp: (e: string, p: string, f: string, r: "admin" | "viewer") => Promise<any>;
+  signIn: (e: string, p: string) => Promise<any>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
 }
@@ -36,21 +31,25 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { toast } = useToast();
+  const isMounted = useRef(true); // 🔥 Pelacak status komponen
 
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fungsi Fetch Profile
+  // 🔹 Fungsi Fetch Profile yang TAHAN BANTING
   const fetchProfile = async (userId: string) => {
     try {
       console.log("🚀 Mengambil profil untuk ID:", userId);
+      
       const { data, error } = await supabase
         .from('users') 
         .select('*')
         .eq('id', userId)
         .single();
+
+      if (!isMounted.current) return; // Stop kalau komponen udah unmount
 
       if (error) {
         console.error("❌ Gagal ambil profil:", error.message);
@@ -65,26 +64,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 🔹 USE EFFECT UTAMA (Anti-Stuck & Anti-Race Condition)
+  // 🔹 USE EFFECT UTAMA (Anti-Stuck saat Reload)
   useEffect(() => {
-    let mounted = true;
+    isMounted.current = true;
 
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Cek sesi awal
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
 
-        if (mounted) {
-          if (session) {
-            setSession(session);
-            setUser(session.user);
-            await fetchProfile(session.user.id);
-          }
+        if (isMounted.current && initialSession) {
+          setSession(initialSession);
+          setUser(initialSession.user);
+          // Tunggu profil sebentar
+          await fetchProfile(initialSession.user.id);
         }
       } catch (error) {
         console.error("Auth Init Error:", error);
       } finally {
-        if (mounted) {
-          console.log("🏁 Initial Load Selesai. Loading dimatikan.");
+        // 🔥 FORCE STOP LOADING: Apapun yang terjadi, loading HARUS mati
+        if (isMounted.current) {
+          console.log("🏁 Init selesai, mematikan loading.");
           setLoading(false);
         }
       }
@@ -92,69 +92,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initializeAuth();
 
+    // 🔹 LISTENER REALTIME
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return;
+        if (!isMounted.current) return;
         
         console.log("🔔 Auth Event:", event);
         
-        setSession(session);
-        setUser(session?.user ?? null);
-
         if (event === 'SIGNED_IN' && session) {
-            // Fetch profil saat baru login
-            await fetchProfile(session.user.id);
+            setSession(session);
+            setUser(session.user);
             
-            // 🔥 FIX PENTING DISINI:
-            // Wajib matikan loading setelah fetch profil selesai
-            // supaya spinner dari tombol login berhenti berputar.
-            setLoading(false); 
+            // Fetch profil dan matikan loading
+            await fetchProfile(session.user.id);
+            if (isMounted.current) setLoading(false);
 
         } else if (event === 'SIGNED_OUT') {
+            setSession(null);
+            setUser(null);
             setProfile(null);
-            setLoading(false);
-        } 
-        // Note: Event INITIAL_SESSION diabaikan disini karena sudah dihandle oleh initializeAuth
+            if (isMounted.current) setLoading(false);
+        }
       }
     );
 
+    // 🔥 SAFETY NET: Timeout 5 detik
+    // Kalau karena satu dan lain hal loading masih nyangkut, matikan paksa.
+    const safetyTimeout = setTimeout(() => {
+        if (loading && isMounted.current) {
+            console.warn("⚠️ Loading terlalu lama, mematikan paksa.");
+            setLoading(false);
+        }
+    }, 5000);
+
     return () => {
-      mounted = false;
+      isMounted.current = false;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, []);
 
-  // 🔐 AUTH ACTIONS
+  // 🔐 ACTIONS
   const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { full_name: fullName, role },
-      },
+      options: { data: { full_name: fullName, role } },
     });
-
     if (error) {
       toast({ title: "Registrasi gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
     }
-
     toast({ title: "Registrasi berhasil", description: "Silakan login." });
     return { data, error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    setLoading(true); // Menyalakan loading
+    setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
     if (error) {
-      setLoading(false); // Matikan kalau error
+      setLoading(false);
       toast({ title: "Login gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
     }
-
     toast({ title: "Login berhasil" });
-    // Loading akan dimatikan oleh listener onAuthStateChange di atas
+    // Loading dimatikan oleh listener SIGNED_IN
     return { data, error: null };
   };
 
