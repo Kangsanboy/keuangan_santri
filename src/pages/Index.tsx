@@ -24,7 +24,9 @@ import {
   Menu, 
   ChevronLeft,
   FileSpreadsheet,
-  ChevronDown
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -46,7 +48,7 @@ const Index = () => {
 
   /* ================= STATE UI ================= */
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
-  const [isSidebarOpen, setSidebarOpen] = useState(true); // Default terbuka di laptop
+  const [isSidebarOpen, setSidebarOpen] = useState(true); // Default terbuka
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
 
   /* ================= STATE DATA ================= */
@@ -144,7 +146,7 @@ const Index = () => {
   /* ================= NAVIGASI SANTRI ================= */
   const handleOpenKelas = (kelas: number) => {
     setSelectedKelasSantri(kelas); // Set filter kelas
-    setActiveMenu("santri"); // Pindah tab
+    setActiveMenu("santri"); // Pindah tab ke Data Santri
   };
 
   if (loading) {
@@ -157,8 +159,7 @@ const Index = () => {
 
   if (!user) return <AuthPage />;
 
-  /* ================= STYLE HELPER (Sesuai Request) ================= */
-  // Style kartu hijau sesuai gambar referensi
+  /* ================= STYLE HELPER ================= */
   const dashboardCardStyle = "border-2 border-green-400/80 rounded-2xl bg-white shadow-sm hover:shadow-md transition-all";
   const summaryCardStyle = "border border-green-500 rounded-xl bg-white shadow-sm";
 
@@ -168,113 +169,131 @@ const Index = () => {
       {/* ================= SIDEBAR ================= */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 bg-green-900 text-white shadow-2xl transition-all duration-300 ease-in-out flex flex-col
-          ${isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:w-0 md:translate-x-0"} 
+          ${isSidebarOpen ? "w-72 translate-x-0" : "w-0 -translate-x-full lg:w-0 lg:translate-x-0 overflow-hidden"} 
         `}
       >
-        {/* Logo Area */}
-        <div className="h-20 flex items-center justify-center border-b border-green-800 bg-green-950 p-4">
-            {/* Ganti src dengan path logo abang */}
-            <img 
-                src="/logo-mahad.png" 
-                alt="Logo" 
-                className="h-12 w-auto object-contain"
-                onError={(e) => {
-                    // Fallback kalau gambar gak ketemu
-                    e.currentTarget.style.display = 'none';
-                }}
-            />
-            {/* Fallback Text kalau gambar error/belum ada */}
-            <span className="ml-2 font-bold text-lg hidden">PPS Al-Jawahir</span> 
+        {/* LOGO AREA (Background Putih biar Logo Hijau Kelihatan) */}
+        <div className="h-24 bg-white flex items-center justify-between px-4 border-b border-gray-200 relative">
+            <div className="flex-1 flex justify-center items-center">
+                 {/* Pastikan file 'logo-mahad.png' ada di folder public */}
+                <img 
+                    src="/logo-mahad.png" 
+                    alt="Logo Al-Jawahir" 
+                    className="h-16 w-auto object-contain"
+                />
+            </div>
+            
+            {/* Tombol Close Sidebar (Hanya di HP atau saat dibuka) */}
+            <button 
+                onClick={() => setSidebarOpen(false)}
+                className="absolute right-2 top-2 text-gray-500 hover:text-red-500 p-1 lg:block"
+                title="Sembunyikan Menu"
+            >
+                <PanelLeftClose size={20} />
+            </button>
         </div>
 
         {/* Menu Items */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <p className="px-4 text-xs font-semibold text-green-300 uppercase tracking-wider mb-2">Menu Utama</p>
+
           <button
             onClick={() => setActiveMenu("dashboard")}
             className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors text-sm font-medium ${
-              activeMenu === "dashboard" ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800"
+              activeMenu === "dashboard" ? "bg-green-700 text-white shadow-lg border-l-4 border-green-400" : "text-green-100 hover:bg-green-800"
             }`}
           >
             <LayoutDashboard className="mr-3 h-5 w-5" />
-            <span className={!isSidebarOpen ? "hidden" : "block"}>Dashboard</span>
+            <span className="truncate">Dashboard</span>
           </button>
 
           <button
             onClick={() => setActiveMenu("keuangan")}
             className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors text-sm font-medium ${
-              activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800"
+              activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-green-400" : "text-green-100 hover:bg-green-800"
             }`}
           >
             <Wallet className="mr-3 h-5 w-5" />
-            <span className={!isSidebarOpen ? "hidden" : "block"}>Keuangan</span>
+            <span className="truncate">Keuangan</span>
           </button>
 
           <div className="border-t border-green-800 my-4"></div>
-          <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">Database</p>
+          <p className="px-4 text-xs font-semibold text-green-300 uppercase tracking-wider mb-2">Database</p>
 
           <button
-            onClick={() => { setActiveMenu("santri"); setSelectedKelasSantri(null); }} // Reset filter kalau klik menu samping
+            onClick={() => { setActiveMenu("santri"); setSelectedKelasSantri(null); }} 
             className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors text-sm font-medium ${
-              activeMenu === "santri" ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800"
+              activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-green-400" : "text-green-100 hover:bg-green-800"
             }`}
           >
             <Users className="mr-3 h-5 w-5" />
-            <span className={!isSidebarOpen ? "hidden" : "block"}>Data Santri</span>
+            <span className="truncate">Data Santri</span>
           </button>
 
           {isAdmin && (
             <button
               onClick={() => setActiveMenu("pengguna")}
               className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors text-sm font-medium ${
-                activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800"
+                activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-green-400" : "text-green-100 hover:bg-green-800"
               }`}
             >
               <UserCog className="mr-3 h-5 w-5" />
-              <span className={!isSidebarOpen ? "hidden" : "block"}>Admin</span>
+              <span className="truncate">Admin</span>
             </button>
           )}
         </nav>
       </aside>
 
       {/* ================= KONTEN KANAN ================= */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden relative transition-all duration-300">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden relative transition-all duration-300 bg-gray-50">
         
         {/* HEADER */}
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b">
           <div className="flex items-center gap-3">
-            {/* Tombol Toggle Sidebar */}
+            {/* Tombol Buka/Tutup Sidebar */}
             <button 
                 onClick={() => setSidebarOpen(!isSidebarOpen)} 
-                className="text-gray-600 p-2 hover:bg-gray-100 rounded-md transition-colors"
+                className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors"
+                title={isSidebarOpen ? "Tutup Sidebar" : "Buka Sidebar"}
             >
-              {isSidebarOpen ? <ChevronLeft size={24} /> : <Menu size={24} />}
+              {isSidebarOpen ? <PanelLeftClose size={24} /> : <PanelLeftOpen size={24} />}
             </button>
             
-            {/* Logo & Judul Header (Sesuai Gambar 1) */}
+            {/* Judul Header */}
             <div className="flex items-center gap-2">
-                <img src="/logo-mahad.png" alt="Logo" className="h-8 w-auto hidden md:block" />
-                <h2 className="text-lg font-bold text-gray-800 tracking-tight">
+                <h2 className="text-lg font-bold text-gray-800 tracking-tight hidden md:block">
                     KEUANGAN PPS AL-JAWAHIR
+                </h2>
+                {/* Tampilkan judul menu aktif di Mobile */}
+                <h2 className="text-lg font-bold text-green-700 md:hidden">
+                    {activeMenu === 'dashboard' && 'Dashboard'}
+                    {activeMenu === 'keuangan' && 'Keuangan'}
+                    {activeMenu === 'santri' && 'Data Santri'}
                 </h2>
             </div>
           </div>
 
-          {/* User Profile & Logout (Sesuai Request 4) */}
+          {/* User Profile & Logout */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors border border-transparent hover:border-gray-200">
+                <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors border border-transparent hover:border-green-200">
                     <div className="text-right hidden sm:block">
                         <p className="text-sm font-bold text-gray-800">{user?.email?.split('@')[0]}</p>
-                        <p className="text-xs text-green-600 font-medium">{isAdmin ? "Administrator" : "Viewer"}</p>
+                        <p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block">
+                            {isAdmin ? "Administrator" : "Viewer"}
+                        </p>
                     </div>
-                    <div className="h-9 w-9 bg-green-100 text-green-700 rounded-full flex items-center justify-center font-bold border border-green-200 shadow-sm">
+                    <div className="h-9 w-9 bg-green-600 text-white rounded-full flex items-center justify-center font-bold border-2 border-green-100 shadow-sm">
                         {user?.email?.charAt(0).toUpperCase()}
                     </div>
                     <ChevronDown size={16} className="text-gray-400" />
                 </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={signOut} className="text-red-600 focus:text-red-600 cursor-pointer font-medium">
+            <DropdownMenuContent align="end" className="w-56 p-2">
+                <div className="px-2 py-1.5 text-sm font-semibold text-gray-500 border-b mb-1 sm:hidden">
+                     {user?.email}
+                </div>
+                <DropdownMenuItem onClick={signOut} className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer font-medium rounded-md p-2">
                     <LogOut className="mr-2 h-4 w-4" />
                     Keluar Aplikasi
                 </DropdownMenuItem>
@@ -283,14 +302,13 @@ const Index = () => {
         </header>
 
         {/* AREA SCROLLABLE */}
-        <main className="flex-1 overflow-y-auto bg-white p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto space-y-8">
 
-            {/* --- VIEW 1: DASHBOARD (Sesuai Gambar 2) --- */}
+            {/* --- VIEW 1: DASHBOARD --- */}
             {activeMenu === "dashboard" && (
               <div className="space-y-8 animate-in fade-in zoom-in duration-300">
                 
-                {/* JUDUL BESAR & DESKRIPSI (Sesuai Gambar) */}
                 <div className="text-center space-y-3 pb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-green-700 uppercase tracking-wide">
                         SALDO SANTRI PPS AL-JAWAHIR
@@ -300,7 +318,7 @@ const Index = () => {
                     </p>
                 </div>
 
-                {/* KARTU SALDO PER KELAS (Style Gambar 2) */}
+                {/* KARTU SALDO PER KELAS */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {[7, 8, 9, 10, 11, 12].map((kls) => {
                       const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
@@ -309,12 +327,14 @@ const Index = () => {
                       return (
                         <div
                           key={kls}
-                          onClick={() => handleOpenKelas(kls)} // 🔥 FIX: Klik kartu -> Buka Data Santri Kelas Tsb
-                          className={`${dashboardCardStyle} p-5 cursor-pointer group`}
+                          onClick={() => handleOpenKelas(kls)} 
+                          className={`${dashboardCardStyle} p-5 cursor-pointer group relative overflow-hidden`}
                         >
-                          <h3 className="text-center font-bold text-gray-800 mb-4 text-lg">Kelas {kls}</h3>
+                          <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-8 -mt-8 z-0 group-hover:bg-green-100 transition-colors"></div>
                           
-                          <div className="space-y-3 text-sm font-medium">
+                          <h3 className="text-center font-bold text-gray-800 mb-4 text-lg relative z-10">Kelas {kls}</h3>
+                          
+                          <div className="space-y-3 text-sm font-medium relative z-10">
                             <div className="flex justify-between items-center text-gray-600">
                               <span>Ikhwan</span>
                               <span className="text-green-600">Rp {ikhwan.toLocaleString("id-ID")}</span>
@@ -330,9 +350,9 @@ const Index = () => {
                             </div>
                           </div>
                           
-                          <div className="mt-4 text-center">
-                            <span className="text-xs text-gray-400 group-hover:text-green-600 transition-colors">
-                                Klik untuk melihat detail santri
+                          <div className="mt-4 text-center relative z-10">
+                            <span className="text-xs text-gray-400 group-hover:text-green-600 transition-colors font-semibold">
+                                Klik untuk melihat detail santri →
                             </span>
                           </div>
                         </div>
@@ -340,7 +360,7 @@ const Index = () => {
                     })}
                 </div>
 
-                {/* RINGKASAN BAWAH (Style Gambar 2) */}
+                {/* RINGKASAN BAWAH */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {[
                     { title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-600" },
@@ -348,8 +368,8 @@ const Index = () => {
                     { title: "Pengeluaran 7 Hari", value: keluar7Hari, color: "text-red-600" },
                     { title: "Pengeluaran Hari Ini", value: keluarHariIni, color: "text-orange-600" },
                   ].map((item, idx) => (
-                    <div key={idx} className={`${summaryCardStyle} p-4 text-center`}>
-                        <h4 className="text-xs font-bold text-gray-700 mb-2">{item.title}</h4>
+                    <div key={idx} className={`${summaryCardStyle} p-4 text-center hover:shadow-md transition-shadow`}>
+                        <h4 className="text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">{item.title}</h4>
                         <p className={`text-xl font-bold ${item.color}`}>
                             Rp {item.value.toLocaleString("id-ID")}
                         </p>
@@ -357,7 +377,7 @@ const Index = () => {
                   ))}
                 </div>
 
-                {/* GRAFIK (Style Gambar 2) */}
+                {/* GRAFIK */}
                 <div className={`${summaryCardStyle} p-6`}>
                     <h3 className="text-center font-bold text-gray-800 mb-6 text-lg">Grafik Keuangan Mingguan</h3>
                     <FinanceChart pemasukan={masuk7Hari} pengeluaran={keluar7Hari} />
@@ -368,13 +388,13 @@ const Index = () => {
             {/* --- VIEW 2: KEUANGAN (AKSI) --- */}
             {activeMenu === "keuangan" && isAdmin && (
               <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                <Card className="border-green-200 bg-green-50">
+                <Card className="border-green-200 bg-green-50/50">
                   <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-lg font-bold text-green-800">Laporan Bulanan</h3>
                       <p className="text-sm text-green-600">Unduh rekap transaksi bulan ini dalam format Excel.</p>
                     </div>
-                    <Button onClick={exportExcelBulanan} className="bg-green-700 hover:bg-green-800">
+                    <Button onClick={exportExcelBulanan} className="bg-green-700 hover:bg-green-800 shadow-md">
                       <FileSpreadsheet className="mr-2 h-4 w-4" />
                       Download Excel
                     </Button>
@@ -387,22 +407,30 @@ const Index = () => {
               </div>
             )}
 
-            {/* --- VIEW 3: SANTRI (Perbaikan Request 5) --- */}
+            {/* --- VIEW 3: SANTRI --- */}
             {activeMenu === "santri" && (
-              <div className="animate-in fade-in zoom-in duration-300">
-                {/* PASSING PROPS KELAS DISINI 
-                    Jika selectedKelasSantri ada isinya (misal 7), maka hanya tampilkan kelas 7.
-                */}
-                <SantriManagement kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} />
-                
-                {/* Tombol Reset Filter (Muncul kalau lagi filter kelas) */}
-                {selectedKelasSantri && (
-                    <div className="mt-4 text-center">
-                        <Button variant="outline" onClick={() => setSelectedKelasSantri(null)}>
-                            Tampilkan Semua Kelas
+              <div className="animate-in fade-in zoom-in duration-300 space-y-4">
+                 {/* Header Kecil untuk Navigasi */}
+                 <div className="flex items-center justify-between bg-white p-4 rounded-lg border shadow-sm">
+                    <h2 className="text-lg font-bold text-gray-800">
+                        {selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}
+                    </h2>
+                    {selectedKelasSantri && (
+                        <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)}>
+                            Tampilkan Semua
                         </Button>
-                    </div>
-                )}
+                    )}
+                 </div>
+
+                {/* KEY PROP DISINI SANGAT PENTING! 
+                   key={selectedKelasSantri || 'all'} 
+                   Ini memaksa React untuk menghancurkan dan membuat ulang komponen 
+                   setiap kali kelas berubah, sehingga data pasti ter-refresh.
+                */}
+                <SantriManagement 
+                    key={selectedKelasSantri || 'all'} 
+                    kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} 
+                />
               </div>
             )}
 
