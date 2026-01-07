@@ -50,25 +50,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("Mencari profil untuk user_id:", userId); // Debugging
       
       const { data, error } = await supabase
-        .from("user_profiles_2025_12_01_21_34") 
-        .select("*")
-        .eq("user_id", userId) // <--- PERUBAHAN KRUSIAL DI SINI (Jangan pakai 'id')
-        .maybeSingle(); 
+  .from('users')  // <--- Ganti nama tabel di sini jadi 'users'
+  .select('*')    // Ambil semua kolom (id, email, role, dll)
+  .eq('id', user.id) // Pastikan kolom di database namanya 'id'
+  .single();
 
-      if (error) {
-        console.warn("Error ambil profil:", error.message);
-        setProfile(null);
-        return;
-      }
+// LOG HASILNYA (Ini yang paling penting sekarang)
+console.log("Hasil Data Database:", data);
+console.log("Error Database:", error);
 
-      if (!data) {
-        console.warn("Profil tidak ditemukan (Data kosong). Cek apakah user_id ada di tabel?");
-        setProfile(null);
-        return;
-      }
+if (error) {
+  console.error("Gagal ambil profil!", error.message);
+  // PENTING: Matikan loading biar gak muter terus
+  setLoading(false); 
+  return;
+}
 
-      console.log("Profil ditemukan:", data); // Kalau ini muncul, loading pasti hilang
-      setProfile(data as UserProfile);
+if (!data) {
+  console.warn("Profil belum dibuat untuk user ini!");
+  // PENTING: Matikan loading atau redirect ke halaman buat profil
+  setLoading(false);
+  return;
+}
+
+// Jika sukses
+console.log("Profil ditemukan, lanjut masuk app...");
+setLoading(false);
     } catch (err) {
       console.error("Fetch profile crash:", err);
       setProfile(null);
