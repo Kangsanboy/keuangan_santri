@@ -45,13 +45,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔹 Fetch profile dari tabel YANG BENAR
   const fetchProfile = async (userId: string) => {
     try {
-      console.log("Fetching profile for:", userId); // Debugging
+      console.log("Fetching profile for:", userId);
       
-      // PERBAIKAN: Gunakan nama tabel yang sesuai dengan database kamu
       const { data, error } = await supabase
         .from("user_profiles_2025_12_01_21_34") 
         .select("*")
-        .eq("id", userId)
+        .eq("user_id", userId) // <--- PERUBAHAN PENTING DI SINI (user_id)
         .maybeSingle(); 
 
       if (error) {
