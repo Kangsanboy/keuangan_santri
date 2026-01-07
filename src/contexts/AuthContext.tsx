@@ -42,46 +42,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fetch profile dari tabel YANG BENAR
-  // 🔹 Fetch profile dari tabel YANG BENAR
-  // 🔹 Update Fungsi Fetch Profile
+  // 🔹 Update Fungsi Fetch Profile (SUDAH DIPERBAIKI)
   const fetchProfile = async (userId: string) => {
-   try {
-  console.log("🚀 Memulai pencarian profil untuk:", user.id);
+    try {
+      // PENTING: Pakai 'userId' dari parameter, JANGAN pakai 'user.id' state karena bisa null
+      console.log("🚀 Memulai pencarian profil untuk ID:", userId);
 
-  // PASTIKAN NAMA TABELNYA 'users' (sesuai gambar database abang)
-  const { data, error } = await supabase
-    .from('users') 
-    .select('*')
-    .eq('id', user.id)
-    .single();
+      const { data, error } = await supabase
+        .from('users')  // Pastikan nama tabel benar
+        .select('*')
+        .eq('id', userId) // <-- PERBAIKAN UTAMA DISINI
+        .single();
 
-  if (error) {
-    console.error("❌ Error Database:", error.message);
-    setLoading(false);
-    return;
-  }
+      if (error) {
+        console.error("❌ Error Database:", error.message);
+        // Jangan return dulu, biarkan loading selesai di akhir
+      } else if (data) {
+        console.log("✅ Data user ditemukan:", data);
+        console.log("🧐 Role user ini adalah:", data.role);
+        
+        // SIMPAN DATA KE STATE (Ini yang bikin admin terbaca)
+        setProfile(data as UserProfile);
+      } else {
+        console.warn("⚠️ Data user kosong di tabel 'users'");
+      }
 
-  // INI PENGAMAN: Kalau data kosong, stop di sini (JANGAN LANJUT)
-  if (!data) {
-    console.warn("⚠️ Data user KOSONG! (Cek apakah user_id ada di tabel 'users')");
-    setLoading(false);
-    return;
-  }
-
-  // Kalau sukses sampai sini, cek isinya
-  console.log("✅ Data ditemukan:", data);
-
-  // Masukkan data ke aplikasi (sesuaikan nama variabel state abang)
-  // Contoh: setProfile(data); atau setUserData(data);
-  
-  // Cek Role-nya apa
-  console.log("🧐 Role user ini adalah:", data.role || data.roles || "Role tidak terbaca");
-
-} catch (err) {
-  console.error("🔥 Fetch profile crash:", err);
-}
-setLoading(false);
+    } catch (err) {
+      console.error("🔥 Fetch profile crash:", err);
+    } finally {
+      // Pastikan loading berhenti apapun yang terjadi
+      setLoading(false);
+    }
   };
 
   // 🔹 INIT SESSION
@@ -97,12 +88,14 @@ setLoading(false);
           setUser(data.session?.user ?? null);
 
           if (data.session?.user) {
+            // Panggil fetchProfile dengan ID dari session
             await fetchProfile(data.session.user.id);
+          } else {
+            setLoading(false);
           }
         }
       } catch (e) {
         console.error("Auth init error:", e);
-      } finally {
         if (mounted) setLoading(false);
       }
     };
@@ -113,17 +106,18 @@ setLoading(false);
       async (_event, session) => {
         if (!mounted) return;
         
-        console.log("Auth state changed:", _event); // Debugging
+        console.log("Auth state changed:", _event);
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          // Reset loading jadi true saat ganti user biar gak glitch
+          setLoading(true);
           await fetchProfile(session.user.id);
         } else {
           setProfile(null);
+          setLoading(false);
         }
-
-        setLoading(false);
       }
     );
 
@@ -135,35 +129,41 @@ setLoading(false);
 
   // 🔐 AUTH ACTIONS
   const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
+    setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
-          role, // Metadata ini akan dicopy oleh Trigger Database (jika ada)
+          role, 
         },
       },
     });
 
     if (error) {
+      setLoading(false);
       toast({ title: "Registrasi gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
     }
 
     toast({ title: "Registrasi berhasil", description: "Silakan login." });
+    setLoading(false);
     return { data, error: null };
   };
 
   const signIn = async (email: string, password: string) => {
+    setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
+      setLoading(false);
       toast({ title: "Login gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
     }
 
     toast({ title: "Login berhasil" });
+    // Loading akan di-handle oleh onAuthStateChange
     return { data, error: null };
   };
 
@@ -184,6 +184,7 @@ setLoading(false);
         signUp,
         signIn,
         signOut,
+        // Cek admin dengan aman (pakai optional chaining)
         isAdmin: profile?.role === "admin",
       }}
     >
