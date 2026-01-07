@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fungsi Fetch Profile yang Stabil
+  // 🔹 Fungsi Fetch Profile
   const fetchProfile = async (userId: string) => {
     try {
       console.log("🚀 Mengambil profil untuk ID:", userId);
@@ -63,30 +63,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("🔥 Error fetch:", err);
     }
-    // Catatan: Kita TIDAK mematikan loading di sini, biar diatur oleh useEffect utama
   };
 
-  // 🔹 USE EFFECT UTAMA (Anti-Stuck Loading)
+  // 🔹 USE EFFECT UTAMA (Anti-Stuck & Anti-Race Condition)
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
-        // 1. Cek sesi yang tersimpan di browser
         const { data: { session } } = await supabase.auth.getSession();
 
         if (mounted) {
           if (session) {
             setSession(session);
             setUser(session.user);
-            // Tunggu ambil profil dulu baru matikan loading
             await fetchProfile(session.user.id);
           }
         }
       } catch (error) {
         console.error("Auth Init Error:", error);
       } finally {
-        // 2. APAPUN YANG TERJADI, MATIKAN LOADING DI SINI
         if (mounted) {
           console.log("🏁 Initial Load Selesai. Loading dimatikan.");
           setLoading(false);
@@ -96,28 +92,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initializeAuth();
 
-    // 3. Listener untuk perubahan status (Login/Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
         
         console.log("🔔 Auth Event:", event);
         
-        // Update state dasar
         setSession(session);
         setUser(session?.user ?? null);
 
         if (event === 'SIGNED_IN' && session) {
-            // Kalau baru login, ambil profil
+            // Fetch profil saat baru login
             await fetchProfile(session.user.id);
+            
+            // 🔥 FIX PENTING DISINI:
+            // Wajib matikan loading setelah fetch profil selesai
+            // supaya spinner dari tombol login berhenti berputar.
+            setLoading(false); 
+
         } else if (event === 'SIGNED_OUT') {
-            // Kalau logout, kosongkan data
             setProfile(null);
             setLoading(false);
-        } else if (event === 'INITIAL_SESSION') {
-            // Abaikan event ini karena sudah dihandle oleh initializeAuth di atas
-            // Ini kunci biar gak loading muter-muter
-        }
+        } 
+        // Note: Event INITIAL_SESSION diabaikan disini karena sudah dihandle oleh initializeAuth
       }
     );
 
@@ -129,7 +126,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 🔐 AUTH ACTIONS
   const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
-    // Jangan set loading true global biar UI gak kaget, cukup handle di component register
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -148,24 +144,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
-    setLoading(true); // Nyalakan loading cuma pas klik tombol login
+    setLoading(true); // Menyalakan loading
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setLoading(false);
+      setLoading(false); // Matikan kalau error
       toast({ title: "Login gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
     }
 
-    // Sukses login, fetchProfile akan dijalankan oleh onAuthStateChange
     toast({ title: "Login berhasil" });
+    // Loading akan dimatikan oleh listener onAuthStateChange di atas
     return { data, error: null };
   };
 
   const signOut = async () => {
     setLoading(true);
     await supabase.auth.signOut();
-    // State akan di-reset oleh onAuthStateChange
   };
 
   return (
