@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { CalendarIcon } from "lucide-react"; // Icon Tambahan
 
 interface Santri {
   id: string;
@@ -35,6 +36,9 @@ const TransactionForm = () => {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // 🔥 STATE BARU: Tanggal Transaksi (Default: Hari Ini)
+  const [trxDate, setTrxDate] = useState<string>(new Date().toISOString().slice(0, 10));
 
   /* reset saat kelas berubah */
   useEffect(() => {
@@ -81,10 +85,11 @@ const TransactionForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!kelas || !gender || !santriId || !amount) {
+    // Validasi data
+    if (!kelas || !gender || !santriId || !amount || !trxDate) {
       toast({
         title: "Data belum lengkap",
-        description: "Lengkapi semua field transaksi",
+        description: "Lengkapi semua field termasuk tanggal.",
         variant: "destructive",
       });
       return;
@@ -99,8 +104,7 @@ const TransactionForm = () => {
       return;
     }
 
-    const dbType: DBType =
-      type === "pemasukan" ? "income" : "expense";
+    const dbType: DBType = type === "pemasukan" ? "income" : "expense";
 
     setLoading(true);
 
@@ -114,21 +118,25 @@ const TransactionForm = () => {
           amount: Number(amount),
           description,
           category: "santri",
-          transaction_date: new Date().toISOString().slice(0, 10),
+          // 🔥 GUNAKAN TANGGAL YANG DIPILIH USER
+          transaction_date: trxDate, 
         });
 
       if (error) throw error;
 
       toast({
         title: "Berhasil",
-        description: "Transaksi berhasil disimpan",
+        description: `Transaksi tgl ${trxDate} berhasil disimpan`,
       });
 
+      // Trigger refresh data di Dashboard
       window.dispatchEvent(new Event("refresh-keuangan"));
 
+      // Reset Form (Kecuali Tanggal, biar enak kalau mau input banyak di tgl yg sama)
       setAmount("");
       setDescription("");
       setSantriId(null);
+      // setTrxDate(new Date().toISOString().slice(0, 10)); // Uncomment kalau mau auto reset ke hari ini
     } catch (err) {
       console.error(err);
       toast({
@@ -142,98 +150,132 @@ const TransactionForm = () => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tambah Transaksi</CardTitle>
+    <Card className="border-green-100 shadow-sm">
+      <CardHeader className="pb-3 border-b border-gray-50 bg-gray-50/30">
+        <CardTitle className="text-lg font-bold text-gray-800">Tambah Transaksi Baru</CardTitle>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-4">
+          
+          {/* 🔥 INPUT TANGGAL (Paling Atas) */}
           <div className="space-y-2">
-            <Label>Jenis Transaksi</Label>
-            <Select value={type} onValueChange={(v) => setType(v as UIType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pemasukan">Pemasukan</SelectItem>
-                <SelectItem value="pengeluaran">Pengeluaran</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-green-600" />
+                Tanggal Transaksi
+            </Label>
+            <Input
+              type="date"
+              value={trxDate}
+              onChange={(e) => setTrxDate(e.target.value)}
+              className="bg-white border-green-200 focus:ring-green-500 font-medium"
+            />
+            <p className="text-[10px] text-gray-400">
+                *Default adalah hari ini. Ubah tanggal untuk input data lampau (Backdate).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+                <Label>Jenis</Label>
+                <Select value={type} onValueChange={(v) => setType(v as UIType)}>
+                <SelectTrigger className="bg-white">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="pemasukan" className="text-green-600 font-medium">Pemasukan (+)</SelectItem>
+                    <SelectItem value="pengeluaran" className="text-red-600 font-medium">Pengeluaran (-)</SelectItem>
+                </SelectContent>
+                </Select>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Kelas</Label>
+                <Select onValueChange={(v) => setKelas(Number(v))}>
+                <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Pilih..." />
+                </SelectTrigger>
+                <SelectContent>
+                    {[7, 8, 9, 10, 11, 12].map((k) => (
+                    <SelectItem key={k} value={k.toString()}>
+                        Kelas {k}
+                    </SelectItem>
+                    ))}
+                </SelectContent>
+                </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+                <Label>Gender</Label>
+                <Select
+                value={gender ?? undefined}
+                onValueChange={(v) => setGender(v as any)}
+                disabled={!kelas}
+                >
+                <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Pilih..." />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="ikhwan">Ikhwan</SelectItem>
+                    <SelectItem value="akhwat">Akhwat</SelectItem>
+                </SelectContent>
+                </Select>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Santri</Label>
+                <Select
+                value={santriId ?? undefined}
+                onValueChange={(v) => setSantriId(v)}
+                disabled={santriList.length === 0}
+                >
+                <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Pilih nama..." />
+                </SelectTrigger>
+                <SelectContent>
+                    {santriList.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                        {s.nama_lengkap}
+                    </SelectItem>
+                    ))}
+                </SelectContent>
+                </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Kelas</Label>
-            <Select onValueChange={(v) => setKelas(Number(v))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih kelas" />
-              </SelectTrigger>
-              <SelectContent>
-                {[7, 8, 9, 10, 11, 12].map((k) => (
-                  <SelectItem key={k} value={k.toString()}>
-                    Kelas {k}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Gender</Label>
-            <Select
-              value={gender ?? undefined}
-              onValueChange={(v) => setGender(v as any)}
-              disabled={!kelas}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih gender" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ikhwan">Ikhwan</SelectItem>
-                <SelectItem value="akhwat">Akhwat</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Santri</Label>
-            <Select
-              value={santriId ?? undefined}
-              onValueChange={(v) => setSantriId(v)}
-              disabled={santriList.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih santri" />
-              </SelectTrigger>
-              <SelectContent>
-                {santriList.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.nama_lengkap}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Nominal</Label>
+            <Label>Nominal (Rp)</Label>
             <Input
               type="number"
+              placeholder="0"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              className="font-bold text-gray-700 bg-white"
             />
           </div>
 
           <div className="space-y-2">
             <Label>Keterangan</Label>
             <Textarea
+              placeholder="Contoh: Tabungan mingguan, Uang saku..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              className="bg-white"
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Menyimpan..." : "Simpan Transaksi"}
+          <Button 
+            type="submit" 
+            className={`w-full font-bold shadow-md transition-all ${
+                type === 'pemasukan' 
+                ? 'bg-green-600 hover:bg-green-700' 
+                : 'bg-red-600 hover:bg-red-700'
+            }`} 
+            disabled={loading}
+          >
+            {loading ? "Menyimpan..." : type === 'pemasukan' ? "Simpan Pemasukan" : "Simpan Pengeluaran"}
           </Button>
         </form>
       </CardContent>
