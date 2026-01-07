@@ -149,9 +149,11 @@ const Index = () => {
   };
 
   useEffect(() => {
-    fetchKeuangan();
-    fetchRekapSaldo();
-  }, []);
+    if (user) {
+      fetchKeuangan();
+      fetchRekapSaldo();
+    }
+  }, [user]);
 
   if (loading) {
     return (
