@@ -26,8 +26,15 @@ import {
   FileSpreadsheet,
   PanelLeftClose,
   PanelLeftOpen,
-  GraduationCap
+  GraduationCap,
+  CalendarDays
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /* ================= TYPES ================= */
 interface RekapSaldo {
@@ -44,6 +51,16 @@ const Index = () => {
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(true); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
+
+  /* ================= STATE EXPORT (BARU) ================= */
+  const [exportMonth, setExportMonth] = useState(new Date().getMonth()); // 0 = Januari
+  const [exportYear, setExportYear] = useState(new Date().getFullYear());
+
+  const monthsList = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  const yearsList = [2024, 2025, 2026, 2027, 2028];
 
   /* ================= STATE DATA ================= */
   const [rekapSaldo, setRekapSaldo] = useState<RekapSaldo[]>([]);
@@ -95,13 +112,17 @@ const Index = () => {
     setRekapSaldo(data || []);
   };
 
+  // 🔥 UPDATE: Fungsi Export Mengikuti State Bulan & Tahun
   const exportExcelBulanan = async () => {
-    const now = new Date();
-    const bulan = now.getMonth();
-    const tahun = now.getFullYear();
-    const namaBulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"][bulan];
+    const bulan = exportMonth;
+    const tahun = exportYear;
+    const namaBulan = monthsList[bulan];
+    
+    // Hitung tanggal awal dan akhir bulan yang dipilih
     const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
-    const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-31`;
+    // Cara gampang dapat tanggal terakhir bulan: tanggal 0 bulan berikutnya
+    const lastDay = new Date(tahun, bulan + 1, 0).getDate(); 
+    const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-${lastDay}`;
 
     const { data, error } = await supabase
       .from("transactions_2025_12_01_21_34")
@@ -119,7 +140,7 @@ const Index = () => {
       Tanggal: d.transaction_date,
       Santri: d.santri?.nama_lengkap || "-",
       Kelas: d.santri?.kelas || "-",
-      Jenis: d.type,
+      Jenis: d.type === "income" ? "Pemasukan" : "Pengeluaran",
       Nominal: d.amount,
       Keterangan: d.description,
     }));
@@ -156,7 +177,7 @@ const Index = () => {
   const dashboardCardStyle = "border-2 border-green-400/80 rounded-2xl bg-white shadow-sm hover:shadow-md transition-all";
   const summaryCardStyle = "border border-green-500 rounded-xl bg-white shadow-sm";
 
-  // Ambil Avatar dari Metadata Google (jika ada)
+  // Ambil Avatar
   const avatarUrl = user?.user_metadata?.avatar_url;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
 
@@ -164,16 +185,12 @@ const Index = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
       
       {/* ================= SIDEBAR ================= */}
-      {/* Sidebar dibuat relative di desktop agar content di sebelahnya bergeser, bukan tertimpa */}
       <aside
         className={`${isSidebarOpen ? "w-72" : "w-0"} 
         bg-green-900 text-white shadow-2xl transition-all duration-300 ease-in-out flex flex-col flex-shrink-0 z-50`}
       >
-        {/* LOGO AREA - TEXT ESTETIK */}
         <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden">
-             {/* Icon Background Tipis */}
             <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
-            
             <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "opacity-0"}`}>
                 <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">
                     PPS AL-JAWAHIR
@@ -184,7 +201,6 @@ const Index = () => {
             </div>
         </div>
 
-        {/* Menu Items */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto overflow-x-hidden">
           <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Menu Utama</p>
 
@@ -242,7 +258,6 @@ const Index = () => {
           )}
         </nav>
 
-        {/* LOGOUT BUTTON DI SIDEBAR (BAWAH) */}
         <div className="p-4 border-t border-green-800 bg-green-950">
             <button 
                 onClick={signOut}
@@ -254,13 +269,11 @@ const Index = () => {
         </div>
       </aside>
 
-      {/* ================= KONTEN KANAN (MAIN) ================= */}
+      {/* ================= KONTEN KANAN ================= */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative transition-all duration-300">
         
-        {/* HEADER ATAS */}
+        {/* HEADER */}
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
-          
-          {/* KIRI: Tombol Toggle */}
           <div className="flex items-center gap-3">
             <button 
                 onClick={() => setSidebarOpen(!isSidebarOpen)} 
@@ -271,7 +284,6 @@ const Index = () => {
             </button>
           </div>
 
-          {/* KANAN: User Profile (Foto, Nama, Role) */}
           <div className="flex items-center gap-4">
                 <div className="text-right hidden sm:block">
                     <p className="text-sm font-bold text-gray-800">{userName}</p>
@@ -279,8 +291,6 @@ const Index = () => {
                         {isAdmin ? "Administrator" : "Viewer"}
                     </p>
                 </div>
-                
-                {/* Avatar Circle */}
                 <div className="h-10 w-10 rounded-full border-2 border-green-100 shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center">
                     {avatarUrl ? (
                         <img src={avatarUrl} alt="User" className="h-full w-full object-cover" />
@@ -293,15 +303,13 @@ const Index = () => {
           </div>
         </header>
 
-        {/* AREA SCROLLABLE */}
+        {/* MAIN CONTENT */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50/50">
           <div className="max-w-7xl mx-auto space-y-8 pb-10">
 
             {/* --- VIEW 1: DASHBOARD --- */}
             {activeMenu === "dashboard" && (
               <div className="space-y-8 animate-in fade-in zoom-in duration-300">
-                
-                {/* JUDUL DASHBOARD (Pindah kesini agar ikut geser) */}
                 <div className="text-center space-y-3 pb-4 border-b border-gray-200">
                     <h1 className="text-2xl md:text-3xl font-bold text-green-700 uppercase tracking-wide">
                         KEUANGAN PPS AL-JAWAHIR
@@ -311,7 +319,7 @@ const Index = () => {
                     </p>
                 </div>
 
-                {/* KARTU SALDO PER KELAS */}
+                {/* Cards Saldo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {[7, 8, 9, 10, 11, 12].map((kls) => {
                       const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
@@ -324,9 +332,7 @@ const Index = () => {
                           className={`${dashboardCardStyle} p-5 cursor-pointer group relative overflow-hidden bg-white`}
                         >
                           <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-8 -mt-8 z-0 group-hover:bg-green-100 transition-colors"></div>
-                          
                           <h3 className="text-center font-bold text-gray-800 mb-4 text-lg relative z-10">Kelas {kls}</h3>
-                          
                           <div className="space-y-3 text-sm font-medium relative z-10">
                             <div className="flex justify-between items-center text-gray-600">
                               <span>Ikhwan</span>
@@ -342,7 +348,6 @@ const Index = () => {
                               <span>Rp {total.toLocaleString("id-ID")}</span>
                             </div>
                           </div>
-                          
                           <div className="mt-4 text-center relative z-10">
                             <span className="text-xs text-gray-400 group-hover:text-green-600 transition-colors font-semibold">
                                 Klik untuk melihat detail santri →
@@ -353,7 +358,7 @@ const Index = () => {
                     })}
                 </div>
 
-                {/* RINGKASAN BAWAH */}
+                {/* Summary */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {[
                     { title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-600" },
@@ -370,7 +375,7 @@ const Index = () => {
                   ))}
                 </div>
 
-                {/* GRAFIK */}
+                {/* Chart */}
                 <div className={`${summaryCardStyle} p-6`}>
                     <h3 className="text-center font-bold text-gray-800 mb-6 text-lg">Grafik Keuangan Mingguan</h3>
                     <FinanceChart pemasukan={masuk7Hari} pengeluaran={keluar7Hari} />
@@ -378,27 +383,78 @@ const Index = () => {
               </div>
             )}
 
-            {/* --- VIEW 2: KEUANGAN --- */}
+            {/* --- VIEW 2: KEUANGAN (Revisi Layout) --- */}
             {activeMenu === "keuangan" && isAdmin && (
               <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-2">
                     <h2 className="text-2xl font-bold text-gray-800">Menu Keuangan</h2>
                 </div>
 
-                <Card className="border-green-200 bg-green-50/50">
-                  <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-green-800">Laporan Bulanan</h3>
-                      <p className="text-sm text-green-600">Unduh rekap transaksi bulan ini dalam format Excel.</p>
-                    </div>
-                    <Button onClick={exportExcelBulanan} className="bg-green-700 hover:bg-green-800 shadow-md">
-                      <FileSpreadsheet className="mr-2 h-4 w-4" />
-                      Download Excel
-                    </Button>
-                  </div>
+                {/* 🔥 BAGIAN EXPORT EXCEL DENGAN FILTER BULAN/TAHUN */}
+                <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
+                  <CardHeader className="bg-green-50/50 border-b border-green-100 pb-3">
+                      <div className="flex items-center gap-2 text-green-800">
+                          <FileSpreadsheet className="w-5 h-5" />
+                          <CardTitle className="text-lg">Export Laporan Bulanan</CardTitle>
+                      </div>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                      <div className="flex flex-col md:flex-row md:items-end gap-4">
+                        
+                        {/* Pilih Bulan */}
+                        <div className="flex-1 space-y-2">
+                            <label className="text-sm font-medium text-gray-600">Pilih Bulan</label>
+                            <select 
+                                value={exportMonth}
+                                onChange={(e) => setExportMonth(parseInt(e.target.value))}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-gray-700"
+                            >
+                                {monthsList.map((m, idx) => (
+                                    <option key={idx} value={idx}>{m}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Pilih Tahun */}
+                        <div className="w-full md:w-32 space-y-2">
+                            <label className="text-sm font-medium text-gray-600">Tahun</label>
+                            <select 
+                                value={exportYear}
+                                onChange={(e) => setExportYear(parseInt(e.target.value))}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-gray-700"
+                            >
+                                {yearsList.map((y) => (
+                                    <option key={y} value={y}>{y}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Tombol Download */}
+                        <Button 
+                            onClick={exportExcelBulanan} 
+                            className="bg-green-700 hover:bg-green-800 shadow-md h-[42px] px-6"
+                        >
+                          <FileSpreadsheet className="mr-2 h-4 w-4" />
+                          Download Laporan
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-3">
+                          *Mengunduh laporan transaksi lengkap periode {monthsList[exportMonth]} {exportYear}
+                      </p>
+                  </CardContent>
                 </Card>
 
-                <div className="bg-white rounded-xl shadow-sm border p-1">
+                {/* FORM TRANSAKSI */}
+                {/* Note: Untuk input tanggal manual (backdate), 
+                    modifikasinya harus dilakukan di dalam file TransactionForm.tsx 
+                */}
+                <div className="bg-white rounded-xl shadow-sm border p-1 relative">
+                    <div className="absolute top-0 right-0 p-4 z-10 hidden">
+                         {/* Placeholder instruksi */}
+                         <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1">
+                             <CalendarDays size={12}/> Mode Input Tanggal
+                         </span>
+                    </div>
                    <TransactionForm />
                 </div>
               </div>
