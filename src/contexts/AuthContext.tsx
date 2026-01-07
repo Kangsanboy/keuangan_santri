@@ -47,12 +47,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔹 Update Fungsi Fetch Profile
   const fetchProfile = async (userId: string) => {
     try {
-      console.log("Mencari profil untuk user_id:", userId); // Debugging
+      console.log("Mencoba ambil data user id:", user.id);
       
       const { data, error } = await supabase
-  .from('users')  // <--- Ganti nama tabel di sini jadi 'users'
-  .select('*')    // Ambil semua kolom (id, email, role, dll)
-  .eq('id', user.id) // Pastikan kolom di database namanya 'id'
+  .from('users')        // Pastikan nama tabel 'users'
+  .select('*')
+  .eq('id', user.id)    // Pastikan kolom 'id'
   .single();
 
 // LOG HASILNYA (Ini yang paling penting sekarang)
@@ -60,21 +60,20 @@ console.log("Hasil Data Database:", data);
 console.log("Error Database:", error);
 
 if (error) {
-  console.error("Gagal ambil profil!", error.message);
-  // PENTING: Matikan loading biar gak muter terus
-  setLoading(false); 
-  return;
-}
-
-if (!data) {
-  console.warn("Profil belum dibuat untuk user ini!");
-  // PENTING: Matikan loading atau redirect ke halaman buat profil
+  console.error("❌ Error Database:", error.message);
   setLoading(false);
   return;
 }
 
+if (!data) {
+  console.warn("⚠️ Data user tidak ditemukan di tabel 'users'!");
+  console.log("Pastikan user_id ini ada di tabel:", user.id);
+  setLoading(false);
+  return; // BERHENTI DI SINI BIAR GAK CRASH
+}
+      
 // Jika sukses
-console.log("Profil ditemukan, lanjut masuk app...");
+console.log("✅ Data ditemukan:", data);
 setLoading(false);
     } catch (err) {
       console.error("Fetch profile crash:", err);
