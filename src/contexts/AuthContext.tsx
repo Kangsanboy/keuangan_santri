@@ -42,118 +42,113 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Update Fungsi Fetch Profile (SUDAH DIPERBAIKI)
+  // 🔹 Fungsi Fetch Profile yang Stabil
   const fetchProfile = async (userId: string) => {
     try {
-      // PENTING: Pakai 'userId' dari parameter, JANGAN pakai 'user.id' state karena bisa null
-      console.log("🚀 Memulai pencarian profil untuk ID:", userId);
-
+      console.log("🚀 Mengambil profil untuk ID:", userId);
       const { data, error } = await supabase
-        .from('users')  // Pastikan nama tabel benar
+        .from('users') 
         .select('*')
-        .eq('id', userId) // <-- PERBAIKAN UTAMA DISINI
+        .eq('id', userId)
         .single();
 
       if (error) {
-        console.error("❌ Error Database:", error.message);
-        // Jangan return dulu, biarkan loading selesai di akhir
+        console.error("❌ Gagal ambil profil:", error.message);
       } else if (data) {
-        console.log("✅ Data user ditemukan:", data);
-        console.log("🧐 Role user ini adalah:", data.role);
-        
-        // SIMPAN DATA KE STATE (Ini yang bikin admin terbaca)
+        console.log("✅ Profil ditemukan. Role:", data.role);
         setProfile(data as UserProfile);
       } else {
-        console.warn("⚠️ Data user kosong di tabel 'users'");
+        console.warn("⚠️ Data profil kosong");
       }
-
     } catch (err) {
-      console.error("🔥 Fetch profile crash:", err);
-    } finally {
-      // Pastikan loading berhenti apapun yang terjadi
-      setLoading(false);
+      console.error("🔥 Error fetch:", err);
     }
+    // Catatan: Kita TIDAK mematikan loading di sini, biar diatur oleh useEffect utama
   };
 
-  // 🔹 INIT SESSION
+  // 🔹 USE EFFECT UTAMA (Anti-Stuck Loading)
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
+    const initializeAuth = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        // 1. Cek sesi yang tersimpan di browser
+        const { data: { session } } = await supabase.auth.getSession();
 
         if (mounted) {
-          setSession(data.session);
-          setUser(data.session?.user ?? null);
-
-          if (data.session?.user) {
-            // Panggil fetchProfile dengan ID dari session
-            await fetchProfile(data.session.user.id);
-          } else {
-            setLoading(false);
+          if (session) {
+            setSession(session);
+            setUser(session.user);
+            // Tunggu ambil profil dulu baru matikan loading
+            await fetchProfile(session.user.id);
           }
         }
-      } catch (e) {
-        console.error("Auth init error:", e);
-        if (mounted) setLoading(false);
+      } catch (error) {
+        console.error("Auth Init Error:", error);
+      } finally {
+        // 2. APAPUN YANG TERJADI, MATIKAN LOADING DI SINI
+        if (mounted) {
+          console.log("🏁 Initial Load Selesai. Loading dimatikan.");
+          setLoading(false);
+        }
       }
     };
 
-    init();
+    initializeAuth();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+    // 3. Listener untuk perubahan status (Login/Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
         if (!mounted) return;
         
-        console.log("Auth state changed:", _event);
+        console.log("🔔 Auth Event:", event);
+        
+        // Update state dasar
         setSession(session);
         setUser(session?.user ?? null);
 
-        if (session?.user) {
-          // Reset loading jadi true saat ganti user biar gak glitch
-          setLoading(true);
-          await fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
-          setLoading(false);
+        if (event === 'SIGNED_IN' && session) {
+            // Kalau baru login, ambil profil
+            await fetchProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
+            // Kalau logout, kosongkan data
+            setProfile(null);
+            setLoading(false);
+        } else if (event === 'INITIAL_SESSION') {
+            // Abaikan event ini karena sudah dihandle oleh initializeAuth di atas
+            // Ini kunci biar gak loading muter-muter
         }
       }
     );
 
     return () => {
       mounted = false;
-      listener.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
   // 🔐 AUTH ACTIONS
   const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
-    setLoading(true);
+    // Jangan set loading true global biar UI gak kaget, cukup handle di component register
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name: fullName,
-          role, 
-        },
+        data: { full_name: fullName, role },
       },
     });
 
     if (error) {
-      setLoading(false);
       toast({ title: "Registrasi gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
     }
 
     toast({ title: "Registrasi berhasil", description: "Silakan login." });
-    setLoading(false);
     return { data, error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    setLoading(true);
+    setLoading(true); // Nyalakan loading cuma pas klik tombol login
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
@@ -162,16 +157,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { data: null, error };
     }
 
+    // Sukses login, fetchProfile akan dijalankan oleh onAuthStateChange
     toast({ title: "Login berhasil" });
-    // Loading akan di-handle oleh onAuthStateChange
     return { data, error: null };
   };
 
   const signOut = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setProfile(null);
+    // State akan di-reset oleh onAuthStateChange
   };
 
   return (
@@ -184,7 +178,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUp,
         signIn,
         signOut,
-        // Cek admin dengan aman (pakai optional chaining)
         isAdmin: profile?.role === "admin",
       }}
     >
