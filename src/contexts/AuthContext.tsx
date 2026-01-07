@@ -42,53 +42,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fetch profile dari public.users
+  // 🔹 Fetch profile dari tabel YANG BENAR
   const fetchProfile = async (userId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle(); // ✅ AMAN
+    try {
+      console.log("Fetching profile for:", userId); // Debugging
+      
+      // PERBAIKAN: Gunakan nama tabel yang sesuai dengan database kamu
+      const { data, error } = await supabase
+        .from("user_profiles_2025_12_01_21_34") 
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle(); 
 
-    if (error) {
-      console.warn("Profile fetch warning:", error.message);
+      if (error) {
+        console.warn("Profile fetch error:", error.message);
+        setProfile(null);
+        return;
+      }
+
+      if (!data) {
+        console.warn("Profile not found in user_profiles_2025_12_01_21_34");
+        setProfile(null);
+        return;
+      }
+
+      console.log("Profile loaded:", data); // Debugging
+      setProfile(data as UserProfile);
+    } catch (err) {
+      console.error("Fetch profile exception:", err);
       setProfile(null);
-      return;
     }
-
-    if (!data) {
-      console.warn("Profile not found");
-      setProfile(null);
-      return;
-    }
-
-    setProfile(data);
-  } catch (err) {
-    console.error("Fetch profile error:", err);
-    setProfile(null);
-  }
-};
+  };
 
   // 🔹 INIT SESSION
   useEffect(() => {
+    let mounted = true;
+
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      try {
+        const { data } = await supabase.auth.getSession();
 
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+        if (mounted) {
+          setSession(data.session);
+          setUser(data.session?.user ?? null);
 
-      if (data.session?.user) {
-        await fetchProfile(data.session.user.id);
+          if (data.session?.user) {
+            await fetchProfile(data.session.user.id);
+          }
+        }
+      } catch (e) {
+        console.error("Auth init error:", e);
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      setLoading(false);
     };
 
     init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
+        
+        console.log("Auth state changed:", _event); // Debugging
         setSession(session);
         setUser(session?.user ?? null);
 
@@ -102,7 +117,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   // 🔐 AUTH ACTIONS
@@ -113,7 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       options: {
         data: {
           full_name: fullName,
-          role,
+          role, // Metadata ini akan dicopy oleh Trigger Database (jika ada)
         },
       },
     });
@@ -133,7 +151,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) {
       toast({ title: "Login gagal", description: error.message, variant: "destructive" });
       return { data: null, error };
-      await supabase.auth.refreshSession();
     }
 
     toast({ title: "Login berhasil" });
