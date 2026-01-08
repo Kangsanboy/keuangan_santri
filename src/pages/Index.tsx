@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import AuthPage from "@/components/AuthPage";
@@ -25,7 +25,8 @@ import {
   PanelLeftOpen,
   GraduationCap,
   FileSpreadsheet,
-  CalendarDays
+  CalendarDays,
+  Menu // Tambahan icon menu untuk mobile
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -63,8 +64,9 @@ const Index = () => {
   const [keluar7Hari, setKeluar7Hari] = useState(0);
   const [keluarHariIni, setKeluarHariIni] = useState(0);
 
-  /* ================= LOGIC DATA ================= */
-  const fetchKeuangan = async () => {
+  /* ================= LOGIC DATA (Updated with useCallback) ================= */
+  // Pakai useCallback biar stabil saat dipanggil ulang oleh Listener
+  const fetchKeuangan = useCallback(async () => {
     const today = new Date();
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(today.getDate() - 6);
@@ -98,12 +100,12 @@ const Index = () => {
     setMasuk7Hari(masuk7);
     setKeluar7Hari(keluar7);
     setKeluarHariIni(keluarToday);
-  };
+  }, []);
 
-  const fetchRekapSaldo = async () => {
+  const fetchRekapSaldo = useCallback(async () => {
     const { data } = await supabase.rpc("get_saldo_rekap_kelas_gender");
     setRekapSaldo(data || []);
-  };
+  }, []);
 
   const exportExcelBulanan = async () => {
     const bulan = exportMonth;
@@ -140,24 +142,40 @@ const Index = () => {
     XLSX.writeFile(wb, `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`);
   };
 
+  // 🔥 1. FETCH AWAL SAAT LOGIN
   useEffect(() => {
     if (user) {
       fetchKeuangan();
       fetchRekapSaldo();
     }
-  }, [user]);
+  }, [user, fetchKeuangan, fetchRekapSaldo]);
+
+  // 🔥 2. LISTENER AUTO-REFRESH (Ini solusinya Bang!)
+  // Kode ini akan 'mendengar' teriakan dari TransactionForm saat simpan sukses
+  useEffect(() => {
+    const handleRefresh = () => {
+        console.log("♻️ Auto-refreshing dashboard data...");
+        fetchKeuangan();
+        fetchRekapSaldo();
+    };
+
+    window.addEventListener("refresh-keuangan", handleRefresh);
+
+    return () => {
+        window.removeEventListener("refresh-keuangan", handleRefresh);
+    };
+  }, [fetchKeuangan, fetchRekapSaldo]);
+
 
   const handleOpenKelas = (kelas: number) => {
     setSelectedKelasSantri(kelas);
     setActiveMenu("santri");
-    // Di HP, tutup sidebar setelah klik
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const handleMenuClick = (menu: any) => {
     setActiveMenu(menu);
     if (menu === "santri") setSelectedKelasSantri(null);
-    // Di HP, tutup sidebar setelah klik menu
     if (window.innerWidth < 768) setSidebarOpen(false);
   }
 
@@ -177,10 +195,11 @@ const Index = () => {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans relative">
       
-      {/* ================= MOBILE OVERLAY (Gelap-gelap di belakang sidebar) ================= */}
+      {/* ================= MOBILE OVERLAY ================= */}
+      {/* Layar hitam transparan di belakang sidebar saat mode HP */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -191,9 +210,9 @@ const Index = () => {
           fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl 
           transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"}
-          w-72 md:w-auto
+          w-[280px] md:w-auto
         `}
-        style={{ width: isSidebarOpen ? '18rem' : '0' }}
+        style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}
       >
         <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
             <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
@@ -205,10 +224,10 @@ const Index = () => {
                     Sistem Keuangan Digital
                 </p>
             </div>
-            {/* Tombol Close di HP */}
+            {/* Tombol Close Sidebar di HP */}
             <button 
                 onClick={() => setSidebarOpen(false)} 
-                className="absolute top-2 right-2 md:hidden text-green-200 hover:text-white"
+                className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"
             >
                 <PanelLeftClose size={24} />
             </button>
@@ -292,7 +311,8 @@ const Index = () => {
                 onClick={() => setSidebarOpen(!isSidebarOpen)} 
                 className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors"
             >
-              {isSidebarOpen ? <PanelLeftClose size={24} /> : <PanelLeftOpen size={24} />}
+              {isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}
+              <Menu size={24} className="md:hidden" /> {/* Icon Menu Burger di HP */}
             </button>
           </div>
 
