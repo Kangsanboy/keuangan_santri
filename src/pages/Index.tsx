@@ -26,7 +26,7 @@ import {
   GraduationCap,
   FileSpreadsheet,
   CalendarDays,
-  Menu // Tambahan icon menu untuk mobile
+  Menu
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -42,7 +42,6 @@ const Index = () => {
 
   /* ================= STATE UI ================= */
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
-  // Default: Tutup di HP (width < 768), Buka di Laptop
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
 
@@ -64,8 +63,9 @@ const Index = () => {
   const [keluar7Hari, setKeluar7Hari] = useState(0);
   const [keluarHariIni, setKeluarHariIni] = useState(0);
 
-  /* ================= LOGIC DATA (Updated with useCallback) ================= */
-  // Pakai useCallback biar stabil saat dipanggil ulang oleh Listener
+  /* ================= LOGIC DATA ================= */
+  
+  // 1. Fetch Ringkasan Bawah & Grafik (Ambil dari tabel Transaksi)
   const fetchKeuangan = useCallback(async () => {
     const today = new Date();
     const sevenDaysAgo = new Date();
@@ -102,9 +102,36 @@ const Index = () => {
     setKeluarHariIni(keluarToday);
   }, []);
 
+  // 2. Fetch Saldo Per Kelas (🔥 UPDATE: Sekarang hitung manual dari View)
   const fetchRekapSaldo = useCallback(async () => {
-    const { data } = await supabase.rpc("get_saldo_rekap_kelas_gender");
-    setRekapSaldo(data || []);
+    // Ambil data dari "view_santri_saldo" yang baru kita buat
+    const { data } = await supabase
+      .from("view_santri_saldo")
+      .select("kelas, gender, saldo");
+
+    if (data) {
+      // Kita rangkum totalnya di sini (Grouping by Kelas & Gender)
+      const stats: RekapSaldo[] = [];
+      const classes = [7, 8, 9, 10, 11, 12];
+      const genders = ["ikhwan", "akhwat"];
+
+      // Siapkan wadah kosong dulu biar kelas yang belum ada transaksi tetap muncul 0
+      classes.forEach(k => {
+        genders.forEach(g => {
+          stats.push({ kelas: k, gender: g as "ikhwan"|"akhwat", saldo: 0 });
+        });
+      });
+
+      // Masukkan data asli dari database
+      data.forEach((item: any) => {
+        const target = stats.find(s => s.kelas === item.kelas && s.gender === item.gender);
+        if (target) {
+          target.saldo += (item.saldo || 0);
+        }
+      });
+
+      setRekapSaldo(stats);
+    }
   }, []);
 
   const exportExcelBulanan = async () => {
@@ -142,7 +169,6 @@ const Index = () => {
     XLSX.writeFile(wb, `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`);
   };
 
-  // 🔥 1. FETCH AWAL SAAT LOGIN
   useEffect(() => {
     if (user) {
       fetchKeuangan();
@@ -150,22 +176,18 @@ const Index = () => {
     }
   }, [user, fetchKeuangan, fetchRekapSaldo]);
 
-  // 🔥 2. LISTENER AUTO-REFRESH (Ini solusinya Bang!)
-  // Kode ini akan 'mendengar' teriakan dari TransactionForm saat simpan sukses
+  // Listener Auto-Refresh
   useEffect(() => {
     const handleRefresh = () => {
         console.log("♻️ Auto-refreshing dashboard data...");
         fetchKeuangan();
         fetchRekapSaldo();
     };
-
     window.addEventListener("refresh-keuangan", handleRefresh);
-
     return () => {
         window.removeEventListener("refresh-keuangan", handleRefresh);
     };
   }, [fetchKeuangan, fetchRekapSaldo]);
-
 
   const handleOpenKelas = (kelas: number) => {
     setSelectedKelasSantri(kelas);
@@ -196,7 +218,6 @@ const Index = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans relative">
       
       {/* ================= MOBILE OVERLAY ================= */}
-      {/* Layar hitam transparan di belakang sidebar saat mode HP */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in"
@@ -224,7 +245,6 @@ const Index = () => {
                     Sistem Keuangan Digital
                 </p>
             </div>
-            {/* Tombol Close Sidebar di HP */}
             <button 
                 onClick={() => setSidebarOpen(false)} 
                 className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"
@@ -312,7 +332,7 @@ const Index = () => {
                 className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors"
             >
               {isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}
-              <Menu size={24} className="md:hidden" /> {/* Icon Menu Burger di HP */}
+              <Menu size={24} className="md:hidden" />
             </button>
           </div>
 
