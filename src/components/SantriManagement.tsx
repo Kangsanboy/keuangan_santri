@@ -2,15 +2,15 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Search } from "lucide-react";
+import { Users, Search, RefreshCw } from "lucide-react"; 
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface SantriSaldo {
-  santri_id?: string; // Tanda tanya biar aman kalau beda nama kolom
-  id?: string;
+  id: string;
   nama_lengkap: string;
-  kelas?: number;
-  saldo: number; // Pastikan view/tabel punya kolom saldo/balance
+  kelas: number;
+  saldo: number;
 }
 
 const SantriManagement = ({ kelas }: { kelas: string | null }) => {
@@ -21,63 +21,50 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
 
   const kelasNumber = kelas ? Number(kelas) : null;
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // 🔥 LOGIKA BARU:
-        // Kita ambil dari view/tabel summary saldo yang ada di gambar database abang
-        // Nama tabel disesuaikan dengan screenshot: 'santri_balance_summary_2025_12_01_21_34'
-        // Kalau error nama tabel, ganti dengan nama tabel/view yang benar di Supabase abang.
-        
-        let query = supabase
-          .from("santri_balance_summary_2025_12_01_21_34") 
-          .select("*");
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // 🔥 PERUBAHAN UTAMA:
+      // Jangan pakai .rpc("get_saldo_santri_by_kelas") lagi!
+      // Pakai .from("view_santri_saldo") karena lebih stabil.
+      
+      let query = supabase
+        .from("view_santri_saldo") 
+        .select("*");
 
-        // Kalau ada filter kelas, pasang filter. Kalau null, ambil semua.
-        if (kelasNumber) {
-          query = query.eq("kelas", kelasNumber);
-        }
-
-        const { data: result, error } = await query.order("nama_lengkap", { ascending: true });
-
-        if (error) {
-            // Fallback: Kalau tabel summary belum ada, coba ambil dari tabel santri biasa
-            console.warn("Mencoba fetch fallback...", error.message);
-            const { data: santriBiasa, error: err2 } = await supabase
-                .from("santri_2025_12_01_21_34")
-                .select("id, nama_lengkap, kelas")
-                .eq("status", "aktif");
-            
-            if (kelasNumber && santriBiasa) {
-                 const filtered = santriBiasa.filter(s => s.kelas === kelasNumber);
-                 // @ts-ignore
-                 setData(filtered.map(s => ({ ...s, saldo: 0 }))); // Saldo 0 dulu kalau darurat
-            } else {
-                 // @ts-ignore
-                 setData(santriBiasa || []);
-            }
-        } else {
-            // @ts-ignore
-            setData(result || []);
-        }
-
-      } catch (err) {
-        console.error(err);
-        toast({
-          title: "Gagal memuat data",
-          description: "Periksa koneksi internet Anda.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+      if (kelasNumber) {
+        query = query.eq("kelas", kelasNumber);
       }
-    };
 
+      const { data: result, error } = await query.order("nama_lengkap", { ascending: true });
+
+      if (error) throw error;
+
+      setData(result || []);
+
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Gagal memuat data",
+        description: "Cek koneksi atau pastikan SQL View sudah dijalankan.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [kelasNumber]);
 
-  // Fitur Search Client-side
+  // Auto-refresh saat ada transaksi baru
+  useEffect(() => {
+    const handleRefresh = () => fetchData();
+    window.addEventListener("refresh-keuangan", handleRefresh);
+    return () => window.removeEventListener("refresh-keuangan", handleRefresh);
+  }, []);
+
   const filteredData = data.filter((item) =>
     item.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -91,31 +78,41 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
             {kelasNumber ? `Saldo Kelas ${kelasNumber}` : "Database Semua Santri"}
             </CardTitle>
             
-            {/* Input Pencarian */}
-            <div className="relative w-full md:w-64">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-                <Input
-                    placeholder="Cari nama santri..."
-                    className="pl-9 bg-white border-green-200 focus:ring-green-500"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <div className="flex gap-2 w-full md:w-auto">
+                <div className="relative w-full md:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input
+                        placeholder="Cari nama santri..."
+                        className="pl-9 bg-white border-green-200 focus:ring-green-500"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={fetchData} 
+                    disabled={loading}
+                    title="Refresh Data"
+                >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
             </div>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
         {loading ? (
-           <div className="p-8 text-center text-gray-500 animate-pulse">Sedang memuat data santri...</div>
+           <div className="p-8 text-center text-gray-500 animate-pulse">Menghitung saldo...</div>
         ) : filteredData.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             Belum ada data santri.
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {filteredData.map((s, idx) => (
+            {filteredData.map((s) => (
               <div
-                key={s.id || s.santri_id || idx}
+                key={s.id}
                 className="flex justify-between items-center p-4 hover:bg-green-50/30 transition-colors"
               >
                 <div className="flex flex-col">
@@ -125,8 +122,11 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
                     </span>
                 </div>
                 <div className="text-right">
-                    <span className={`font-bold ${ (s.saldo || 0) >= 0 ? 'text-green-600' : 'text-red-500' }`}>
-                    Rp {(s.saldo || 0).toLocaleString("id-ID")}
+                    <span className={`font-bold text-lg ${ 
+                        s.saldo > 0 ? 'text-green-600' : 
+                        s.saldo < 0 ? 'text-red-500' : 'text-gray-400' 
+                    }`}>
+                    Rp {s.saldo.toLocaleString("id-ID")}
                     </span>
                 </div>
               </div>
