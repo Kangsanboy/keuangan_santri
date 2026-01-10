@@ -26,7 +26,10 @@ import {
   GraduationCap,
   FileSpreadsheet,
   CalendarDays,
-  Menu
+  Menu,
+  History,
+  ArrowUpCircle,
+  ArrowDownCircle
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -34,6 +37,19 @@ interface RekapSaldo {
   kelas: number;
   gender: "ikhwan" | "akhwat";
   saldo: number;
+}
+
+// Tipe data untuk tabel riwayat
+interface TransaksiItem {
+  id: string;
+  amount: number;
+  type: "income" | "expense";
+  description: string;
+  transaction_date: string;
+  santri: {
+    nama_lengkap: string;
+    kelas: number;
+  } | null;
 }
 
 const Index = () => {
@@ -57,72 +73,89 @@ const Index = () => {
 
   /* ================= STATE DATA ================= */
   const [rekapSaldo, setRekapSaldo] = useState<RekapSaldo[]>([]);
+  
+  // Ringkasan Dashboard
   const [totalMasuk, setTotalMasuk] = useState(0);
   const [totalKeluar, setTotalKeluar] = useState(0);
   const [masuk7Hari, setMasuk7Hari] = useState(0);
   const [keluar7Hari, setKeluar7Hari] = useState(0);
   const [keluarHariIni, setKeluarHariIni] = useState(0);
 
+  // 🔥 STATE BARU: Riwayat Transaksi Hari Ini
+  const [trxHariIni, setTrxHariIni] = useState<TransaksiItem[]>([]);
+
   /* ================= LOGIC DATA ================= */
   
-  // 1. Fetch Ringkasan Bawah & Grafik (Ambil dari tabel Transaksi)
   const fetchKeuangan = useCallback(async () => {
     const today = new Date();
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(today.getDate() - 6);
     const todayStr = today.toISOString().slice(0, 10);
 
+    // 1. Ambil Data Ringkasan (Chart & Card Atas)
     const { data } = await supabase
       .from("transactions_2025_12_01_21_34")
       .select("amount, type, transaction_date");
 
-    if (!data) return;
+    if (data) {
+        let masuk = 0, keluar = 0, masuk7 = 0, keluar7 = 0, keluarToday = 0;
 
-    let masuk = 0, keluar = 0, masuk7 = 0, keluar7 = 0, keluarToday = 0;
+        data.forEach((d) => {
+        const tgl = new Date(d.transaction_date);
+        if (d.type === "income") masuk += d.amount;
+        if (d.type === "expense") keluar += d.amount;
 
-    data.forEach((d) => {
-      const tgl = new Date(d.transaction_date);
-      if (d.type === "income") masuk += d.amount;
-      if (d.type === "expense") keluar += d.amount;
+        if (tgl >= sevenDaysAgo && tgl <= today) {
+            if (d.type === "income") masuk7 += d.amount;
+            if (d.type === "expense") keluar7 += d.amount;
+        }
 
-      if (tgl >= sevenDaysAgo && tgl <= today) {
-        if (d.type === "income") masuk7 += d.amount;
-        if (d.type === "expense") keluar7 += d.amount;
-      }
+        if (d.type === "expense" && d.transaction_date === todayStr) {
+            keluarToday += d.amount;
+        }
+        });
 
-      if (d.type === "expense" && d.transaction_date === todayStr) {
-        keluarToday += d.amount;
-      }
-    });
+        setTotalMasuk(masuk);
+        setTotalKeluar(keluar);
+        setMasuk7Hari(masuk7);
+        setKeluar7Hari(keluar7);
+        setKeluarHariIni(keluarToday);
+    }
 
-    setTotalMasuk(masuk);
-    setTotalKeluar(keluar);
-    setMasuk7Hari(masuk7);
-    setKeluar7Hari(keluar7);
-    setKeluarHariIni(keluarToday);
+    // 🔥 2. Ambil Data Detail Riwayat Hari Ini (Untuk Tabel)
+    // Kita ambil detail nama santri juga pakai relasi (santri:santri_id)
+    const { data: detailHariIni } = await supabase
+      .from("transactions_2025_12_01_21_34")
+      .select(`
+        id, amount, type, description, transaction_date, created_at,
+        santri:santri_id ( nama_lengkap, kelas )
+      `)
+      .eq("transaction_date", todayStr) // Hanya tanggal hari ini
+      .order("created_at", { ascending: false }); // Yang baru diinput ada di atas
+
+    if (detailHariIni) {
+        // @ts-ignore
+        setTrxHariIni(detailHariIni);
+    }
+
   }, []);
 
-  // 2. Fetch Saldo Per Kelas (🔥 UPDATE: Sekarang hitung manual dari View)
   const fetchRekapSaldo = useCallback(async () => {
-    // Ambil data dari "view_santri_saldo" yang baru kita buat
     const { data } = await supabase
       .from("view_santri_saldo")
       .select("kelas, gender, saldo");
 
     if (data) {
-      // Kita rangkum totalnya di sini (Grouping by Kelas & Gender)
       const stats: RekapSaldo[] = [];
       const classes = [7, 8, 9, 10, 11, 12];
       const genders = ["ikhwan", "akhwat"];
 
-      // Siapkan wadah kosong dulu biar kelas yang belum ada transaksi tetap muncul 0
       classes.forEach(k => {
         genders.forEach(g => {
           stats.push({ kelas: k, gender: g as "ikhwan"|"akhwat", saldo: 0 });
         });
       });
 
-      // Masukkan data asli dari database
       data.forEach((item: any) => {
         const target = stats.find(s => s.kelas === item.kelas && s.gender === item.gender);
         if (target) {
@@ -176,7 +209,6 @@ const Index = () => {
     }
   }, [user, fetchKeuangan, fetchRekapSaldo]);
 
-  // Listener Auto-Refresh
   useEffect(() => {
     const handleRefresh = () => {
         console.log("♻️ Auto-refreshing dashboard data...");
@@ -217,7 +249,7 @@ const Index = () => {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans relative">
       
-      {/* ================= MOBILE OVERLAY ================= */}
+      {/* MOBILE OVERLAY */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in"
@@ -225,7 +257,7 @@ const Index = () => {
         />
       )}
 
-      {/* ================= SIDEBAR ================= */}
+      {/* SIDEBAR */}
       <aside
         className={`
           fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl 
@@ -321,10 +353,8 @@ const Index = () => {
         </div>
       </aside>
 
-      {/* ================= KONTEN KANAN ================= */}
+      {/* CONTENT */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
-        
-        {/* HEADER */}
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             <button 
@@ -355,11 +385,10 @@ const Index = () => {
           </div>
         </header>
 
-        {/* MAIN SCROLLABLE */}
         <main className="flex-1 overflow-y-auto p-3 md:p-8 bg-gray-50/50 w-full">
           <div className="max-w-7xl mx-auto space-y-6 pb-20">
 
-            {/* --- VIEW 1: DASHBOARD --- */}
+            {/* --- DASHBOARD --- */}
             {activeMenu === "dashboard" && (
               <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                 <div className="text-center space-y-2 pb-4 border-b border-gray-200">
@@ -371,7 +400,6 @@ const Index = () => {
                     </p>
                 </div>
 
-                {/* Cards Saldo */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[7, 8, 9, 10, 11, 12].map((kls) => {
                       const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
@@ -410,7 +438,6 @@ const Index = () => {
                     })}
                 </div>
 
-                {/* Summary Mobile Friendly */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
                     { title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-600" },
@@ -427,7 +454,6 @@ const Index = () => {
                   ))}
                 </div>
 
-                {/* Chart */}
                 <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto">
                     <h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Grafik Mingguan</h3>
                     <div className="min-w-[300px]">
@@ -437,14 +463,13 @@ const Index = () => {
               </div>
             )}
 
-            {/* --- VIEW 2: KEUANGAN --- */}
+            {/* --- KEUANGAN --- */}
             {activeMenu === "keuangan" && isAdmin && (
               <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2>
                 </div>
 
-                {/* EXPORT SECTION */}
                 <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
                   <CardHeader className="bg-green-50/50 border-b border-green-100 pb-3 p-4">
                       <div className="flex items-center gap-2 text-green-800">
@@ -492,6 +517,7 @@ const Index = () => {
                   </CardContent>
                 </Card>
 
+                {/* FORM TRANSAKSI */}
                 <div className="bg-white rounded-xl shadow-sm border p-1 relative">
                     <div className="absolute top-0 right-0 p-4 z-10 hidden md:block">
                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1">
@@ -500,10 +526,58 @@ const Index = () => {
                     </div>
                    <TransactionForm />
                 </div>
+
+                {/* 🔥 TABEL RIWAYAT TRANSAKSI HARI INI (BARU) */}
+                <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
+                  <CardHeader className="bg-gray-50/50 border-b border-green-100 pb-3 p-4">
+                      <div className="flex items-center gap-2 text-gray-800">
+                          <History className="w-5 h-5 text-green-600" />
+                          <CardTitle className="text-base md:text-lg">Riwayat Transaksi Hari Ini</CardTitle>
+                      </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                      {trxHariIni.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500 text-sm">
+                            Belum ada transaksi di tanggal ini.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                           {trxHariIni.map((trx, idx) => (
+                               <div key={idx} className="p-4 flex items-center justify-between hover:bg-green-50/30 transition-colors">
+                                   <div className="flex items-center gap-3">
+                                       {/* Icon Panah */}
+                                       {trx.type === 'income' ? (
+                                           <ArrowUpCircle className="text-green-600 w-8 h-8 opacity-80" />
+                                       ) : (
+                                           <ArrowDownCircle className="text-red-500 w-8 h-8 opacity-80" />
+                                       )}
+                                       
+                                       <div className="flex flex-col">
+                                           <span className="font-bold text-gray-800 text-sm">
+                                               {trx.santri ? trx.santri.nama_lengkap : "Tanpa Nama"}
+                                           </span>
+                                           <span className="text-xs text-gray-500 flex gap-2">
+                                              <span>{trx.santri ? `Kelas ${trx.santri.kelas}` : "-"}</span>
+                                              <span>•</span>
+                                              <span className="italic">{trx.description || "Tanpa Keterangan"}</span>
+                                           </span>
+                                       </div>
+                                   </div>
+
+                                   <div className={`font-bold text-sm ${trx.type === 'income' ? 'text-green-700' : 'text-red-600'}`}>
+                                       {trx.type === 'income' ? '+' : '-'} Rp {trx.amount.toLocaleString("id-ID")}
+                                   </div>
+                               </div>
+                           ))}
+                        </div>
+                      )}
+                  </CardContent>
+                </Card>
+
               </div>
             )}
 
-            {/* --- VIEW 3: SANTRI --- */}
+            {/* --- SANTRI --- */}
             {activeMenu === "santri" && (
               <div className="animate-in fade-in zoom-in duration-300 space-y-4">
                  <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2">
@@ -524,7 +598,7 @@ const Index = () => {
               </div>
             )}
 
-            {/* --- VIEW 4: USER --- */}
+            {/* --- USER --- */}
             {activeMenu === "pengguna" && isAdmin && (
               <div className="animate-in fade-in zoom-in duration-300">
                 <UserManagement />
