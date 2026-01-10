@@ -5,61 +5,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Users, UserCheck } from 'lucide-react';
+import { Shield, Users, UserCheck, Loader2 } from 'lucide-react';
 
-interface UserProfile {
+interface UserData {
   id: string;
-  user_id: string;
+  email: string;
   full_name: string;
   role: 'admin' | 'viewer';
   created_at: string;
-  updated_at: string;
-  email?: string;
 }
 
 const UserManagement: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: currentUser } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
 
+  // 🔥 FETCH DATA DARI TABEL 'users' (YANG BENAR)
   const fetchUsers = async () => {
+    setIsLoading(true);
     try {
-      // Get all user profiles
-      const { data: profiles, error: profileError } = await supabase
-        .from('user_profiles_2025_12_01_21_34')
+      // Kita ambil langsung dari tabel 'users' karena kolomnya sudah lengkap (email, full_name, role)
+      const { data, error } = await supabase
+        .from('users')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (profileError) throw profileError;
+      if (error) throw error;
 
-      // Get user emails from auth.users (only admin can see this)
-      if (isAdmin) {
-        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-        
-        if (!authError && authUsers) {
-          const usersWithEmails = profiles?.map(profile => {
-            const authUser = authUsers.users.find(u => u.id === profile.user_id);
-            return {
-              ...profile,
-              email: authUser?.email || 'N/A'
-            };
-          }) || [];
-          
-          setUsers(usersWithEmails);
-        } else {
-          setUsers(profiles || []);
-        }
-      } else {
-        setUsers(profiles || []);
-      }
+      setUsers(data || []);
     } catch (error: any) {
       console.error('Error fetching users:', error);
       toast({
-        title: "Error",
-        description: "Gagal memuat data pengguna",
+        title: "Gagal memuat data",
+        description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -69,56 +52,63 @@ const UserManagement: React.FC = () => {
     }
   }, [isAdmin]);
 
-  const handleRoleUpdate = async (userId: string, newRole: 'admin' | 'viewer', userName: string) => {
+  // 🔥 UPDATE ROLE LANGSUNG KE TABEL 'users'
+  const handleRoleUpdate = async (targetUserId: string, newRole: 'admin' | 'viewer', userName: string) => {
     if (!isAdmin) {
       toast({
         title: "Akses Ditolak",
-        description: "Hanya admin yang dapat mengubah role pengguna",
+        description: "Hanya admin yang dapat mengubah role",
         variant: "destructive",
       });
       return;
     }
 
-    setIsLoading(true);
+    // Mencegah Admin mengubah role dirinya sendiri jadi Viewer (Biar gak terkunci)
+    if (targetUserId === currentUser?.id) {
+        toast({
+            title: "Bahaya",
+            description: "Anda tidak bisa mengubah role Anda sendiri.",
+            variant: "destructive",
+        });
+        return;
+    }
 
     try {
-      const { error } = await supabase.rpc('update_user_role_2025_12_01_21_34', {
-        target_user_id: userId,
-        new_role: newRole
-      });
+      const { error } = await supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', targetUserId);
 
       if (error) throw error;
 
       toast({
         title: "Berhasil",
-        description: `Role ${userName} berhasil diubah menjadi ${newRole}`,
+        description: `Role ${userName} diubah menjadi ${newRole}`,
       });
 
-      // Refresh users list
+      // Refresh list biar update
       fetchUsers();
     } catch (error: any) {
       toast({
-        title: "Error",
+        title: "Gagal Update",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
   if (!isAdmin) {
     return (
-      <Card>
+      <Card className="border-red-100 bg-red-50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-red-700">
             <Shield className="h-5 w-5" />
-            Manajemen Pengguna
+            Akses Dibatasi
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            Hanya admin yang dapat mengelola pengguna
+          <div className="text-sm text-red-600">
+            Hanya akun dengan level <strong>Admin</strong> yang dapat mengakses halaman ini.
           </div>
         </CardContent>
       </Card>
@@ -131,32 +121,32 @@ const UserManagement: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Pengguna</CardTitle>
+            <CardTitle className="text-xs font-medium text-gray-500 uppercase">Total Pengguna</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-2xl font-bold text-gray-800">
               {users.length}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-green-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Admin</CardTitle>
+            <CardTitle className="text-xs font-medium text-green-600 uppercase">Admin</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-green-700">
               {users.filter(u => u.role === 'admin').length}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-blue-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Viewer</CardTitle>
+            <CardTitle className="text-xs font-medium text-blue-600 uppercase">Viewer</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-600">
+            <div className="text-2xl font-bold text-blue-700">
               {users.filter(u => u.role === 'viewer').length}
             </div>
           </CardContent>
@@ -165,59 +155,65 @@ const UserManagement: React.FC = () => {
 
       {/* Users List */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Daftar Pengguna
-          </CardTitle>
-          <CardDescription>
-            Kelola role dan akses pengguna sistem
-          </CardDescription>
+        <CardHeader className="border-b bg-gray-50/50">
+          <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                    <Users className="h-5 w-5 text-gray-600" />
+                    Daftar Pengguna
+                </CardTitle>
+                <CardDescription>
+                    Kelola hak akses pengguna sistem
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchUsers} disabled={isLoading}>
+                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
+              </Button>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {users.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Belum ada pengguna terdaftar
+            <div className="text-center py-10 text-gray-400">
+                {isLoading ? "Memuat data..." : "Belum ada pengguna terdaftar"}
             </div>
           ) : (
-            <div className="space-y-3">
-              {users.map((user) => (
+            <div className="divide-y divide-gray-100">
+              {users.map((userData) => (
                 <div
-                  key={user.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  key={userData.id}
+                  className="flex flex-col md:flex-row md:items-center justify-between p-4 hover:bg-gray-50 transition-colors gap-4"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium">{user.full_name}</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        user.role === 'admin' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-blue-100 text-blue-800'
+                      <span className="font-bold text-gray-800">{userData.full_name || "Tanpa Nama"}</span>
+                      <span className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded-full border ${
+                        userData.role === 'admin' 
+                          ? 'bg-green-50 text-green-700 border-green-200' 
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
                       }`}>
-                        {user.role === 'admin' ? 'Admin' : 'Viewer'}
+                        {userData.role}
                       </span>
                     </div>
-                    {user.email && (
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Bergabung: {new Date(user.created_at).toLocaleDateString('id-ID', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
+                    <div className="text-sm text-gray-500 font-mono">
+                        {userData.email}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Bergabung: {new Date(userData.created_at).toLocaleDateString('id-ID', {
+                        day: 'numeric', month: 'short', year: 'numeric'
                       })}
                     </p>
                   </div>
                   
                   <div className="flex items-center gap-2">
                     <Select 
-                      value={user.role} 
+                      value={userData.role} 
                       onValueChange={(value: 'admin' | 'viewer') => 
-                        handleRoleUpdate(user.user_id, value, user.full_name)
+                        handleRoleUpdate(userData.id, value, userData.full_name)
                       }
-                      disabled={isLoading}
+                      // Disable kalau sedang loading atau user itu adalah diri sendiri
+                      disabled={isLoading || userData.id === currentUser?.id}
                     >
-                      <SelectTrigger className="w-32">
+                      <SelectTrigger className="w-32 h-9 bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -230,38 +226,6 @@ const UserManagement: React.FC = () => {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Info Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserCheck className="h-5 w-5" />
-            Informasi Role
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-start gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-              <div>
-                <span className="font-medium">Admin:</span> Dapat mengelola data santri, transaksi keuangan, dan mengubah role pengguna lain.
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-              <div>
-                <span className="font-medium">Viewer:</span> Hanya dapat melihat data keuangan dan laporan. Tidak dapat mengubah atau menghapus data.
-              </div>
-            </div>
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-yellow-800 text-sm">
-                <strong>Catatan:</strong> Semua akun baru akan otomatis terdaftar sebagai Viewer. 
-                Admin dapat mengubah role pengguna melalui halaman ini.
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
