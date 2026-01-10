@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarIcon } from "lucide-react"; // Icon Tambahan
+import { CalendarIcon, Wallet } from "lucide-react";
 
 interface Santri {
   id: string;
@@ -37,23 +37,49 @@ const TransactionForm = () => {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // 🔥 STATE BARU: Tanggal Transaksi (Default: Hari Ini)
+  // State untuk Tanggal & Saldo
   const [trxDate, setTrxDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [currentSaldo, setCurrentSaldo] = useState<number>(0);
 
-  /* reset saat kelas berubah */
+  /* Reset saat kelas berubah */
   useEffect(() => {
     setGender(null);
     setSantriId(null);
     setSantriList([]);
+    setCurrentSaldo(0);
   }, [kelas]);
 
-  /* reset saat gender berubah */
+  /* Reset saat gender berubah */
   useEffect(() => {
     setSantriId(null);
     setSantriList([]);
+    setCurrentSaldo(0);
   }, [gender]);
 
-  /* ambil santri */
+  /* 🔥 1. AMBIL SALDO SAAT SANTRI DIPILIH */
+  useEffect(() => {
+    const fetchSaldoSantri = async () => {
+        if (!santriId) {
+            setCurrentSaldo(0);
+            return;
+        }
+
+        // Ambil saldo dari View Kalkulator yang sudah kita buat
+        const { data, error } = await supabase
+            .from("view_santri_saldo")
+            .select("saldo")
+            .eq("id", santriId)
+            .single();
+
+        if (data) {
+            setCurrentSaldo(data.saldo || 0);
+        }
+    };
+
+    fetchSaldoSantri();
+  }, [santriId]);
+
+  /* Ambil daftar santri */
   useEffect(() => {
     const fetchSantri = async () => {
       if (!kelas || !gender) return;
@@ -81,11 +107,10 @@ const TransactionForm = () => {
     fetchSantri();
   }, [kelas, gender]);
 
-  /* simpan transaksi */
+  /* Simpan Transaksi */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validasi data
     if (!kelas || !gender || !santriId || !amount || !trxDate) {
       toast({
         title: "Data belum lengkap",
@@ -95,13 +120,25 @@ const TransactionForm = () => {
       return;
     }
 
-    if (Number(amount) <= 0) {
+    const nominal = Number(amount);
+
+    if (nominal <= 0) {
       toast({
         title: "Nominal tidak valid",
         description: "Nominal harus lebih dari 0",
         variant: "destructive",
       });
       return;
+    }
+
+    // 🔥 2. CEK PROTEKSI ANTI MINUS
+    if (type === "pengeluaran" && nominal > currentSaldo) {
+        toast({
+            title: "Saldo Tidak Cukup!",
+            description: `Sisa saldo santri hanya Rp ${currentSaldo.toLocaleString("id-ID")}. Transaksi dibatalkan.`,
+            variant: "destructive", // Warna Merah
+        });
+        return; // Stop, jangan simpan ke database
     }
 
     const dbType: DBType = type === "pemasukan" ? "income" : "expense";
@@ -115,10 +152,9 @@ const TransactionForm = () => {
           user_id: user!.id,
           santri_id: santriId,
           type: dbType,
-          amount: Number(amount),
+          amount: nominal,
           description,
           category: "santri",
-          // 🔥 GUNAKAN TANGGAL YANG DIPILIH USER
           transaction_date: trxDate, 
         });
 
@@ -126,17 +162,20 @@ const TransactionForm = () => {
 
       toast({
         title: "Berhasil",
-        description: `Transaksi tgl ${trxDate} berhasil disimpan`,
+        description: `Transaksi ${type} berhasil disimpan`,
       });
 
-      // Trigger refresh data di Dashboard
+      // Refresh Dashboard & Update Saldo Terbaru di Form
       window.dispatchEvent(new Event("refresh-keuangan"));
+      
+      // Update saldo lokal di form biar langsung berubah tanpa refresh
+      if (type === "pemasukan") setCurrentSaldo(prev => prev + nominal);
+      else setCurrentSaldo(prev => prev - nominal);
 
-      // Reset Form (Kecuali Tanggal, biar enak kalau mau input banyak di tgl yg sama)
+      // Reset Input (Kecuali santri, biar bisa input lagi kalau mau)
       setAmount("");
       setDescription("");
-      setSantriId(null);
-      // setTrxDate(new Date().toISOString().slice(0, 10)); // Uncomment kalau mau auto reset ke hari ini
+      
     } catch (err) {
       console.error(err);
       toast({
@@ -158,7 +197,7 @@ const TransactionForm = () => {
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* 🔥 INPUT TANGGAL (Paling Atas) */}
+          {/* Input Tanggal */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
                 <CalendarIcon className="w-4 h-4 text-green-600" />
@@ -170,9 +209,6 @@ const TransactionForm = () => {
               onChange={(e) => setTrxDate(e.target.value)}
               className="bg-white border-green-200 focus:ring-green-500 font-medium"
             />
-            <p className="text-[10px] text-gray-400">
-                *Default adalah hari ini. Ubah tanggal untuk input data lampau (Backdate).
-            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -245,6 +281,19 @@ const TransactionForm = () => {
             </div>
           </div>
 
+          {/* 🔥 INFO SALDO (Muncul kalau Santri sudah dipilih) */}
+          {santriId && (
+              <div className="bg-green-50 p-3 rounded-lg flex items-center justify-between border border-green-200">
+                  <div className="flex items-center gap-2 text-sm text-green-800">
+                      <Wallet className="w-4 h-4" />
+                      <span>Sisa Saldo:</span>
+                  </div>
+                  <span className="font-bold text-green-700 text-lg">
+                      Rp {currentSaldo.toLocaleString("id-ID")}
+                  </span>
+              </div>
+          )}
+
           <div className="space-y-2">
             <Label>Nominal (Rp)</Label>
             <Input
@@ -254,6 +303,12 @@ const TransactionForm = () => {
               onChange={(e) => setAmount(e.target.value)}
               className="font-bold text-gray-700 bg-white"
             />
+            {/* Warning kecil kalau pengeluaran */}
+            {type === 'pengeluaran' && santriId && (Number(amount) > currentSaldo) && (
+                <p className="text-xs text-red-500 font-medium animate-pulse">
+                    ⚠️ Nominal melebihi sisa saldo!
+                </p>
+            )}
           </div>
 
           <div className="space-y-2">
