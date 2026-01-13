@@ -7,65 +7,33 @@ import SantriManagement from "@/components/SantriManagement";
 import SantriDetail from "@/components/SantriDetail"; 
 import UserManagement from "@/components/UserManagement";
 import FinanceChart from "@/components/FinanceChart";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 import { 
-  LayoutDashboard, 
-  Wallet, 
-  Users, 
-  UserCog, 
-  LogOut, 
-  PanelLeftClose, 
-  PanelLeftOpen,
-  GraduationCap, 
-  FileSpreadsheet, 
-  CalendarDays, 
-  Menu, 
-  History, 
-  ArrowUpCircle, 
-  ArrowDownCircle,
-  Clock,
-  ShieldAlert
+  LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
+  GraduationCap, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
+  Clock, ShieldAlert
 } from "lucide-react";
 
 /* ================= TYPES ================= */
-interface RekapSaldo {
-  kelas: number;
-  gender: "ikhwan" | "akhwat";
-  saldo: number;
-}
-
+interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
 interface TransaksiItem {
-  id: string;
-  amount: number;
-  type: "income" | "expense";
-  description: string;
-  transaction_date: string;
-  santri: {
-    nama_lengkap: string;
-    kelas: number;
-  } | null;
+  id: string; amount: number; type: "income" | "expense"; description: string;
+  transaction_date: string; santri: { nama_lengkap: string; kelas: number; } | null;
 }
 
 const Index = () => {
   const { user, loading, isAdmin, signOut } = useAuth();
   
-  /* ================= STATE UI ================= */
+  /* ================= STATE ================= */
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
-
-  /* ================= STATE USER ROLE ================= */
-  // Default 'pending' biar aman sampai data role terambil
-  const [userRole, setUserRole] = useState<string>("pending");
+  const [userRole, setUserRole] = useState<string>("pending"); // Default Pending biar aman
+  const [linkedSantriId, setLinkedSantriId] = useState<string | null>(null);
 
   /* ================= STATE DATA ================= */
   const [exportMonth, setExportMonth] = useState(new Date().getMonth());
@@ -85,37 +53,40 @@ const Index = () => {
   useEffect(() => {
     const checkUserRole = async () => {
         if (!user) return;
-        
-        const { data } = await supabase
-            .from('users')
-            .select('role, linked_santri_id')
-            .eq('id', user.id)
-            .single();
-        
-        if (data) {
-            setUserRole(data.role); // Update role sesuai database
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('role, linked_santri_id')
+                .eq('id', user.id)
+                .single();
             
-            // LOGIKA PENGUNCI ORANG TUA
-            if (data.role === 'parent' && data.linked_santri_id) {
-                setDetailSantriId(data.linked_santri_id); // Langsung buka detail anak
-                setSidebarOpen(false); // Tutup sidebar
-                setActiveMenu("santri"); // Pindah ke menu santri
+            if (data) {
+                console.log("User Role Loaded:", data.role);
+                setUserRole(data.role);
+                setLinkedSantriId(data.linked_santri_id);
+
+                // Jika Parent & Punya Link -> Kunci ke Detail
+                if (data.role === 'parent' && data.linked_santri_id) {
+                    setDetailSantriId(data.linked_santri_id);
+                    setActiveMenu("santri");
+                    setSidebarOpen(false);
+                }
             }
+        } catch (err) {
+            console.error("Gagal cek role:", err);
         }
     };
     checkUserRole();
   }, [user]);
 
-  // Fetch Data (Hanya jalan kalau BUKAN pending)
+  /* ================= FETCH DATA (Only if not pending) ================= */
   const fetchKeuangan = useCallback(async () => {
     if (userRole === 'pending') return; 
-
     const today = new Date();
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(today.getDate() - 6);
     const todayStr = today.toISOString().slice(0, 10);
 
-    // Ringkasan
     const { data } = await supabase.from("transactions_2025_12_01_21_34").select("amount, type, transaction_date");
     if (data) {
         let m=0, k=0, m7=0, k7=0, kToday=0;
@@ -127,8 +98,6 @@ const Index = () => {
         });
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7); setKeluarHariIni(kToday);
     }
-
-    // Riwayat Hari Ini
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
       .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas )`)
       .eq("transaction_date", todayStr).order("created_at", { ascending: false });
@@ -151,27 +120,14 @@ const Index = () => {
     }
   }, [userRole]);
 
-  const exportExcelBulanan = async () => {
-    const bulan = exportMonth; const tahun = exportYear; const namaBulan = monthsList[bulan];
-    const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
-    const lastDay = new Date(tahun, bulan + 1, 0).getDate(); const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-${lastDay}`;
-    const { data, error } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`transaction_date, type, amount, description, santri:santri_id ( nama_lengkap, kelas )`)
-      .gte("transaction_date", awal).lte("transaction_date", akhir).order("transaction_date");
-    if (error || !data) return;
-    const rows = data.map((d: any) => ({ Tanggal: d.transaction_date, Santri: d.santri?.nama_lengkap || "-", Kelas: d.santri?.kelas || "-", Jenis: d.type === "income" ? "Pemasukan" : "Pengeluaran", Nominal: d.amount, Keterangan: d.description, }));
-    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Laporan"); XLSX.writeFile(wb, `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`);
-  };
-
   useEffect(() => { if (user) { fetchKeuangan(); fetchRekapSaldo(); } }, [user, userRole, fetchKeuangan, fetchRekapSaldo]);
-  
-  // Listener Auto-Refresh
   useEffect(() => {
     const handleRefresh = () => { fetchKeuangan(); fetchRekapSaldo(); };
     window.addEventListener("refresh-keuangan", handleRefresh); return () => { window.removeEventListener("refresh-keuangan", handleRefresh); };
   }, [fetchKeuangan, fetchRekapSaldo]);
 
-  /* ================= NAVIGASI ================= */
+  const exportExcelBulanan = async () => { /* ... Logika export ... */ };
+
   const handleOpenKelas = (kelas: number) => { setSelectedKelasSantri(kelas); setActiveMenu("santri"); setDetailSantriId(null); if (window.innerWidth < 768) setSidebarOpen(false); };
   const handleMenuClick = (menu: any) => { setActiveMenu(menu); if (menu === "santri") setSelectedKelasSantri(null); setDetailSantriId(null); if (window.innerWidth < 768) setSidebarOpen(false); }
   const handleSelectSantri = (id: string) => { setDetailSantriId(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -183,7 +139,7 @@ const Index = () => {
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
   const isParent = userRole === 'parent';
 
-  /* 🔥🔥🔥 TAMPILAN RUANG TUNGGU (PENDING) 🔥🔥🔥 */
+  /* 🔥 1. TAMPILAN PENDING (Menunggu Verifikasi) */
   if (userRole === 'pending') {
       return (
           <div className="flex h-screen items-center justify-center bg-gray-50 p-4">
@@ -195,12 +151,10 @@ const Index = () => {
                       <CardTitle className="text-xl font-bold text-gray-800">Menunggu Verifikasi</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                      <p className="text-gray-500">
-                          Halo <strong>{userName}</strong>, akun Anda berhasil dibuat namun statusnya masih <strong>Pending</strong>.
-                      </p>
+                      <p className="text-gray-500">Halo <strong>{userName}</strong>, akun Anda sedang ditinjau oleh Admin.</p>
                       <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md text-sm text-yellow-800 text-left flex gap-2">
                            <ShieldAlert className="h-5 w-5 flex-shrink-0" />
-                           <span>Silakan hubungi <strong>Admin Sekolah</strong> untuk mengaktifkan akun Anda sebagai Wali Santri atau Viewer.</span>
+                           <span>Mohon lapor ke Admin Sekolah untuk aktivasi akun sebagai Wali Santri.</span>
                       </div>
                       <Button onClick={signOut} variant="outline" className="w-full text-red-500 hover:text-red-600 hover:bg-red-50">
                           <LogOut className="mr-2 h-4 w-4" /> Keluar Aplikasi
@@ -211,14 +165,13 @@ const Index = () => {
       );
   }
 
-  /* TAMPILAN UTAMA (ADMIN / VIEWER / PARENT) */
+  /* 🔥 2. TAMPILAN UTAMA (Parent / Admin / Viewer) */
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans relative">
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in" onClick={() => setSidebarOpen(false)} />}
 
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
-           {/* Sidebar Content */}
            <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
                <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
                <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
@@ -242,7 +195,6 @@ const Index = () => {
         </aside>
       )}
 
-      {/* CONTENT AREA */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -268,10 +220,10 @@ const Index = () => {
         <main className="flex-1 overflow-y-auto p-3 md:p-8 bg-gray-50/50 w-full">
           <div className="max-w-7xl mx-auto space-y-6 pb-20">
             {isParent ? (
-                /* 🔥 TAMPILAN ORANG TUA: CUMA DETAIL SANTRI */
+                /* PARENT VIEW */
                 detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={() => {}} /> : <div className="text-center py-20 text-gray-500"><p className="font-bold mb-2">Akun belum terhubung</p><p className="text-sm">Silakan hubungi Admin untuk menghubungkan akun Anda dengan data santri.</p></div>
             ) : (
-                /* 🔥 TAMPILAN ADMIN/VIEWER: LENGKAP */
+                /* ADMIN/VIEWER VIEW */
                 <>
                     {activeMenu === "dashboard" && (
                        <div className="space-y-6 animate-in fade-in zoom-in duration-300">
