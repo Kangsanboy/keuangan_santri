@@ -8,11 +8,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Tipe data sesuai dengan yang ada di Index.tsx
 interface RekapSaldo {
   kelas: number;
   gender: "ikhwan" | "akhwat";
@@ -20,14 +17,12 @@ interface RekapSaldo {
 }
 
 interface FinanceChartProps {
-  data: RekapSaldo[]; // Kita terima data rekap saldo lengkap
+  data: RekapSaldo[]; 
 }
 
 const FinanceChart = ({ data }: FinanceChartProps) => {
   
-  // 1. KITA OLAH DATANYA BIAR COCOK SAMA GRAFIK
-  // Kita ubah dari format database menjadi format grafik:
-  // [{ name: "Kls 7", Ikhwan: 1000, Akhwat: 2000 }, ... ]
+  // 1. OLAH DATA
   const chartData = [7, 8, 9, 10, 11, 12].map((kelas) => {
     const saldoIkhwan = data.find((d) => d.kelas === kelas && d.gender === "ikhwan")?.saldo || 0;
     const saldoAkhwat = data.find((d) => d.kelas === kelas && d.gender === "akhwat")?.saldo || 0;
@@ -39,14 +34,14 @@ const FinanceChart = ({ data }: FinanceChartProps) => {
     };
   });
 
-  // Fungsi Format Rupiah Singkat (misal: 1.2jt)
+  // Format Angka Sumbu Y (Misal: 1jt)
   const formatYAxis = (value: number) => {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}jt`;
     if (value >= 1000) return `${(value / 1000).toFixed(0)}rb`;
     return value.toString();
   };
 
-  // Fungsi Format Rupiah Lengkap untuk Tooltip
+  // Format Angka Tooltip (Misal: Rp 1.000.000)
   const formatRupiah = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -66,13 +61,14 @@ const FinanceChart = ({ data }: FinanceChartProps) => {
             left: 0,
             bottom: 5,
           }}
+          barGap={2} // Jarak antar batang Ikhwan & Akhwat dipersempit biar nempel
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
           <XAxis 
             dataKey="name" 
             axisLine={false} 
             tickLine={false} 
-            tick={{ fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 'bold' }} // Tebalin font sumbu X
             dy={10}
           />
           <YAxis 
@@ -110,22 +106,24 @@ const FinanceChart = ({ data }: FinanceChartProps) => {
             verticalAlign="top" 
             align="right"
             iconType="circle"
-            wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }}
+            wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', fontWeight: 'bold' }}
           />
-          {/* BATANG HIJAU UNTUK IKHWAN */}
+          
+          {/* 🔥 BATANG IKHWAN (HIJAU) - LEBIH GENDUT */}
           <Bar 
             dataKey="Ikhwan" 
-            fill="#16a34a" // Green-600
-            radius={[4, 4, 0, 0]} 
-            barSize={20}
+            fill="#16a34a" 
+            radius={[6, 6, 0, 0]} // Sudut atas agak bulat biar manis
+            barSize={45} // 🔥 GANTI JADI 45 (Biar Gendut)
             name="Ikhwan"
           />
-          {/* BATANG PINK/UNGU UNTUK AKHWAT */}
+          
+          {/* 🔥 BATANG AKHWAT (PINK) - LEBIH GENDUT */}
           <Bar 
             dataKey="Akhwat" 
-            fill="#db2777" // Pink-600
-            radius={[4, 4, 0, 0]} 
-            barSize={20}
+            fill="#db2777" 
+            radius={[6, 6, 0, 0]} // Sudut atas agak bulat
+            barSize={45} // 🔥 GANTI JADI 45 (Biar Gendut)
             name="Akhwat"
           />
         </BarChart>
