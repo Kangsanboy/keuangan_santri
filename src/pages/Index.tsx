@@ -305,7 +305,7 @@ const Index = () => {
                             })}
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[{ title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-600" }, { title: "Masuk 7 Hari", value: masuk7Hari, color: "text-green-600" }, { title: "Keluar 7 Hari", value: keluar7Hari, color: "text-red-600" }, { title: "Keluar Hari Ini", value: keluarHariIni, color: "text-orange-600" }].map((item, idx) => (<div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]"><h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4><p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>Rp {item.value.toLocaleString("id-ID")}</p></div>))}</div>
-                          <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Grafik Mingguan</h3><div className="min-w-[300px]">{/* Kita kirim data rekapSaldo (Saldo per kelas & gender) ke Chart */}<FinanceChart data={rekapSaldo} /></div></div>
+                          <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]">{/* Kita kirim data rekapSaldo (Saldo per kelas & gender) ke Chart */}<FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
                     {activeMenu === "keuangan" && isAdmin && (
