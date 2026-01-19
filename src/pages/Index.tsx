@@ -15,7 +15,7 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   GraduationCap, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2
+  Clock, ShieldAlert, Trash2, RefreshCw
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -52,44 +52,27 @@ const Index = () => {
   const yearsList = [2024, 2025, 2026, 2027, 2028];
 
   /* ================= LOGIC: TOMBOL BACK HP (HISTORY API) ================= */
-  // 1. Inisialisasi History saat pertama load
-  useEffect(() => {
-    // Replace state awal biar browser tau kita mulai dari dashboard
-    window.history.replaceState({ menu: 'dashboard', detailId: null }, '');
-  }, []);
-
-  // 2. Dengar Event "PopState" (Saat tombol Back ditekan)
+  useEffect(() => { window.history.replaceState({ menu: 'dashboard', detailId: null }, ''); }, []);
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state;
       if (state) {
-        // Balikkan UI sesuai catatan browser
         if (state.menu) setActiveMenu(state.menu);
         setDetailSantriId(state.detailId || null);
-        
-        // Tutup sidebar kalau di mobile biar rapi
         if (window.innerWidth < 768) setSidebarOpen(false);
       } else {
-        // Fallback kalau history kosong
         setActiveMenu('dashboard');
         setDetailSantriId(null);
       }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 3. Fungsi Helper untuk Pindah Menu (Sekaligus Catat History)
   const navigateTo = (menu: any, detailId: string | null = null) => {
-    // Catat ke browser history
     window.history.pushState({ menu, detailId }, '', '');
-    
-    // Update UI
     setActiveMenu(menu);
     setDetailSantriId(detailId);
-    
-    // Scroll ke atas & Tutup sidebar mobile
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
@@ -103,7 +86,6 @@ const Index = () => {
             if (data) {
                 setUserRole(data.role);
                 setLinkedSantriId(data.linked_santri_id);
-                // Jika Parent, langsung kunci navigasi ke santri (tapi jangan pushState dulu biar gak loop)
                 if (data.role === 'parent' && data.linked_santri_id) {
                     setDetailSantriId(data.linked_santri_id);
                     setActiveMenu("santri");
@@ -157,10 +139,54 @@ const Index = () => {
   }, [userRole]);
 
   useEffect(() => { if (user) { fetchKeuangan(); fetchRekapSaldo(); } }, [user, userRole, fetchKeuangan, fetchRekapSaldo]);
+  
+  // Listener Auto-Refresh dari komponen lain (opsional)
   useEffect(() => {
     const handleRefresh = () => { fetchKeuangan(); fetchRekapSaldo(); };
     window.addEventListener("refresh-keuangan", handleRefresh); return () => { window.removeEventListener("refresh-keuangan", handleRefresh); };
   }, [fetchKeuangan, fetchRekapSaldo]);
+
+  /* 🔥🔥🔥 FITUR BARU: AUTO REFRESH JAM 00:00 WIB 🔥🔥🔥 */
+  useEffect(() => {
+    const calculateTimeToMidnight = () => {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0); // Set ke jam 00:00:00 besok
+        
+        // Selisih waktu sekarang dengan besok jam 00:00
+        // Ditambah 2000ms (2 detik) biar aman server udah ganti tanggal
+        return (tomorrow.getTime() - now.getTime()) + 2000; 
+    };
+
+    const scheduleRefresh = () => {
+        const timeToWait = calculateTimeToMidnight();
+        console.log(`⏱️ Auto-refresh dijadwalkan dalam ${Math.floor(timeToWait / 1000 / 60)} menit lagi.`);
+
+        const timerId = setTimeout(() => {
+            console.log("🕛 Sudah jam 00:00! Refreshing data...");
+            fetchKeuangan();
+            fetchRekapSaldo();
+            
+            // Tampilkan notifikasi kecil
+            toast({ 
+                title: "Pergantian Hari 🕛", 
+                description: "Data transaksi harian telah di-reset.",
+                duration: 5000 
+            });
+
+            // Jadwalkan lagi untuk besok malam (Looping)
+            scheduleRefresh();
+        }, timeToWait);
+
+        return timerId;
+    };
+
+    const timer = scheduleRefresh();
+    
+    // Bersihkan timer kalau user tutup aplikasi
+    return () => clearTimeout(timer);
+  }, [fetchKeuangan, fetchRekapSaldo, toast]);
 
   /* ================= FUNGSI INTERAKSI ================= */
   const handleDeleteTransaction = async (id: string) => {
@@ -175,7 +201,7 @@ const Index = () => {
     }
   };
 
-  const exportExcelBulanan = async () => { /* Logic export sama */ 
+  const exportExcelBulanan = async () => { 
     const bulan = exportMonth; const tahun = exportYear; const namaBulan = monthsList[bulan];
     const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
     const lastDay = new Date(tahun, bulan + 1, 0).getDate(); const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-${lastDay}`;
@@ -187,28 +213,10 @@ const Index = () => {
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Laporan"); XLSX.writeFile(wb, `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`);
   };
 
-  /* 🔥 UPDATE NAVIGASI MENGGUNAKAN `MapsTo` AGAR TOMBOL BACK JALAN */
-  const handleOpenKelas = (kelas: number) => { 
-    setSelectedKelasSantri(kelas); 
-    // Kita pindah menu pakai fungsi custom
-    navigateTo("santri", null);
-  };
-
-  const handleMenuClick = (menu: any) => { 
-    if (menu === "santri") setSelectedKelasSantri(null);
-    navigateTo(menu, null);
-  }
-
-  const handleSelectSantri = (id: string) => { 
-    // Masuk ke detail santri, catat di history
-    navigateTo("santri", id);
-  }
-
-  // Khusus tombol Back di dalam Detail Santri
-  const handleBackFromDetail = () => {
-     // Gunakan browser back (ini akan memicu popstate di atas)
-     window.history.back();
-  }
+  const handleOpenKelas = (kelas: number) => { setSelectedKelasSantri(kelas); navigateTo("santri", null); };
+  const handleMenuClick = (menu: any) => { if (menu === "santri") setSelectedKelasSantri(null); navigateTo(menu, null); }
+  const handleSelectSantri = (id: string) => { navigateTo("santri", id); }
+  const handleBackFromDetail = () => { window.history.back(); }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin h-10 w-10 border-b-2 border-green-600 rounded-full" /></div>;
   if (!user) return <AuthPage />;
@@ -247,7 +255,6 @@ const Index = () => {
            </div>
            <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Menu Utama</p>
-             {/* 🔥 Panggil navigateTo di onClick */}
              <button onClick={() => handleMenuClick("dashboard")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "dashboard" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><LayoutDashboard className="mr-3 h-5 w-5 flex-shrink-0" />Dashboard</button>
              <button onClick={() => handleMenuClick("keuangan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Wallet className="mr-3 h-5 w-5 flex-shrink-0" />Keuangan</button>
              <div className="border-t border-green-800 my-4"></div>
@@ -336,7 +343,6 @@ const Index = () => {
                     )}
                     {activeMenu === "santri" && (
                       <div className="animate-in fade-in zoom-in duration-300 space-y-4">
-                        {/* 🔥 Ubah onBack jadi handleBackFromDetail */}
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
