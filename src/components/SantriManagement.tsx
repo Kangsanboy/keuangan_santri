@@ -1,438 +1,219 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from '@/integrations/supabase/client';
-import { 
-  UserPlus, Search, Pencil, Trash2, Users, ArrowUpCircle, 
-  AlertTriangle, ArrowLeft, Wallet, GraduationCap
-} from 'lucide-react';
+import { Users, Search, RefreshCw, User, UserCheck, ChevronRight } from "lucide-react"; 
+import { Users, Search, RefreshCw, User, UserCheck } from "lucide-react"; 
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
-interface Santri {
-  id: string;
-  nama_lengkap: string;
-  nis: string;
+// Interface baru untuk menangkap data riwayat dari SQL View baru
+interface TransactionHistory {
+  amount: number;
+  type: 'income' | 'expense';
+@@ -19,10 +18,16 @@ interface SantriSaldo {
   kelas: number;
-  gender: 'ikhwan' | 'akhwat';
-  status: string;
-  nama_wali: string;
-  saldo: number; // Tambahan untuk view saldo
+  gender: "ikhwan" | "akhwat";
+  saldo: number;
+  recent_trx: TransactionHistory[]; // Data baru dari View
+  recent_trx: TransactionHistory[];
 }
 
+const SantriManagement = ({ kelas }: { kelas: string | null }) => {
+// 🔥 Tambahkan Props 'onSelectSantri'
 interface SantriManagementProps {
-  kelas?: string | null;
-  onSelectSantri?: (id: string) => void; 
+    kelas: string | null;
+    onSelectSantri?: (id: string) => void; 
 }
 
-// Tipe untuk Ringkasan Kelas
-interface ClassSummary {
-  kelas: number;
-  count: number;
-  totalSaldo: number;
-}
-
-const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagementProps) => {
+const SantriManagement = ({ kelas, onSelectSantri }: SantriManagementProps) => {
   const { toast } = useToast();
-  
-  // State Utama
-  // Jika initialKelas ada (dari props), pakai itu. Jika tidak, null (Tampil Grid Kelas)
-  const [activeKelas, setActiveKelas] = useState<number | null>(initialKelas ? parseInt(initialKelas) : null);
-  
-  const [santris, setSantris] = useState<Santri[]>([]);
-  const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
+  const [data, setData] = useState<SantriSaldo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  // State Dialog
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  
-  // State Form
-  const [formData, setFormData] = useState<Partial<Santri>>({
-    gender: 'ikhwan',
-    status: 'Aktif',
-    kelas: 7
-  });
-
-  // 1. FETCH RINGKASAN DATA (Untuk Tampilan Awal)
-  const fetchSummaries = async () => {
+@@ -33,26 +38,21 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      // Kita ambil dari view_santri_saldo biar dapat saldonya sekalian
-      const { data, error } = await supabase
-        .from('view_santri_saldo')
-        .select('kelas, saldo');
+      let query = supabase
+        .from("view_santri_saldo") 
+        .select("*");
+      let query = supabase.from("view_santri_saldo").select("*");
 
-      if (error) throw error;
-
-      if (data) {
-        // Hitung manual grouping per kelas
-        const summaries: ClassSummary[] = [];
-        const classes = [7, 8, 9, 10, 11, 12, 99]; // 99 Alumni
-
-        classes.forEach(k => {
-          const filtered = data.filter(d => d.kelas === k);
-          const total = filtered.reduce((acc, curr) => acc + (curr.saldo || 0), 0);
-          summaries.push({
-            kelas: k,
-            count: filtered.length,
-            totalSaldo: total
-          });
-        });
-        setClassSummaries(summaries);
+      if (kelasNumber) {
+        query = query.eq("kelas", kelasNumber);
       }
-    } catch (error: any) {
-      console.error("Error summary:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // 2. FETCH DATA DETAIL (Saat Masuk Kelas)
-  const fetchSantrisInClass = async () => {
-    if (activeKelas === null) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('view_santri_saldo') // Pakai view biar ada saldonya
-        .select('*')
-        .eq('kelas', activeKelas)
-        .order('nama_lengkap', { ascending: true });
+      const { data: result, error } = await query.order("nama_lengkap", { ascending: true });
 
       if (error) throw error;
+
       // @ts-ignore
-      setSantris(data || []);
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setData(result || []);
+
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Gagal memuat data",
+        description: "Pastikan SQL View versi terbaru sudah dijalankan.",
+        description: "Cek koneksi internet Anda.",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
-    }
-  };
+@@ -77,48 +77,40 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
+  const dataIkhwan = filteredData.filter(s => s.gender === 'ikhwan');
+  const dataAkhwat = filteredData.filter(s => s.gender === 'akhwat');
 
-  // Effect: Jalankan saat komponen dimuat atau activeKelas berubah
-  useEffect(() => {
-    if (activeKelas === null) {
-      fetchSummaries();
-    } else {
-      fetchSantrisInClass();
-    }
-  }, [activeKelas]);
+  // 🔥 KOMPONEN DATA PER KELAS + RIWAYAT
+  const SantriPerKelas = ({ items }: { items: SantriSaldo[] }) => {
+      // Kita loop kelas 7 sampai 12
+      const classList = [7, 8, 9, 10, 11, 12];
 
-  // --- LOGIC CRUD & ACTION ---
+      return (
+        <div className="space-y-6 p-2">
+            {classList.map((cls) => {
+                // Ambil santri di kelas ini saja
+                const studentsInClass = items.filter(s => s.kelas === cls);
+                
+                // Kalau kelas ini kosong, skip aja biar gak menuhin layar
+                if (studentsInClass.length === 0) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (isEditMode && formData.id) {
-        const { error } = await supabase.from('santri_2025_12_01_21_34').update({
-             nama_lengkap: formData.nama_lengkap,
-             nis: formData.nis,
-             kelas: formData.kelas,
-             gender: formData.gender,
-             nama_wali: formData.nama_wali,
-             status: formData.status
-        }).eq('id', formData.id);
-        if (error) throw error;
-        toast({ title: "Sukses", description: "Data diperbarui" });
-      } else {
-        const { error } = await supabase.from('santri_2025_12_01_21_34').insert([{
-             nama_lengkap: formData.nama_lengkap,
-             nis: formData.nis,
-             kelas: formData.kelas,
-             gender: formData.gender,
-             nama_wali: formData.nama_wali,
-             status: formData.status
-        }]);
-        if (error) throw error;
-        toast({ title: "Sukses", description: "Santri baru ditambahkan" });
-      }
-      setIsDialogOpen(false);
-      // Refresh data sesuai view sekarang
-      if (activeKelas === null) fetchSummaries(); else fetchSantrisInClass();
-      setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: 7 });
-    } catch (error: any) {
-      toast({ title: "Gagal", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Hapus santri ini? Data keuangan akan hilang!")) return;
-    try {
-      const { error } = await supabase.from('santri_2025_12_01_21_34').delete().eq('id', id);
-      if (error) throw error;
-      toast({ title: "Terhapus", description: "Data dihapus" });
-      fetchSantrisInClass();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const handleNaikKelasMassal = async () => {
-    setLoading(true);
-    try {
-        const { error } = await supabase.rpc('naik_kelas_massal');
-        if (error) throw error;
-        toast({ title: "Sukses! 🎓", description: "Kenaikan kelas berhasil diproses.", duration: 5000 });
-        fetchSummaries(); // Refresh tampilan luar
-    } catch (error: any) {
-        toast({ title: "Gagal", description: error.message, variant: "destructive" });
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  const openAdd = () => {
-    setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: activeKelas || 7 });
-    setIsEditMode(false);
-    setIsDialogOpen(true);
-  };
-
-  const openEdit = (santri: Santri) => {
-    setFormData(santri);
-    setIsEditMode(true);
-    setIsDialogOpen(true);
-  };
-
-  // Filter Search
-  const filteredSantris = santris.filter(s => 
-    s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.nis?.includes(searchTerm)
-  );
-
-  /* ================= VIEW 1: GRID KELAS (TAMPILAN AWAL) ================= */
-  if (activeKelas === null) {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        {/* HEADER & CONTROL PANEL */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
-             <div>
-                 <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                    <Users className="text-green-600" /> Database Santri
-                 </h2>
-                 <p className="text-sm text-gray-500">Kelola data santri, kenaikan kelas, dan pendaftaran.</p>
-             </div>
-             
-             <div className="flex gap-3 w-full md:w-auto">
-                 {/* TOMBOL 1: TAMBAH SANTRI */}
-                 <Button onClick={openAdd} className="bg-green-600 hover:bg-green-700 shadow-md flex-1 md:flex-none">
-                    <UserPlus className="mr-2 h-4 w-4" /> Santri Baru
-                 </Button>
-
-                 {/* TOMBOL 2: NAIK KELAS (DIPISAH BIAR CANGGIH) */}
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 shadow-sm flex-1 md:flex-none">
-                            <ArrowUpCircle className="mr-2 h-4 w-4" /> Kenaikan Kelas
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle className="text-orange-600 flex items-center gap-2">
-                                <AlertTriangle /> Konfirmasi Kenaikan Kelas
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Sistem akan menaikkan tingkat semua santri secara otomatis.
-                                <ul className="list-disc pl-5 mt-2 space-y-1 text-gray-700 font-medium">
-                                    <li>Kls 7-11 ➝ Naik 1 Tingkat</li>
-                                    <li>Kls 12 ➝ Jadi Alumni</li>
-                                    <li>Saldo ➝ <strong>AMAN (Tidak Hilang)</strong></li>
-                                </ul>
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleNaikKelasMassal} className="bg-orange-600 hover:bg-orange-700">Ya, Proses!</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-             </div>
-        </div>
-
-        {/* GRID KARTU KELAS */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {classSummaries.map((summary) => (
-                <Card 
-                    key={summary.kelas} 
-                    onClick={() => setActiveKelas(summary.kelas)}
-                    className="cursor-pointer hover:shadow-md hover:border-green-300 transition-all group relative overflow-hidden"
-                >
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-8 -mt-8 z-0 group-hover:bg-green-100 transition-colors"></div>
-                    <CardHeader className="pb-2 relative z-10">
-                        <CardTitle className="text-lg font-bold text-gray-700 flex justify-between items-center">
-                            {summary.kelas === 99 ? "Alumni" : `Kelas ${summary.kelas}`}
-                            <GraduationCap className="w-5 h-5 text-green-600 opacity-50" />
-                        </CardTitle>
-                        <CardDescription>{summary.count} Santri</CardDescription>
-                    </CardHeader>
-                    <CardContent className="relative z-10">
-                        <div className="text-2xl font-bold text-gray-800">
-                            Rp {summary.totalSaldo.toLocaleString("id-ID")}
+                return (
+                    <div key={cls} className="mb-4">
+                        {/* HEADER KELAS */}
+                        <div className="flex items-center gap-2 mb-2 px-2">
+                            <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded-md border border-gray-200">
+                                KELAS {cls}
+                            </span>
+                            <div className="h-px bg-gray-100 flex-1"></div>
                         </div>
-                        <p className="text-[10px] text-green-600 mt-1 font-medium bg-green-50 inline-block px-2 py-0.5 rounded-full">
-                            Total Tabungan
-                        </p>
-                    </CardContent>
-                </Card>
-            ))}
-        </div>
 
-        {/* DIALOG TAMBAH (GLOBAL) */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Tambah Santri Baru</DialogTitle>
-                    <DialogDescription>Masukkan data santri baru.</DialogDescription>
-                </DialogHeader>
-                {/* Form sama seperti sebelumnya */}
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Nama Lengkap</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
+                        {/* LIST SANTRI */}
+                        <div className="space-y-1">
+                            {studentsInClass.map((s) => (
+                                <div
+                                    key={s.id}
+                                    className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-transparent hover:border-gray-100 hover:bg-white hover:shadow-sm transition-all bg-gray-50/30"
+                                    // 🔥 UBAH DIV JADI CLICKABLE (POINTER)
+                                    onClick={() => onSelectSantri && onSelectSantri(s.id)}
+                                    className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-transparent hover:border-green-300 hover:bg-green-50/50 hover:shadow-sm transition-all bg-gray-50/30 cursor-pointer"
+                                >
+                                    {/* NAMA */}
+                                    <div className="mb-2 sm:mb-0">
+                                        <span className="font-bold text-gray-700 text-sm capitalize block">
+                                        {/* Tambahkan efek underline saat hover biar tau bisa diklik */}
+                                        <span className="font-bold text-gray-700 text-sm capitalize block group-hover:text-green-700 group-hover:underline decoration-green-500 decoration-2 underline-offset-2">
+                                            {s.nama_lengkap}
+                                        </span>
+                                    </div>
+
+                                    {/* KANAN: RIWAYAT + SALDO */}
+                                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                                        
+                                        {/* 🔥 3 RIWAYAT TERAKHIR (ESTETIK) */}
+                                        <div className="flex gap-1 overflow-hidden opacity-80 group-hover:opacity-100 transition-opacity">
+                                            {s.recent_trx && s.recent_trx.map((trx, idx) => (
+                                                <div 
+@@ -130,15 +122,12 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
+                                                            : 'bg-red-50 text-red-600 border-red-100'
+                                                        }
+                                                    `}
+                                                    title={`${trx.type === 'income' ? 'Masuk' : 'Keluar'} tgl ${trx.date}`}
+                                                >
+                                                    {trx.type === 'income' ? '+' : '-'}
+                                                    {(trx.amount / 1000).toFixed(0)}k
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* SALDO UTAMA */}
+                                        <div className="text-right min-w-[80px]">
+                                            <span className={`font-bold text-sm ${ 
+                                                s.saldo > 0 ? 'text-green-600' : 
+@@ -154,19 +143,12 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Kelas</label>
-                            <Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}<SelectItem value="99">Alumni</SelectItem></SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Gender</label>
-                            <Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="space-y-2"><label className="text-sm font-medium">Nama Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
-                    <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-      </div>
-    );
-  }
+                );
+            })}
+            
+            {items.length === 0 && (
+                 <div className="text-center py-8 text-gray-400 text-xs italic">
+                     Tidak ada data santri yang ditemukan.
+                 </div>
+            )}
+        </div>
+      );
+  };
 
-  /* ================= VIEW 2: LIST DETAIL (SAAT KLIK KELAS) ================= */
   return (
-    <Card className="border-green-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <CardHeader className="bg-white border-b border-green-50 pb-4">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto">
-             {/* TOMBOL KEMBALI KE GRID KELAS */}
-             <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50">
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-             </Button>
-             
-             <div>
-                <CardTitle className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    {activeKelas === 99 ? "Data Alumni" : `Data Santri Kelas ${activeKelas}`}
-                </CardTitle>
-                <p className="text-xs text-gray-500">{filteredSantris.length} Santri Terdaftar</p>
-             </div>
-          </div>
-          
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="relative flex-1 md:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-              <Input placeholder="Cari Nama / NIS..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+    <div className="space-y-4">
+        {/* HEADER & SEARCH */}
+        <Card className="border-green-100 shadow-sm bg-white">
+            <CardHeader className="py-4 px-4 border-b bg-gray-50/50">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+@@ -185,60 +167,32 @@ const SantriManagement = ({ kelas }: { kelas: string | null }) => {
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-9 w-9"
+                            onClick={fetchData} 
+                            disabled={loading}
+                            title="Refresh Data"
+                        >
+                        <Button variant="outline" size="icon" className="h-9 w-9" onClick={fetchData} disabled={loading}>
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        </Button>
+                    </div>
+                </div>
+            </CardHeader>
+        </Card>
+
+        {/* LOADING STATE */}
+        {loading ? (
+           <Card className="p-8 text-center text-gray-500 animate-pulse bg-white">
+               Sedang memuat data santri...
+           </Card>
+           <Card className="p-8 text-center text-gray-500 animate-pulse bg-white">Sedang memuat data santri...</Card>
+        ) : (
+            /* 🔥 GRID LAYOUT: 2 KOLOM */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                
+                {/* KOLOM KIRI: IKHWAN */}
+                <Card className="border-green-200 shadow-sm bg-white flex flex-col h-full border-t-4 border-t-green-600">
+                    <div className="bg-green-50 p-3 border-b border-green-100 flex items-center justify-between sticky top-0 z-10">
+                        <h3 className="font-bold text-green-800 flex items-center gap-2">
+                            <User className="w-4 h-4" /> Santri Ikhwan
+                        </h3>
+                        <span className="text-xs bg-white px-2 py-0.5 rounded-full text-green-700 font-bold border border-green-200">
+                            {dataIkhwan.length} Santri
+                        </span>
+                        <h3 className="font-bold text-green-800 flex items-center gap-2"><User className="w-4 h-4" /> Santri Ikhwan</h3>
+                        <span className="text-xs bg-white px-2 py-0.5 rounded-full text-green-700 font-bold border border-green-200">{dataIkhwan.length} Santri</span>
+                    </div>
+                    <CardContent className="p-0 max-h-[600px] overflow-y-auto custom-scrollbar">
+                        <SantriPerKelas items={dataIkhwan} />
+                    </CardContent>
+                    <CardContent className="p-0 max-h-[600px] overflow-y-auto custom-scrollbar"><SantriPerKelas items={dataIkhwan} /></CardContent>
+                </Card>
+
+                {/* KOLOM KANAN: AKHWAT */}
+                <Card className="border-pink-200 shadow-sm bg-white flex flex-col h-full border-t-4 border-t-pink-500">
+                    <div className="bg-pink-50 p-3 border-b border-pink-100 flex items-center justify-between sticky top-0 z-10">
+                        <h3 className="font-bold text-pink-800 flex items-center gap-2">
+                            <UserCheck className="w-4 h-4" /> Santri Akhwat
+                        </h3>
+                        <span className="text-xs bg-white px-2 py-0.5 rounded-full text-pink-700 font-bold border border-pink-200">
+                            {dataAkhwat.length} Santri
+                        </span>
+                        <h3 className="font-bold text-pink-800 flex items-center gap-2"><UserCheck className="w-4 h-4" /> Santri Akhwat</h3>
+                        <span className="text-xs bg-white px-2 py-0.5 rounded-full text-pink-700 font-bold border border-pink-200">{dataAkhwat.length} Santri</span>
+                    </div>
+                    <CardContent className="p-0 max-h-[600px] overflow-y-auto custom-scrollbar">
+                         <SantriPerKelas items={dataAkhwat} />
+                    </CardContent>
+                    <CardContent className="p-0 max-h-[600px] overflow-y-auto custom-scrollbar"><SantriPerKelas items={dataAkhwat} /></CardContent>
+                </Card>
+
             </div>
-            {/* Tombol Tambah juga ada di sini biar cepat */}
-            <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
-              <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-green-50 text-green-800 font-semibold border-b border-green-100">
-              <tr>
-                <th className="p-4">NIS</th>
-                <th className="p-4">Nama Lengkap</th>
-                <th className="p-4">Gender</th>
-                <th className="p-4">Saldo</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredSantris.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">Tidak ada data santri ditemukan.</td></tr>
-              ) : (
-                  filteredSantris.map((santri) => (
-                    <tr key={santri.id} className="hover:bg-gray-50 transition-colors group">
-                      <td className="p-4 font-mono text-gray-500">{santri.nis || "-"}</td>
-                      <td className="p-4 font-bold text-gray-800 cursor-pointer hover:text-green-600 hover:underline" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
-                          {santri.nama_lengkap}
-                      </td>
-                      <td className="p-4 capitalize">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${santri.gender === 'ikhwan' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-pink-50 text-pink-700 border-pink-200'}`}>{santri.gender}</span>
-                      </td>
-                      <td className="p-4 font-bold text-gray-700">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
-                      <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${santri.status === 'Aktif' ? 'text-green-600 bg-green-50' : 'text-red-500 bg-red-50'}`}>{santri.status}</span></td>
-                      <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(santri)}><Pencil size={14} /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDelete(santri.id)}><Trash2 size={14} /></Button>
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-      
-      {/* Reuse Dialog yang sama */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-            <DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle><DialogDescription>Isi data santri dengan lengkap.</DialogDescription></DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
-                    <div className="space-y-2"><label className="text-sm font-medium">Nama Lengkap</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}<SelectItem value="99">Alumni</SelectItem></SelectContent></Select></div>
-                    <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                </div>
-                <div className="space-y-2"><label className="text-sm font-medium">Nama Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
-                <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
-            </form>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-};
-
-export default SantriManagement;
+        )}
+    </div>
