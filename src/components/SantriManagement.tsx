@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
 import { 
   UserPlus, Search, Pencil, Trash2, Users, ArrowUpCircle, 
-  AlertTriangle, ArrowLeft, GraduationCap
+  AlertTriangle, ArrowLeft, GraduationCap, User, UserCheck
 } from 'lucide-react';
 
 /* ================= TYPES ================= */
@@ -30,7 +30,7 @@ interface SantriSaldo {
   id: string; nama_lengkap: string; nis: string; kelas: number;
   gender: "ikhwan" | "akhwat"; saldo: number; status: string;
   nama_wali: string; 
-  recent_trx: TransactionHistory[]; // 🔥 DATA BARU DARI VIEW
+  recent_trx: TransactionHistory[];
 }
 
 interface SantriManagementProps {
@@ -39,23 +39,22 @@ interface SantriManagementProps {
 }
 
 interface ClassSummary {
-  kelas: number;
-  count: number;
-  totalSaldo: number;
+  kelas: number; count: number; totalSaldo: number;
 }
 
 const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagementProps) => {
   const { toast } = useToast();
   
-  // State Navigasi
+  // State Navigasi & Data
   const [activeKelas, setActiveKelas] = useState<number | null>(initialKelas ? parseInt(initialKelas) : null);
-  
-  // State Data
   const [santris, setSantris] = useState<SantriSaldo[]>([]);
   const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
+  // 🔥 STATE BARU: TAB GENDER (Default: Ikhwan)
+  const [activeTab, setActiveTab] = useState<"ikhwan" | "akhwat">("ikhwan");
+
   // State Dialog
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -63,7 +62,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     gender: 'ikhwan', status: 'Aktif', kelas: 7
   });
 
-  /* 1. FETCH SUMMARIES (DASHBOARD) */
+  /* FETCH DATA */
   const fetchSummaries = async () => {
     setLoading(true);
     try {
@@ -82,36 +81,26 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } catch (error: any) { console.error("Error summary:", error); } finally { setLoading(false); }
   };
 
-  /* 2. FETCH DETAIL + RIWAYAT */
   const fetchSantrisInClass = async () => {
     if (activeKelas === null) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('view_santri_saldo')
-        .select('*') // Ini otomatis ambil kolom recent_trx juga
-        .eq('kelas', activeKelas)
-        .order('nama_lengkap', { ascending: true });
-
+      const { data, error } = await supabase.from('view_santri_saldo').select('*').eq('kelas', activeKelas).order('nama_lengkap', { ascending: true });
       if (error) throw error;
       // @ts-ignore
       setSantris(data || []);
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); } finally { setLoading(false); }
   };
 
   useEffect(() => { activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); }, [activeKelas]);
 
-  /* LOGIC NAIK KELAS & CRUD */
+  /* CRUD & ACTIONS */
   const handleNaikKelasMassal = async () => {
     setLoading(true);
     try {
         const { error } = await supabase.rpc('naik_kelas_massal');
         if (error) throw error;
-        toast({ title: "Sukses! 🎓", description: "Kelas 12 dihapus. Lainnya naik tingkat.", duration: 5000 });
+        toast({ title: "Sukses! 🎓", description: "Naik kelas berhasil.", duration: 5000 });
         fetchSummaries();
     } catch (error: any) { toast({ title: "Gagal", description: error.message, variant: "destructive" }); } finally { setLoading(false); }
   };
@@ -122,12 +111,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
       const payload = { nama_lengkap: formData.nama_lengkap, nis: formData.nis, kelas: formData.kelas, gender: formData.gender, nama_wali: formData.nama_wali, status: formData.status };
       if (isEditMode && formData.id) {
         const { error } = await supabase.from('santri_2025_12_01_21_34').update(payload).eq('id', formData.id);
-        if (error) throw error;
-        toast({ title: "Sukses", description: "Data diperbarui" });
+        if (error) throw error; toast({ title: "Sukses", description: "Data diperbarui" });
       } else {
         const { error } = await supabase.from('santri_2025_12_01_21_34').insert([payload]);
-        if (error) throw error;
-        toast({ title: "Sukses", description: "Santri baru ditambahkan" });
+        if (error) throw error; toast({ title: "Sukses", description: "Santri baru ditambahkan" });
       }
       setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: 7 });
     } catch (error: any) { toast({ title: "Gagal", description: error.message, variant: "destructive" }); }
@@ -145,9 +132,11 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const openEdit = (e: React.MouseEvent, santri: SantriSaldo) => { e.stopPropagation(); setFormData(santri); setIsEditMode(true); setIsDialogOpen(true); };
   const onDeleteClick = (e: React.MouseEvent, id: string) => { e.stopPropagation(); handleDelete(id); }
 
+  // 🔥 FILTER DATA BERDASARKAN PENCARIAN & TAB GENDER
   const filteredSantris = santris.filter(s => s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
+  const currentTabSantris = filteredSantris.filter(s => s.gender === activeTab);
 
-  /* VIEW 1: GRID KELAS */
+  /* VIEW 1: DASHBOARD KARTU KELAS */
   if (activeKelas === null) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
@@ -158,7 +147,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                  <AlertDialog>
                     <AlertDialogTrigger asChild><Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 shadow-sm flex-1 md:flex-none"><ArrowUpCircle className="mr-2 h-4 w-4" /> Naik Kelas</Button></AlertDialogTrigger>
                     <AlertDialogContent>
-                        <AlertDialogHeader><AlertDialogTitle className="text-orange-600 flex items-center gap-2"><AlertTriangle /> Peringatan Kenaikan Kelas</AlertDialogTitle><AlertDialogDescription><ul className="list-disc pl-5 space-y-1 text-sm text-gray-700"><li>Kls 7-11 naik tingkat.</li><li className="text-red-600 font-bold">Kls 12 & Riwayatnya DIHAPUS.</li></ul></AlertDialogDescription></AlertDialogHeader>
+                        <AlertDialogHeader><AlertDialogTitle className="text-orange-600 flex items-center gap-2"><AlertTriangle /> Peringatan Kenaikan Kelas</AlertDialogTitle><AlertDialogDescription><ul className="list-disc pl-5 space-y-1 text-sm text-gray-700"><li>Kls 7-11 naik tingkat.</li><li className="text-red-600 font-bold">Kls 12 DIHAPUS.</li></ul></AlertDialogDescription></AlertDialogHeader>
                         <AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={handleNaikKelasMassal} className="bg-orange-600 hover:bg-orange-700">Ya, Proses</AlertDialogAction></AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
@@ -173,6 +162,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                 </Card>
             ))}
         </div>
+        {/* Dialog Form Tambah (Global) */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent><DialogHeader><DialogTitle>Tambah Santri Baru</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -187,68 +177,80 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     );
   }
 
-  /* VIEW 2: DETAIL TABLE */
+  /* VIEW 2: DETAIL TABLE DENGAN TAB GENDER */
   return (
-    <Card className="border-green-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <CardHeader className="bg-white border-b border-green-50 pb-4">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+    <Card className={`shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 border-t-4 ${activeTab === 'ikhwan' ? 'border-t-green-600 border-green-100' : 'border-t-pink-500 border-pink-100'}`}>
+      <CardHeader className="bg-white border-b border-gray-100 pb-0">
+        {/* Header Atas */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
              <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
-             <div><CardTitle className="text-lg font-bold text-gray-800">Kelas {activeKelas}</CardTitle><p className="text-xs text-gray-500">{filteredSantris.length} Santri</p></div>
+             <div><CardTitle className="text-lg font-bold text-gray-800">Kelas {activeKelas}</CardTitle><p className="text-xs text-gray-500">{filteredSantris.length} Santri Total</p></div>
           </div>
           <div className="flex items-center gap-2 w-full md:w-auto">
             <div className="relative flex-1 md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
             <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9"><UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span></Button>
           </div>
         </div>
+
+        {/* 🔥 TAB SWITCHER IKHWAN / AKHWAT */}
+        <div className="flex w-full border-b border-gray-200">
+             <button 
+                onClick={() => setActiveTab('ikhwan')}
+                className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${
+                    activeTab === 'ikhwan' 
+                    ? 'border-green-600 text-green-700 bg-green-50/50' 
+                    : 'border-transparent text-gray-400 hover:text-green-600'
+                }`}
+             >
+                <User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})
+             </button>
+             <button 
+                onClick={() => setActiveTab('akhwat')}
+                className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${
+                    activeTab === 'akhwat' 
+                    ? 'border-pink-500 text-pink-700 bg-pink-50/50' 
+                    : 'border-transparent text-gray-400 hover:text-pink-600'
+                }`}
+             >
+                <UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})
+             </button>
+        </div>
       </CardHeader>
 
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-green-50 text-green-800 font-semibold border-b border-green-100">
+            <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
               <tr>
                 <th className="p-4 w-[100px]">NIS</th>
                 <th className="p-4 w-[200px]">Nama Lengkap</th>
-                <th className="p-4 w-[100px]">Gender</th>
-                {/* 🔥 KOLOM BARU: RIWAYAT 5 TERAKHIR */}
                 <th className="p-4 text-center">Riwayat (5 Terakhir)</th>
                 <th className="p-4 text-right">Saldo</th>
                 <th className="p-4 text-center w-[100px]">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredSantris.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">Tidak ada data santri ditemukan.</td></tr>
+              {currentTabSantris.length === 0 ? (
+                <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic">Tidak ada santri {activeTab} ditemukan di kelas ini.</td></tr>
               ) : (
-                  filteredSantris.map((santri) => (
+                  currentTabSantris.map((santri) => (
                     <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
                       <td className="p-4 font-mono text-gray-500">{santri.nis || "-"}</td>
                       <td className="p-4 font-bold text-gray-800 group-hover:text-green-600 group-hover:underline">{santri.nama_lengkap}</td>
-                      <td className="p-4 capitalize"><span className={`px-2 py-1 rounded-full text-xs font-medium border ${santri.gender === 'ikhwan' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-pink-50 text-pink-700 border-pink-200'}`}>{santri.gender}</span></td>
                       
-                      {/* 🔥 TAMPILAN 5 RIWAYAT TERAKHIR */}
+                      {/* 5 Riwayat Terakhir */}
                       <td className="p-4">
                         <div className="flex justify-center gap-1.5 flex-wrap max-w-[250px] mx-auto">
-                            {santri.recent_trx && santri.recent_trx.length > 0 ? (
+                            {Array.isArray(santri.recent_trx) && santri.recent_trx.length > 0 ? (
                                 santri.recent_trx.map((trx, idx) => (
-                                    <div 
-                                        key={idx}
-                                        title={`${trx.date}: ${trx.type === 'income' ? 'Masuk' : 'Keluar'}`}
-                                        className={`
-                                            text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center
-                                            ${trx.type === 'income' 
-                                                ? 'bg-green-50 text-green-700 border-green-200' 
-                                                : 'bg-red-50 text-red-600 border-red-200'}
-                                        `}
+                                    <div key={idx} title={`${trx.date}: ${trx.type === 'income' ? 'Masuk' : 'Keluar'}`}
+                                        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center ${trx.type === 'income' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}
                                     >
-                                        {trx.type === 'income' ? '+' : '-'}
-                                        {(trx.amount / 1000).toFixed(0)}k
+                                        {trx.type === 'income' ? '+' : '-'}{(trx.amount / 1000).toFixed(0)}k
                                     </div>
                                 ))
-                            ) : (
-                                <span className="text-gray-300 text-xs">-</span>
-                            )}
+                            ) : (<span className="text-gray-300 text-xs">-</span>)}
                         </div>
                       </td>
 
@@ -264,7 +266,8 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           </table>
         </div>
       </CardContent>
-      {/* Dialog reuse... */}
+
+      {/* Dialog reuse (Sama persis) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent><DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
