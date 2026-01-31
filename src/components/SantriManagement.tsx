@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
 import { 
   UserPlus, Search, Pencil, Trash2, Users, ArrowUpCircle, 
-  AlertTriangle, ArrowLeft, GraduationCap, User, UserCheck
+  AlertTriangle, ArrowLeft, GraduationCap, User, UserCheck, ScanBarcode, CreditCard
 } from 'lucide-react';
 
 /* ================= TYPES ================= */
@@ -30,6 +30,7 @@ interface SantriSaldo {
   id: string; nama_lengkap: string; nis: string; kelas: number;
   gender: "ikhwan" | "akhwat"; saldo: number; status: string;
   nama_wali: string; 
+  rfid_card_id: string | null; // 🔥 Field Baru
   recent_trx: TransactionHistory[];
 }
 
@@ -52,14 +53,14 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // 🔥 STATE BARU: TAB GENDER (Default: Ikhwan)
+  // Tab Gender
   const [activeTab, setActiveTab] = useState<"ikhwan" | "akhwat">("ikhwan");
 
   // State Dialog
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState<Partial<SantriSaldo>>({
-    gender: 'ikhwan', status: 'Aktif', kelas: 7
+    gender: 'ikhwan', status: 'Aktif', kelas: 7, rfid_card_id: ''
   });
 
   /* FETCH DATA */
@@ -108,7 +109,16 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = { nama_lengkap: formData.nama_lengkap, nis: formData.nis, kelas: formData.kelas, gender: formData.gender, nama_wali: formData.nama_wali, status: formData.status };
+      const payload = { 
+          nama_lengkap: formData.nama_lengkap, 
+          nis: formData.nis, 
+          kelas: formData.kelas, 
+          gender: formData.gender, 
+          nama_wali: formData.nama_wali, 
+          status: formData.status,
+          rfid_card_id: formData.rfid_card_id || null // 🔥 Kirim data kartu
+      };
+
       if (isEditMode && formData.id) {
         const { error } = await supabase.from('santri_2025_12_01_21_34').update(payload).eq('id', formData.id);
         if (error) throw error; toast({ title: "Sukses", description: "Data diperbarui" });
@@ -116,8 +126,8 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         const { error } = await supabase.from('santri_2025_12_01_21_34').insert([payload]);
         if (error) throw error; toast({ title: "Sukses", description: "Santri baru ditambahkan" });
       }
-      setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: 7 });
-    } catch (error: any) { toast({ title: "Gagal", description: error.message, variant: "destructive" }); }
+      setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: 7, rfid_card_id: '' });
+    } catch (error: any) { toast({ title: "Gagal", description: "Cek kembali data (Mungkin NIS/Kartu sudah dipakai).", variant: "destructive" }); }
   };
 
   const handleDelete = async (id: string) => {
@@ -128,11 +138,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
   };
 
-  const openAdd = () => { setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: activeKelas || 7 }); setIsEditMode(false); setIsDialogOpen(true); };
+  const openAdd = () => { setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: activeKelas || 7, rfid_card_id: '' }); setIsEditMode(false); setIsDialogOpen(true); };
   const openEdit = (e: React.MouseEvent, santri: SantriSaldo) => { e.stopPropagation(); setFormData(santri); setIsEditMode(true); setIsDialogOpen(true); };
   const onDeleteClick = (e: React.MouseEvent, id: string) => { e.stopPropagation(); handleDelete(id); }
 
-  // 🔥 FILTER DATA BERDASARKAN PENCARIAN & TAB GENDER
   const filteredSantris = santris.filter(s => s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
   const currentTabSantris = filteredSantris.filter(s => s.gender === activeTab);
 
@@ -162,12 +171,33 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                 </Card>
             ))}
         </div>
-        {/* Dialog Form Tambah (Global) */}
+        
+        {/* DIALOG FORM (Global untuk Dashboard) */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent><DialogHeader><DialogTitle>Tambah Santri Baru</DialogTitle></DialogHeader>
+            <DialogContent>
+                <DialogHeader><DialogTitle>Tambah Santri Baru</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div><div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div></div>
-                    <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
+                    </div>
+                    
+                    {/* 🔥 INPUT RFID BARU */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-blue-600 flex items-center gap-2"><ScanBarcode className="w-4 h-4"/> Kode Kartu RFID (Opsional)</label>
+                        <Input 
+                            value={formData.rfid_card_id || ''} 
+                            onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} 
+                            placeholder="Klik disini lalu tempel kartu..." 
+                            className="border-blue-300 focus:border-blue-500 bg-blue-50/50"
+                        />
+                        <p className="text-[10px] text-gray-500">Klik kolom di atas, lalu tempelkan kartu pada alat reader.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
+                    </div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
                     <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
                 </form>
@@ -177,11 +207,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     );
   }
 
-  /* VIEW 2: DETAIL TABLE DENGAN TAB GENDER */
+  /* VIEW 2: DETAIL TABLE */
   return (
     <Card className={`shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 border-t-4 ${activeTab === 'ikhwan' ? 'border-t-green-600 border-green-100' : 'border-t-pink-500 border-pink-100'}`}>
       <CardHeader className="bg-white border-b border-gray-100 pb-0">
-        {/* Header Atas */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
              <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
@@ -193,28 +222,9 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           </div>
         </div>
 
-        {/* 🔥 TAB SWITCHER IKHWAN / AKHWAT */}
         <div className="flex w-full border-b border-gray-200">
-             <button 
-                onClick={() => setActiveTab('ikhwan')}
-                className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${
-                    activeTab === 'ikhwan' 
-                    ? 'border-green-600 text-green-700 bg-green-50/50' 
-                    : 'border-transparent text-gray-400 hover:text-green-600'
-                }`}
-             >
-                <User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})
-             </button>
-             <button 
-                onClick={() => setActiveTab('akhwat')}
-                className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${
-                    activeTab === 'akhwat' 
-                    ? 'border-pink-500 text-pink-700 bg-pink-50/50' 
-                    : 'border-transparent text-gray-400 hover:text-pink-600'
-                }`}
-             >
-                <UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})
-             </button>
+             <button onClick={() => setActiveTab('ikhwan')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'ikhwan' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-gray-400 hover:text-green-600'}`}><User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})</button>
+             <button onClick={() => setActiveTab('akhwat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'akhwat' ? 'border-pink-500 text-pink-700 bg-pink-50/50' : 'border-transparent text-gray-400 hover:text-pink-600'}`}><UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})</button>
         </div>
       </CardHeader>
 
@@ -225,7 +235,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
               <tr>
                 <th className="p-4 w-[100px]">NIS</th>
                 <th className="p-4 w-[200px]">Nama Lengkap</th>
-                <th className="p-4 text-center">Riwayat (5 Terakhir)</th>
+                <th className="p-4 text-center">Riwayat</th>
                 <th className="p-4 text-right">Saldo</th>
                 <th className="p-4 text-center w-[100px]">Aksi</th>
               </tr>
@@ -237,9 +247,16 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                   currentTabSantris.map((santri) => (
                     <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
                       <td className="p-4 font-mono text-gray-500">{santri.nis || "-"}</td>
-                      <td className="p-4 font-bold text-gray-800 group-hover:text-green-600 group-hover:underline">{santri.nama_lengkap}</td>
+                      <td className="p-4">
+                          <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
+                              {santri.nama_lengkap}
+                              {/* 🔥 INDIKATOR KARTU */}
+                              {santri.rfid_card_id && (
+                                  <span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>
+                              )}
+                          </div>
+                      </td>
                       
-                      {/* 5 Riwayat Terakhir */}
                       <td className="p-4">
                         <div className="flex justify-center gap-1.5 flex-wrap max-w-[250px] mx-auto">
                             {Array.isArray(santri.recent_trx) && santri.recent_trx.length > 0 ? (
@@ -267,12 +284,30 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         </div>
       </CardContent>
 
-      {/* Dialog reuse (Sama persis) */}
+      {/* Dialog Edit (Global) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent><DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div><div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div></div>
-                    <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
+                    </div>
+
+                    {/* 🔥 INPUT RFID BARU */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-blue-600 flex items-center gap-2"><ScanBarcode className="w-4 h-4"/> Kode Kartu RFID (Opsional)</label>
+                        <Input 
+                            value={formData.rfid_card_id || ''} 
+                            onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} 
+                            placeholder="Klik disini lalu tempel kartu..." 
+                            className="border-blue-300 focus:border-blue-500 bg-blue-50/50 font-mono"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
+                    </div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
                     <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
                 </form>
