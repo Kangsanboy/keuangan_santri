@@ -309,7 +309,6 @@ const Index = () => {
             {!isParent ? (
               <div className="flex items-center gap-2">
                   <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
-                  {hasAdminAccess && (<Button onClick={() => navigate('/kasir')} variant="outline" size="sm" className="hidden md:flex border-green-200 text-green-700 hover:bg-green-50 ml-2"><ScanBarcode className="mr-2 h-4 w-4" /> Mode Kasir</Button>)}
               </div>
             ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
