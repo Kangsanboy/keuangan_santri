@@ -102,39 +102,55 @@ const Index = () => {
   const fetchKeuangan = useCallback(async () => {
     if (userRole === 'pending') return; 
     
-    // 🔥 PERBAIKAN 1: Gunakan Waktu Lokal (WIB), bukan UTC
+    // 1. Definisikan Hari Ini (WIB / Lokal Laptop)
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(now.getDate() - 6);
 
-    const { data } = await supabase.from("transactions_2025_12_01_21_34").select("amount, type, transaction_date");
+    // 2. Fetch DATA TOTAL (Total Saldo & 7 Hari)
+    // 🔥 Kita urutkan 'desc' agar data TERBARU ikut terambil jika kena limit 1000 baris
+    const { data } = await supabase.from("transactions_2025_12_01_21_34")
+        .select("amount, type, transaction_date")
+        .order('transaction_date', { ascending: false }); 
+
     if (data) {
-        let m=0, k=0, m7=0, k7=0, kToday=0;
+        let m=0, k=0, m7=0, k7=0;
         data.forEach(d => {
            const tgl = new Date(d.transaction_date);
            if(d.type==='income') m+=d.amount; else k+=d.amount;
            
-           // Hitung 7 Hari
-           if(tgl>=sevenDaysAgo && tgl<=now) { if(d.type==='income') m7+=d.amount; else k7+=d.amount; }
-           
-           // 🔥 PERBAIKAN 2: Bandingkan String Tanggal Lokal
-           if(d.type==='expense' && d.transaction_date === todayStr) {
-               kToday += d.amount;
+           // Hitung Statistik 7 Hari
+           if(tgl>=sevenDaysAgo && tgl<=now) { 
+               if(d.type==='income') m7+=d.amount; else k7+=d.amount; 
            }
         });
-        setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7); setKeluarHariIni(kToday);
+        setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7);
+        // ❌ HAPUS hitungan 'kToday' dari sini biar tidak error/limit
     }
     
-    // ... sisa kode sama (fetch detailHariIni) ...
-    // Pastikan fetch detail juga pakai todayStr yang baru
+    // 3. Fetch DETAIL HARI INI (Pasti Benar & Sinkron)
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
-      .eq("transaction_date", todayStr) // 🔥 Pakai todayStr Lokal
+      .select(`
+        id, amount, type, description, transaction_date, created_at, 
+        santri:santri_id ( nama_lengkap, kelas ),
+        merchant:merchant_id(full_name)
+      `)
+      .eq("transaction_date", todayStr) // 🔥 Ambil spesifik hari ini
       .order("created_at", { ascending: false });
       
-    if (detailHariIni) setTrxHariIni(detailHariIni as any);
+    if (detailHariIni) {
+        setTrxHariIni(detailHariIni as any);
+        
+        // 🔥 SOLUSI: Hitung 'Keluar Hari Ini' langsung dari data yang tampil di tabel
+        // Jadi kalau di tabel ada, di card atas PASTI ada.
+        const pengeluaranHariIni = detailHariIni
+            .filter(d => d.type === 'expense')
+            .reduce((acc, curr) => acc + curr.amount, 0);
+            
+        setKeluarHariIni(pengeluaranHariIni);
+    }
   }, [userRole]);
 
   const fetchRekapSaldo = useCallback(async () => {
