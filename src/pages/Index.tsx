@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
-  GraduationCap, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
+  Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, RefreshCw
 } from "lucide-react";
 
@@ -51,7 +51,7 @@ const Index = () => {
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
   const yearsList = [2024, 2025, 2026, 2027, 2028];
 
-  /* ================= LOGIC: TOMBOL BACK HP (HISTORY API) ================= */
+  /* ================= LOGIC: TOMBOL BACK HP ================= */
   useEffect(() => { window.history.replaceState({ menu: 'dashboard', detailId: null }, ''); }, []);
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -61,8 +61,7 @@ const Index = () => {
         setDetailSantriId(state.detailId || null);
         if (window.innerWidth < 768) setSidebarOpen(false);
       } else {
-        setActiveMenu('dashboard');
-        setDetailSantriId(null);
+        setActiveMenu('dashboard'); setDetailSantriId(null);
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -71,8 +70,7 @@ const Index = () => {
 
   const navigateTo = (menu: any, detailId: string | null = null) => {
     window.history.pushState({ menu, detailId }, '', '');
-    setActiveMenu(menu);
-    setDetailSantriId(detailId);
+    setActiveMenu(menu); setDetailSantriId(detailId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
@@ -87,9 +85,7 @@ const Index = () => {
                 setUserRole(data.role);
                 setLinkedSantriId(data.linked_santri_id);
                 if (data.role === 'parent' && data.linked_santri_id) {
-                    setDetailSantriId(data.linked_santri_id);
-                    setActiveMenu("santri");
-                    setSidebarOpen(false);
+                    setDetailSantriId(data.linked_santri_id); setActiveMenu("santri"); setSidebarOpen(false);
                 }
             }
         } catch (err) { console.error("Gagal cek role:", err); }
@@ -139,53 +135,28 @@ const Index = () => {
   }, [userRole]);
 
   useEffect(() => { if (user) { fetchKeuangan(); fetchRekapSaldo(); } }, [user, userRole, fetchKeuangan, fetchRekapSaldo]);
-  
-  // Listener Auto-Refresh dari komponen lain (opsional)
   useEffect(() => {
     const handleRefresh = () => { fetchKeuangan(); fetchRekapSaldo(); };
     window.addEventListener("refresh-keuangan", handleRefresh); return () => { window.removeEventListener("refresh-keuangan", handleRefresh); };
   }, [fetchKeuangan, fetchRekapSaldo]);
 
-  /* 🔥🔥🔥 FITUR BARU: AUTO REFRESH JAM 00:00 WIB 🔥🔥🔥 */
+  /* AUTO REFRESH 00:00 */
   useEffect(() => {
     const calculateTimeToMidnight = () => {
-        const now = new Date();
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0, 0, 0, 0); // Set ke jam 00:00:00 besok
-        
-        // Selisih waktu sekarang dengan besok jam 00:00
-        // Ditambah 2000ms (2 detik) biar aman server udah ganti tanggal
+        const now = new Date(); const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0); 
         return (tomorrow.getTime() - now.getTime()) + 2000; 
     };
-
     const scheduleRefresh = () => {
         const timeToWait = calculateTimeToMidnight();
-        console.log(`⏱️ Auto-refresh dijadwalkan dalam ${Math.floor(timeToWait / 1000 / 60)} menit lagi.`);
-
         const timerId = setTimeout(() => {
-            console.log("🕛 Sudah jam 00:00! Refreshing data...");
-            fetchKeuangan();
-            fetchRekapSaldo();
-            
-            // Tampilkan notifikasi kecil
-            toast({ 
-                title: "Pergantian Hari 🕛", 
-                description: "Data transaksi harian telah di-reset.",
-                duration: 5000 
-            });
-
-            // Jadwalkan lagi untuk besok malam (Looping)
+            fetchKeuangan(); fetchRekapSaldo();
+            toast({ title: "Pergantian Hari 🕛", description: "Data transaksi harian telah di-reset.", duration: 5000 });
             scheduleRefresh();
         }, timeToWait);
-
         return timerId;
     };
-
-    const timer = scheduleRefresh();
-    
-    // Bersihkan timer kalau user tutup aplikasi
-    return () => clearTimeout(timer);
+    const timer = scheduleRefresh(); return () => clearTimeout(timer);
   }, [fetchKeuangan, fetchRekapSaldo, toast]);
 
   /* ================= FUNGSI INTERAKSI ================= */
@@ -193,12 +164,8 @@ const Index = () => {
     if (!window.confirm("Apakah Anda yakin ingin menghapus transaksi ini? Saldo akan otomatis berubah.")) return;
     try {
         const { error } = await supabase.from('transactions_2025_12_01_21_34').delete().eq('id', id);
-        if (error) throw error;
-        toast({ title: "Dihapus", description: "Transaksi berhasil dihapus.", duration: 3000 });
-        fetchKeuangan(); fetchRekapSaldo();
-    } catch (err: any) {
-        toast({ title: "Gagal", description: "Tidak bisa menghapus: " + err.message, variant: "destructive" });
-    }
+        if (error) throw error; toast({ title: "Dihapus", description: "Transaksi berhasil dihapus.", duration: 3000 }); fetchKeuangan(); fetchRekapSaldo();
+    } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
   const exportExcelBulanan = async () => { 
@@ -224,6 +191,7 @@ const Index = () => {
   const avatarUrl = user?.user_metadata?.avatar_url;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
   const isParent = userRole === 'parent';
+  const isSuperAdmin = userRole === 'super_admin'; // 🔥 CEK SUPER ADMIN
 
   if (userRole === 'pending') {
       return (
@@ -249,7 +217,7 @@ const Index = () => {
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
            <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
-               <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
+               <Banknote className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
                <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}><h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">PPS AL-JAWAHIR</h1><p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Keuangan Digital</p></div>
                <button onClick={() => setSidebarOpen(false)} className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"><PanelLeftClose size={24} /></button>
            </div>
@@ -260,7 +228,12 @@ const Index = () => {
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Database</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
-             {isAdmin && <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>}
+             
+             {/* 🔥 MENU ADMIN HANYA UNTUK SUPER ADMIN 🔥 */}
+             {isSuperAdmin && (
+                 <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>
+             )}
+
            </nav>
            <div className="p-4 border-t border-green-800 bg-green-950 flex-shrink-0"><button onClick={signOut} className="flex items-center w-full px-4 py-3 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-200 transition-colors text-sm font-medium whitespace-nowrap"><LogOut className="mr-3 h-5 w-5 flex-shrink-0" />Keluar Aplikasi</button></div>
         </aside>
@@ -271,18 +244,16 @@ const Index = () => {
           <div className="flex items-center gap-3">
             {!isParent ? (
               <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
-            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><GraduationCap className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
+            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
           <div className="flex items-center gap-3 max-w-[60%]">
-                <div className="text-right hidden sm:block truncate"><p className="text-sm font-bold text-gray-800 truncate">{userName}</p><p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">
-  {isParent 
-    ? "Orang Tua" 
-    : (userRole === 'super_admin' 
-        ? "🚀 Super Admin" 
-        : (isAdmin ? "Admin" : "Viewer")
-      )
-  }
-</p></div>
+                <div className="text-right hidden sm:block truncate">
+                    <p className="text-sm font-bold text-gray-800 truncate">{userName}</p>
+                    {/* 🔥 UPDATE LABEL SUPER ADMIN */}
+                    <p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">
+                        {isParent ? "Orang Tua" : (isSuperAdmin ? "🚀 Super Admin" : (isAdmin ? "Admin" : "Viewer"))}
+                    </p>
+                </div>
                 {isParent && <button onClick={signOut} className="ml-2 text-red-500 hover:bg-red-50 p-2 rounded-full" title="Keluar"><LogOut size={18} /></button>}
                 {!isParent && <div className="h-9 w-9 rounded-full border-2 border-green-100 shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">{avatarUrl ? <img src={avatarUrl} alt="User" className="h-full w-full object-cover" /> : <span className="text-green-700 font-bold text-lg">{user?.email?.charAt(0).toUpperCase()}</span>}</div>}
           </div>
@@ -313,7 +284,7 @@ const Index = () => {
                             })}
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[{ title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-600" }, { title: "Masuk 7 Hari", value: masuk7Hari, color: "text-green-600" }, { title: "Keluar 7 Hari", value: keluar7Hari, color: "text-red-600" }, { title: "Keluar Hari Ini", value: keluarHariIni, color: "text-orange-600" }].map((item, idx) => (<div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]"><h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4><p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>Rp {item.value.toLocaleString("id-ID")}</p></div>))}</div>
-                          <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]">{/* Kita kirim data rekapSaldo (Saldo per kelas & gender) ke Chart */}<FinanceChart data={rekapSaldo} /></div></div>
+                          <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
                     {activeMenu === "keuangan" && isAdmin && (
@@ -354,7 +325,8 @@ const Index = () => {
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
-                    {activeMenu === "pengguna" && isAdmin && <UserManagement />}
+                    {/* 🔥 HANYA SUPER ADMIN YANG BISA AKSES MENU PENGGUNA 🔥 */}
+                    {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                 </>
             )}
           </div>
