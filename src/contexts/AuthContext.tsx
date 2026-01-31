@@ -20,88 +20,76 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const { toast } = useToast();
 
-  // 1. FUNGSI CEK ADMIN (Dipisah biar aman)
-  const checkAdminRole = async (userId: string) => {
-    try {
-      // Cek tabel users
-      const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle(); // Pakai maybeSingle biar gak error 406
-      
-      if (error) {
-        console.log("Info Role:", error.message);
-        return;
-      }
-      
-      const role = data?.role;
-      setIsAdmin(role === 'admin' || role === 'super_admin');
-    } catch (err) {
-      console.error("Gagal cek role, anggap user biasa.");
-    }
-  };
-
   useEffect(() => {
-    let mounted = true;
-
-    // 2. CEK SESI AWAL (Hanya sekali pas web dibuka)
+    // 1. Cek Sesi Saat Ini (Startup)
     const initSession = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
         
-        if (mounted) {
-          setSession(initialSession);
-          setUser(initialSession?.user ?? null);
-          // Kalau ada user, baru cek admin
-          if (initialSession?.user) {
-            await checkAdminRole(initialSession.user.id);
-          }
+        if (session?.user) {
+          await checkUserRole(session.user.id);
         }
       } catch (error) {
         console.error("Auth Init Error:", error);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
     };
 
     initSession();
 
-    // 3. PASANG PENDENGAR (Listener) - Versi Paling Aman
-    const { data } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return;
+    // 2. Dengerin Perubahan Login/Logout (Realtime)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(true);
 
-      console.log("Auth Event:", event); // Debug di console
-      
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      
-      if (event === 'SIGNED_OUT') {
-        setIsAdmin(false);
-        setLoading(false);
-      } else if (newSession?.user) {
-        // Cek admin disini juga, tapi dibungkus try-catch
-        await checkAdminRole(newSession.user.id);
-        setLoading(false);
+      if (session?.user) {
+        await checkUserRole(session.user.id);
       } else {
+        setIsAdmin(false); // Kalau logout, admin jadi false
         setLoading(false);
       }
     });
 
     return () => {
-      mounted = false;
-      if (data && data.subscription) {
-        data.subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
     };
   }, []);
 
+  const checkUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.warn("Gagal ambil role:", error.message);
+        setIsAdmin(false);
+      } else {
+        setIsAdmin(data?.role === 'admin' || data?.role === 'super_admin');
+      }
+    } catch (error) {
+      console.error("Role Check Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setIsAdmin(false);
-    toast({ title: "Berhasil Keluar", description: "Anda telah logout." });
+    try {
+        await supabase.auth.signOut();
+        setSession(null);
+        setUser(null);
+        setIsAdmin(false);
+        toast({ title: "Logout Berhasil", description: "Sampai jumpa lagi!" });
+    } catch (error: any) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   return (
