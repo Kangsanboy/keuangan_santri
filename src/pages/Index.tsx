@@ -245,8 +245,25 @@ const Index = () => {
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             {!isParent ? (
-              <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
-            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
+<div className="flex items-center gap-3">
+  {!isParent ? (
+    <div className="flex items-center gap-2">
+        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
+        
+        {/* 🔥 TOMBOL SHORTCUT KE KASIR (HANYA MUNCUL DI HP/PC ADMIN) */}
+        {hasAdminAccess && (
+            <Button 
+                onClick={() => setDetailedView("kasir")} // Nanti kita atur logic pindah halamannya
+                variant="outline" 
+                size="sm" 
+                className="hidden md:flex border-green-200 text-green-700 hover:bg-green-50 ml-2"
+            >
+                <ScanBarcode className="mr-2 h-4 w-4" /> Mode Kasir
+            </Button>
+        )}
+    </div>
+  ) : ( ... )}
+</div>            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
           <div className="flex items-center gap-3 max-w-[60%]">
                 <div className="text-right hidden sm:block truncate">
