@@ -20,78 +20,88 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const { toast } = useToast();
 
+  // 1. FUNGSI CEK ADMIN (Dipisah biar aman)
+  const checkAdminRole = async (userId: string) => {
+    try {
+      // Cek tabel users
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle(); // Pakai maybeSingle biar gak error 406
+      
+      if (error) {
+        console.log("Info Role:", error.message);
+        return;
+      }
+      
+      const role = data?.role;
+      setIsAdmin(role === 'admin' || role === 'super_admin');
+    } catch (err) {
+      console.error("Gagal cek role, anggap user biasa.");
+    }
+  };
+
   useEffect(() => {
-    // 1. Cek sesi awal saat web dibuka
+    let mounted = true;
+
+    // 2. CEK SESI AWAL (Hanya sekali pas web dibuka)
     const initSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
         
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) checkAdmin(session.user.id);
-      } catch (err: any) {
-        console.error("Auth Init Error:", err);
-        // Jangan crash, cukup anggap user belum login
-        setSession(null);
-        setUser(null);
+        if (mounted) {
+          setSession(initialSession);
+          setUser(initialSession?.user ?? null);
+          // Kalau ada user, baru cek admin
+          if (initialSession?.user) {
+            await checkAdminRole(initialSession.user.id);
+          }
+        }
+      } catch (error) {
+        console.error("Auth Init Error:", error);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     initSession();
 
-    // 2. Pasang pendengar (listener) perubahan status login
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log("Auth Event:", _event); // Debugging
+    // 3. PASANG PENDENGAR (Listener) - Versi Paling Aman
+    const { data } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (!mounted) return;
+
+      console.log("Auth Event:", event); // Debug di console
       
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
       
-      if (session?.user) {
-        checkAdmin(session.user.id);
-      } else {
+      if (event === 'SIGNED_OUT') {
         setIsAdmin(false);
+        setLoading(false);
+      } else if (newSession?.user) {
+        // Cek admin disini juga, tapi dibungkus try-catch
+        await checkAdminRole(newSession.user.id);
+        setLoading(false);
+      } else {
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
     return () => {
-      subscription.unsubscribe();
+      mounted = false;
+      if (data && data.subscription) {
+        data.subscription.unsubscribe();
+      }
     };
   }, []);
 
-  const checkAdmin = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      
-      if (error) {
-        console.warn("Gagal cek role:", error.message);
-        return; // Jangan crash
-      }
-      
-      setIsAdmin(data?.role === 'admin' || data?.role === 'super_admin');
-    } catch (error) {
-      console.error("Check Admin Error:", error);
-    }
-  };
-
   const signOut = async () => {
-    try {
-        await supabase.auth.signOut();
-        setSession(null);
-        setUser(null);
-        setIsAdmin(false);
-        toast({ title: "Berhasil Keluar", description: "Sampai jumpa lagi!" });
-    } catch (error: any) {
-        toast({ title: "Gagal Keluar", description: error.message, variant: "destructive" });
-    }
+    await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    setIsAdmin(false);
+    toast({ title: "Berhasil Keluar", description: "Anda telah logout." });
   };
 
   return (
