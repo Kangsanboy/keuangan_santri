@@ -274,7 +274,15 @@ const Index = () => {
             ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><GraduationCap className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
           <div className="flex items-center gap-3 max-w-[60%]">
-                <div className="text-right hidden sm:block truncate"><p className="text-sm font-bold text-gray-800 truncate">{userName}</p><p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block">{isParent ? "Orang Tua" : (isAdmin ? "Admin" : "Viewer")}</p></div>
+                <div className="text-right hidden sm:block truncate"><p className="text-sm font-bold text-gray-800 truncate">{userName}</p><p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">
+  {isParent 
+    ? "Orang Tua" 
+    : (userRole === 'super_admin' 
+        ? "🚀 Super Admin" 
+        : (isAdmin ? "Admin" : "Viewer")
+      )
+  }
+</p></div>
                 {isParent && <button onClick={signOut} className="ml-2 text-red-500 hover:bg-red-50 p-2 rounded-full" title="Keluar"><LogOut size={18} /></button>}
                 {!isParent && <div className="h-9 w-9 rounded-full border-2 border-green-100 shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">{avatarUrl ? <img src={avatarUrl} alt="User" className="h-full w-full object-cover" /> : <span className="text-green-700 font-bold text-lg">{user?.email?.charAt(0).toUpperCase()}</span>}</div>}
           </div>
