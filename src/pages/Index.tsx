@@ -6,7 +6,7 @@ import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
 import SantriDetail from "@/components/SantriDetail"; 
 import UserManagement from "@/components/UserManagement";
-import WarungMonitoring from "@/components/WarungMonitoring"; // 🔥 IMPORT KOMPONEN BARU
+import WarungMonitoring from "@/components/WarungMonitoring"; 
 import FinanceChart from "@/components/FinanceChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3 // 🔥 Tambah Icon
+  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap // 🔥 Tambah Icon GraduationCap
 } from "lucide-react"; 
 
 /* ================= TYPES ================= */
@@ -33,7 +33,6 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  // 🔥 TAMBAH STATE MENU BARU: 'monitoring_warung'
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
@@ -98,19 +97,17 @@ const Index = () => {
     checkUserRole();
   }, [user, navigate]);
 
-  /* ================= FETCH DATA ================= */
+  /* ================= FETCH DATA (DENGAN TIMEZONE FIX & DETAIL) ================= */
   const fetchKeuangan = useCallback(async () => {
     if (userRole === 'pending') return; 
     
     // 1. Definisikan Hari Ini (WIB / Lokal Laptop)
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(now.getDate() - 6);
 
-    // 2. Fetch DATA TOTAL (Total Saldo & 7 Hari)
-    // 🔥 Kita urutkan 'desc' agar data TERBARU ikut terambil jika kena limit 1000 baris
+    // 2. Fetch DATA TOTAL
     const { data } = await supabase.from("transactions_2025_12_01_21_34")
         .select("amount, type, transaction_date")
         .order('transaction_date', { ascending: false }); 
@@ -120,35 +117,24 @@ const Index = () => {
         data.forEach(d => {
            const tgl = new Date(d.transaction_date);
            if(d.type==='income') m+=d.amount; else k+=d.amount;
-           
-           // Hitung Statistik 7 Hari
            if(tgl>=sevenDaysAgo && tgl<=now) { 
                if(d.type==='income') m7+=d.amount; else k7+=d.amount; 
            }
         });
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7);
-        // ❌ HAPUS hitungan 'kToday' dari sini biar tidak error/limit
     }
     
-    // 3. Fetch DETAIL HARI INI (Pasti Benar & Sinkron)
+    // 3. Fetch DETAIL HARI INI (Sumber Kebenaran "Keluar Hari Ini")
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`
-        id, amount, type, description, transaction_date, created_at, 
-        santri:santri_id ( nama_lengkap, kelas ),
-        merchant:merchant_id(full_name)
-      `)
-      .eq("transaction_date", todayStr) // 🔥 Ambil spesifik hari ini
+      .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
+      .eq("transaction_date", todayStr)
       .order("created_at", { ascending: false });
       
     if (detailHariIni) {
         setTrxHariIni(detailHariIni as any);
-        
-        // 🔥 SOLUSI: Hitung 'Keluar Hari Ini' langsung dari data yang tampil di tabel
-        // Jadi kalau di tabel ada, di card atas PASTI ada.
         const pengeluaranHariIni = detailHariIni
             .filter(d => d.type === 'expense')
             .reduce((acc, curr) => acc + curr.amount, 0);
-            
         setKeluarHariIni(pengeluaranHariIni);
     }
   }, [userRole]);
@@ -259,33 +245,49 @@ const Index = () => {
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in" onClick={() => setSidebarOpen(false)} />}
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
-          <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
-    {/* Ganti Icon Banknote jadi Icon Gedung/School */}
-    <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
-    <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
-        <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIM-PESANTREN</h1>
-        <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Manajemen Terpadu</p>
-    </div>
-               <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}><h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">PPS AL-JAWAHIR</h1><p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Keuangan Digital</p></div>
+           {/* 🔥 HEADER SIDEBAR BARU: SIMTREN */}
+           <div className="h-24 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
+               <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
+               <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
+                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIM-PESANTREN</h1>
+                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Manajemen Terpadu</p>
+               </div>
                <button onClick={() => setSidebarOpen(false)} className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"><PanelLeftClose size={24} /></button>
            </div>
+           
+           {/* 🔥 MENU NAVIGASI TERKELOMPOK */}
            <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-             <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Menu Utama</p>
-             <button onClick={() => handleMenuClick("dashboard")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "dashboard" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><LayoutDashboard className="mr-3 h-5 w-5 flex-shrink-0" />Dashboard</button>
-             <button onClick={() => handleMenuClick("keuangan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Wallet className="mr-3 h-5 w-5 flex-shrink-0" />Keuangan</button>
              
-             {/* 🔥 MENU MONITORING WARUNG (KHUSUS SUPER ADMIN) */}
+             {/* 1. UTAMA */}
+             <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Utama</p>
+             <button onClick={() => handleMenuClick("dashboard")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "dashboard" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><LayoutDashboard className="mr-3 h-5 w-5 flex-shrink-0" />Dashboard Pusat</button>
+             
+             {/* 2. AKADEMIK */}
+             <div className="border-t border-green-800 my-4"></div>
+             <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
+             <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
+             <button onClick={() => toast({title: "Segera Hadir", description: "Modul Absensi sedang disiapkan bang!"})} className="flex items-center w-full px-4 py-3 rounded-lg text-green-100 hover:bg-green-800 transition-all text-sm font-medium whitespace-nowrap"><Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi</button>
+
+             {/* 3. KEUANGAN */}
+             <div className="border-t border-green-800 my-4"></div>
+             <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Keuangan Digital</p>
+             <button onClick={() => handleMenuClick("keuangan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Wallet className="mr-3 h-5 w-5 flex-shrink-0" />Tabungan & Saldo</button>
              {isSuperAdmin && (
                  <button onClick={() => handleMenuClick("monitoring_warung")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "monitoring_warung" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
-                    <BarChart3 className="mr-3 h-5 w-5 flex-shrink-0" /> Monitoring Warung
+                    <Store className="mr-3 h-5 w-5 flex-shrink-0" /> Monitoring Kantin
                  </button>
              )}
 
-             <div className="border-t border-green-800 my-4"></div>
-             <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Database</p>
-             <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
-             {isSuperAdmin && (<button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>)}
+             {/* 4. SISTEM */}
+             {isSuperAdmin && (
+                 <>
+                    <div className="border-t border-green-800 my-4"></div>
+                    <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem</p>
+                    <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen User</button>
+                 </>
+             )}
            </nav>
+           
            <div className="p-4 border-t border-green-800 bg-green-950 flex-shrink-0"><button onClick={signOut} className="flex items-center w-full px-4 py-3 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-200 transition-colors text-sm font-medium whitespace-nowrap"><LogOut className="mr-3 h-5 w-5 flex-shrink-0" />Keluar Aplikasi</button></div>
         </aside>
       )}
@@ -315,7 +317,7 @@ const Index = () => {
                 <>
                     {activeMenu === "dashboard" && (
                        <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                          <div className="text-center space-y-2 pb-4 border-b border-gray-200"><h1 className="text-xl md:text-3xl font-bold text-green-700 uppercase tracking-wide px-2">KEUANGAN PPS AL-JAWAHIR</h1><p className="text-gray-500 max-w-3xl mx-auto text-xs md:text-base leading-relaxed px-4">Monitoring data saldo santri secara real-time.</p></div>
+                          <div className="text-center space-y-2 pb-4 border-b border-gray-200"><h1 className="text-xl md:text-3xl font-bold text-green-700 uppercase tracking-wide px-2">DASHBOARD PUSAT</h1><p className="text-gray-500 max-w-3xl mx-auto text-xs md:text-base leading-relaxed px-4">Ringkasan data pesantren secara real-time.</p></div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {[7, 8, 9, 10, 11, 12].map((kls) => {
                               const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
@@ -376,10 +378,7 @@ const Index = () => {
                       </div>
                     )}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
-                    
-                    {/* 🔥 RENDER MENU MONITORING WARUNG */}
                     {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
-
                 </>
             )}
           </div>
