@@ -3,12 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext"; // 🔥 Ambil user login
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ScanBarcode, Wallet, User, RotateCcw, ArrowLeft, Printer, Store } from "lucide-react";
+import { ScanBarcode, Wallet, User, RotateCcw, ArrowLeft, Store, LogOut, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-// Style khusus print (Thermal 58mm)
+// Style CSS khusus Struk (58mm)
 const printStyles = `
   @media print {
     @page { size: 58mm auto; margin: 0; }
@@ -17,7 +17,7 @@ const printStyles = `
     #printable-receipt {
       position: absolute; left: 0; top: 0; width: 58mm;
       font-family: 'Courier New', monospace; font-size: 12px;
-      color: black; padding: 5px;
+      color: black; padding: 5px 2px; line-height: 1.2;
     }
     .no-print { display: none !important; }
   }
@@ -30,16 +30,33 @@ interface SantriKasir {
 const CashierPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user } = useAuth(); // Ambil data Merchant yg login
+  const { user, signOut } = useAuth(); // Ambil data warung yang login
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [scanCode, setScanCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [santri, setSantri] = useState<SantriKasir | null>(null);
   const [amount, setAmount] = useState<string>("");
-  const [lastTrx, setLastTrx] = useState<any>(null); // Data untuk struk
+  
+  // State khusus struk & auto-print
+  const [lastTrx, setLastTrx] = useState<any>(null);
+  const [printTrigger, setPrintTrigger] = useState(false);
 
+  // Focus otomatis
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, [santri]);
+
+  // 🔥 EFEK AUTO PRINT
+  // Begitu transaksi sukses (printTrigger true), langsung print!
+  useEffect(() => {
+    if (printTrigger && lastTrx) {
+        // Delay dikit biar struk render dulu di layar (walau hidden)
+        const timer = setTimeout(() => {
+            window.print();
+            setPrintTrigger(false); // Reset trigger
+        }, 300);
+        return () => clearTimeout(timer);
+    }
+  }, [printTrigger, lastTrx]);
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault(); if (!scanCode.trim()) return;
@@ -47,10 +64,10 @@ const CashierPage = () => {
     try {
       const { data, error } = await supabase.from('view_santri_saldo').select('*').or(`rfid_card_id.eq.${scanCode},nis.eq.${scanCode}`).single();
       if (error || !data) {
-        toast({ title: "Tidak Ditemukan", description: "Kartu/NIS salah.", variant: "destructive" }); setScanCode("");
+        toast({ title: "❌ Tidak Ditemukan", description: "Kartu atau NIS belum terdaftar.", variant: "destructive" }); setScanCode("");
       } else {
         // @ts-ignore
-        setSantri(data); setScanCode(""); setLastTrx(null); // Reset struk lama
+        setSantri(data); setScanCode(""); setLastTrx(null); 
       }
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
@@ -58,9 +75,9 @@ const CashierPage = () => {
   const handlePayment = async () => {
     if (!santri || !amount || !user) return;
     const nominal = parseInt(amount.replace(/\D/g, ''));
-    if (nominal <= 0 || nominal > santri.saldo) {
-        toast({ title: "Error", description: "Saldo tidak cukup / Nominal salah.", variant: "destructive" }); return;
-    }
+    
+    if (nominal <= 0) { toast({ title: "Nominal Salah", variant: "destructive" }); return; }
+    if (nominal > santri.saldo) { toast({ title: "Saldo Kurang!", description: `Sisa: Rp ${santri.saldo.toLocaleString()}`, variant: "destructive" }); return; }
 
     setLoading(true);
     try {
@@ -69,22 +86,34 @@ const CashierPage = () => {
         amount: nominal,
         type: 'expense',
         description: 'Jajan Kantin',
-        merchant_id: user.id, // 🔥 CATAT SIAPA YANG JUALAN
+        merchant_id: user.id, 
         transaction_date: new Date().toISOString().split('T')[0]
       };
 
       const { error } = await supabase.from('transactions_2025_12_01_21_34').insert([trxData]);
       if (error) throw error;
 
-      // Siapkan data struk
-      setLastTrx({ ...trxData, santri_nama: santri.nama_lengkap, sisa_saldo: santri.saldo - nominal, time: new Date().toLocaleString() });
-      
-      toast({ title: "Berhasil", description: "Transaksi tersimpan.", className: "bg-green-600 text-white" });
-      
-      // Auto Print (Opsional, atau klik manual)
-      // setTimeout(() => window.print(), 500); 
+      // 1. Siapkan Data Struk
+      const merchantName = user.user_metadata?.full_name || "Kantin PPS";
+      setLastTrx({ 
+          ...trxData, 
+          santri_nama: santri.nama_lengkap, 
+          sisa_saldo: santri.saldo - nominal, 
+          merchant: merchantName,
+          time: new Date().toLocaleString('id-ID') 
+      });
 
-      setSantri(null); setAmount(""); // Reset UI tapi simpan lastTrx buat print
+      // 2. Notifikasi Sukses
+      toast({ 
+          title: "✅ Pembayaran Berhasil", 
+          description: `Mencetak struk untuk ${santri.nama_lengkap}...`, 
+          className: "bg-green-600 text-white border-none"
+      });
+
+      // 3. 🔥 RESET UI & TRIGGER AUTO PRINT
+      setSantri(null); 
+      setAmount("");
+      setPrintTrigger(true); // Ini yang memicu useEffect print di atas
       if (inputRef.current) inputRef.current.focus();
 
     } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); } finally { setLoading(false); }
@@ -92,67 +121,183 @@ const CashierPage = () => {
 
   const handleReset = () => { setSantri(null); setAmount(""); setScanCode(""); if (inputRef.current) inputRef.current.focus(); };
 
+  // Ambil Nama Warung
+  const merchantName = user?.user_metadata?.full_name || user?.email || "Kasir Kantin";
+
   return (
-    <div className="min-h-screen bg-gray-100 p-4 flex flex-col items-center justify-center font-sans">
+    <div className="min-h-screen bg-gray-100 flex flex-col font-sans">
       <style>{printStyles}</style>
 
-      {/* HEADER */}
-      <div className="w-full max-w-lg mb-6 flex items-center justify-between no-print">
-         <Button variant="ghost" onClick={() => navigate('/')}><ArrowLeft className="mr-2 h-4 w-4" /> Dashboard</Button>
-         <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Store /> KASIR KANTIN</h1>
-      </div>
+      {/* HEADER SUPERMARKET STYLE (NO-PRINT) */}
+      <header className="bg-gray-900 text-white shadow-md p-4 flex justify-between items-center no-print sticky top-0 z-50">
+         <div className="flex items-center gap-4">
+             <Button variant="ghost" onClick={() => navigate('/')} className="text-gray-300 hover:text-white hover:bg-gray-800">
+                 <ArrowLeft className="mr-2 h-5 w-5" /> Keluar
+             </Button>
+             <div className="border-l border-gray-700 pl-4">
+                 <h1 className="text-xl font-bold flex items-center gap-2 text-yellow-400">
+                    <Store className="h-6 w-6" /> {merchantName.toUpperCase()}
+                 </h1>
+                 <p className="text-xs text-gray-400">Mode Kasir Aktif • {new Date().toLocaleDateString('id-ID')}</p>
+             </div>
+         </div>
+         <div className="flex items-center gap-3">
+             <div className="bg-gray-800 px-4 py-2 rounded-lg text-right hidden md:block">
+                 <p className="text-xs text-gray-400">User Login</p>
+                 <p className="text-sm font-bold text-white truncate max-w-[150px]">{user?.email}</p>
+             </div>
+         </div>
+      </header>
 
-      <Card className="w-full max-w-lg shadow-xl border-green-200 overflow-hidden no-print">
-        {!santri ? (
-          <div className="p-8 text-center space-y-6">
-            <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto animate-pulse"><ScanBarcode className="w-12 h-12 text-green-600" /></div>
-            <div><h2 className="text-2xl font-bold text-gray-800">Siap Scan</h2><p className="text-gray-500">Tempel Kartu RFID / Ketik NIS</p></div>
-            <form onSubmit={handleScan}><Input ref={inputRef} value={scanCode} onChange={(e) => setScanCode(e.target.value)} className="text-center text-lg h-12" autoFocus /><Button type="submit" className="w-full mt-4 bg-green-600 h-12">{loading ? "..." : "CARI"}</Button></form>
+      {/* CONTENT AREA */}
+      <main className="flex-1 flex items-center justify-center p-4 no-print">
+        <Card className="w-full max-w-lg shadow-2xl border-0 overflow-hidden">
             
-            {/* TOMBOL CETAK STRUK TERAKHIR */}
-            {lastTrx && (
-                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm font-bold text-yellow-800 mb-2">Transaksi Terakhir: Rp {lastTrx.amount.toLocaleString()}</p>
-                    <Button onClick={() => window.print()} variant="outline" size="sm" className="w-full border-yellow-600 text-yellow-700 hover:bg-yellow-100"><Printer className="mr-2 h-4 w-4" /> Cetak Struk</Button>
+            {/* SCREEN 1: IDLE / SCAN */}
+            {!santri ? (
+            <div className="p-10 text-center space-y-8 bg-white">
+                <div className="relative">
+                    <div className="w-32 h-32 bg-green-50 rounded-full flex items-center justify-center mx-auto border-4 border-green-100 animate-pulse">
+                        <ScanBarcode className="w-16 h-16 text-green-600" />
+                    </div>
+                    {/* Status Indikator */}
+                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs px-3 py-1 rounded-full shadow-sm">
+                        READER READY
+                    </div>
                 </div>
-            )}
-          </div>
-        ) : (
-          <div>
-            <CardHeader className={`text-white text-center py-6 ${santri.gender==='ikhwan'?'bg-green-600':'bg-pink-500'}`}><CardTitle className="text-2xl font-bold capitalize">{santri.nama_lengkap}</CardTitle><p className="opacity-90">{santri.kelas} • {santri.gender}</p></CardHeader>
-            <CardContent className="p-6 space-y-6">
-                <div className="text-center p-4 bg-gray-50 rounded-xl border"><p className="text-sm text-gray-500 flex justify-center gap-2"><Wallet className="w-4 h-4" /> Saldo</p><div className="text-3xl font-bold text-gray-800">Rp {santri.saldo.toLocaleString("id-ID")}</div></div>
-                <div className="space-y-2"><label className="text-sm font-bold">Nominal (Rp)</label><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-center text-3xl font-bold h-16" autoFocus /></div>
-                <div className="grid grid-cols-2 gap-4"><Button variant="outline" onClick={handleReset} className="h-12 border-red-200 text-red-600"><RotateCcw className="mr-2 h-4 w-4" /> Batal</Button><Button onClick={handlePayment} disabled={loading || !amount} className="h-12 bg-green-600 font-bold">{loading ? "..." : "BAYAR"}</Button></div>
-            </CardContent>
-          </div>
-        )}
-      </Card>
+                
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-2">Silakan Scan Kartu</h2>
+                    <p className="text-gray-500">Tempelkan kartu RFID santri pada alat reader.</p>
+                </div>
+                
+                <form onSubmit={handleScan} className="relative w-full max-w-xs mx-auto">
+                    <Input 
+                        ref={inputRef}
+                        value={scanCode}
+                        onChange={(e) => setScanCode(e.target.value)}
+                        className="text-center text-lg h-12 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all rounded-xl"
+                        placeholder="...menunggu input..."
+                        autoFocus
+                    />
+                    {/* Tombol manual (Hidden di production pakai CSS kalau mau, tapi berguna buat testing) */}
+                    <Button type="submit" className="w-full mt-4 bg-gray-800 hover:bg-gray-900 h-12 rounded-xl">
+                        {loading ? "Mencari Data..." : "CARI MANUAL (ENTER)"}
+                    </Button>
+                </form>
+            </div>
+            ) : (
+            /* SCREEN 2: PAYMENT */
+            <div className="flex flex-col h-full bg-white">
+                {/* Header Santri */}
+                <div className={`p-6 text-white text-center relative overflow-hidden ${santri.gender === 'ikhwan' ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-pink-500 to-rose-500'}`}>
+                    <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                    <div className="relative z-10">
+                        <h2 className="text-3xl font-bold capitalize mb-1">{santri.nama_lengkap}</h2>
+                        <div className="flex justify-center gap-2 text-sm opacity-90 font-medium">
+                            <span className="bg-white/20 px-3 py-1 rounded-full">Kelas {santri.kelas}</span>
+                            <span className="bg-white/20 px-3 py-1 rounded-full capitalize">{santri.gender}</span>
+                        </div>
+                    </div>
+                </div>
 
-      {/* 🔥 FORMAT STRUK (HANYA MUNCUL SAAT PRINT) */}
+                <CardContent className="p-8 space-y-8">
+                    {/* Saldo Display */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-100 p-2 rounded-full"><Wallet className="text-blue-600 w-6 h-6" /></div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase">Sisa Saldo</p>
+                                <p className="text-sm text-gray-400">Sebelum Transaksi</p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className={`text-2xl font-bold ${santri.saldo < 5000 ? 'text-red-500' : 'text-gray-800'}`}>
+                                Rp {santri.saldo.toLocaleString("id-ID")}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Input Besar */}
+                    <div className="space-y-3">
+                        <label className="text-sm font-bold text-gray-700 uppercase tracking-wider block text-center">Input Nominal Belanja</label>
+                        <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-2xl">Rp</span>
+                            <Input 
+                                type="number" 
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                className="text-right text-4xl font-bold h-20 pl-12 border-2 border-gray-200 focus:border-green-500 rounded-2xl shadow-sm"
+                                placeholder="0"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-3 gap-4 pt-2">
+                        <Button variant="outline" onClick={handleReset} className="h-14 col-span-1 border-gray-300 hover:bg-gray-100 text-gray-600 rounded-xl">
+                            <RotateCcw className="w-6 h-6" />
+                        </Button>
+                        <Button 
+                            onClick={handlePayment} 
+                            disabled={loading || !amount} 
+                            className="h-14 col-span-2 bg-green-600 hover:bg-green-700 text-white text-xl font-bold rounded-xl shadow-lg shadow-green-200"
+                        >
+                            {loading ? "Memproses..." : "BAYAR & CETAK"}
+                        </Button>
+                    </div>
+                </CardContent>
+            </div>
+            )}
+        </Card>
+      </main>
+
+      {/* FOOTER */}
+      <footer className="text-center p-4 text-gray-400 text-xs no-print">
+          Sistem Kasir Digital • PPS Al-Jawahir
+      </footer>
+
+      {/* 🔥 HIDDEN RECEIPT (STRUK) - HANYA MUNCUL SAAT PRINT */}
       <div id="printable-receipt">
         {lastTrx && (
-            <div className="text-center border-b-2 border-black pb-2 mb-2 border-dashed">
-                <h2 className="font-bold text-lg">PPS AL-JAWAHIR</h2>
-                <p className="text-xs">Sistem Kantin Digital</p>
-                <p className="text-xs mt-1">{lastTrx.time}</p>
+            <div className="text-center">
+                <div className="font-bold text-lg mb-1">PPS AL-JAWAHIR</div>
+                <div className="text-xs mb-2">Jl. Pesantren No. 1</div>
+                
                 <hr className="border-t border-black border-dashed my-2"/>
-                <div className="text-left">
-                    <p>Santri : {lastTrx.santri_nama}</p>
-                    <p>Item   : Jajan Kantin</p>
+                
+                <div className="text-left flex justify-between text-xs mb-1">
+                    <span>Tanggal :</span>
+                    <span>{lastTrx.time}</span>
                 </div>
+                <div className="text-left flex justify-between text-xs mb-1">
+                    <span>Kasir :</span>
+                    <span>{lastTrx.merchant}</span>
+                </div>
+                <div className="text-left flex justify-between text-xs mb-2">
+                    <span>Santri :</span>
+                    <span className="font-bold">{lastTrx.santri_nama}</span>
+                </div>
+
                 <hr className="border-t border-black border-dashed my-2"/>
-                <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
+
+                <div className="flex justify-between font-bold text-sm my-2">
+                    <span>TOTAL BAYAR</span>
                     <span>Rp {lastTrx.amount.toLocaleString("id-ID")}</span>
                 </div>
-                <div className="flex justify-between text-xs mt-1">
+
+                <div className="flex justify-between text-xs">
                     <span>Sisa Saldo</span>
                     <span>Rp {lastTrx.sisa_saldo.toLocaleString("id-ID")}</span>
                 </div>
+
                 <hr className="border-t border-black border-dashed my-2"/>
-                <p className="text-center text-xs mt-2">Terima Kasih</p>
-                <p className="text-center text-[10px]">Simpan struk ini sebagai bukti.</p>
+                
+                <div className="text-center text-xs mt-2">
+                    Terima Kasih<br/>
+                    Simpan struk sebagai bukti sah.
+                </div>
             </div>
         )}
       </div>
