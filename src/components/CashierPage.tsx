@@ -129,10 +129,16 @@ const CashierPage = () => {
 
     setLoading(true);
     try {
+      const now = new Date();
+      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
       const trxData = {
-        santri_id: santri.id, amount: nominal, type: 'expense',
-        description: 'Jajan Kantin', merchant_id: user.id, 
-        transaction_date: new Date().toISOString().split('T')[0]
+        santri_id: santri.id, 
+        amount: nominal, 
+        type: 'expense',
+        description: 'Jajan Kantin', 
+        merchant_id: user.id, 
+        transaction_date: localDate // 🔥 Gunakan tanggal lokal ini
       };
 
       const { error } = await supabase.from('transactions_2025_12_01_21_34').insert([trxData]);
