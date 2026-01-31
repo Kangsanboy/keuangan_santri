@@ -1,174 +1,150 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from "react";
-import { User, Session } from "@supabase/supabase-js";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Session, User } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 
-interface UserProfile {
-  id: string;
-  email: string;
-  role: "admin" | "viewer";
-  created_at: string;
-}
-
 interface AuthContextType {
-  user: User | null;
   session: Session | null;
-  profile: UserProfile | null;
+  user: User | null;
   loading: boolean;
-  signUp: (e: string, p: string, f: string, r: "admin" | "viewer") => Promise<any>;
-  signIn: (e: string, p: string) => Promise<any>;
-  signOut: () => Promise<void>;
   isAdmin: boolean;
+  role: string | null;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-};
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { toast } = useToast();
-  const isMounted = useRef(true);
-
-  const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // 🔥 SETTING BARU: LEBIH SABAR (BIAR NGGAK RE-TRY TERUS)
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000; // Jeda 1 detik antar percobaan
+  const REQUEST_TIMEOUT = 10000; // 🔥 DULU 2000, SEKARANG 10000 (10 Detik)
 
-  // 🔹 Fungsi Fetch dengan RETRY & TIMEOUT
-  const fetchProfileWithRetry = async (userId: string, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        console.log(`🚀 Percobaan ambil data ke-${i + 1} untuk ID: ${userId}`);
+  // Fungsi Fetch Profile dengan Logic "Sabar"
+  const fetchProfile = async (userId: string, retryCount = 0) => {
+    try {
+      console.log(`🚀 Percobaan ambil data ke-${retryCount + 1} untuk ID: ${userId}`);
 
-        // 1. Buat janji timeout (2 detik max per request)
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Request Timeout")), 2000)
-        );
+      // Race: Antara Data Database vs Timer
+      const fetchPromise = supabase
+        .from("users")
+        .select("role")
+        .eq("id", userId)
+        .single();
 
-        // 2. Request ke Database
-        const dbPromise = supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request Timeout")), REQUEST_TIMEOUT)
+      );
 
-        // 3. Balapan: Mana duluan, data sampai atau waktu habis?
-        // @ts-ignore
-        const { data, error } = await Promise.race([dbPromise, timeoutPromise]);
+      // @ts-ignore
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data) {
-          console.log("✅ Profil ditemukan (Admin/Viewer):", data.role);
-          if (isMounted.current) setProfile(data as UserProfile);
-          return; // SUKSES! Keluar dari loop
-        }
-      } catch (err: any) {
-        console.warn(`⚠️ Gagal percobaan ke-${i + 1}:`, err.message || err);
-        // Kalau belum limit retry, kita coba lagi (loop lanjut)
-        if (i < retries - 1) {
-             console.log("♻️ Mencoba ulang dalam 1 detik...");
-             await new Promise(res => setTimeout(res, 1000));
-        }
+      if (data) {
+        console.log("✅ Profil ditemukan:", data.role);
+        setRole(data.role);
+        setLoading(false); // Stop loading langsung
+      }
+    } catch (error: any) {
+      console.warn(`⚠️ Gagal percobaan ke-${retryCount + 1}:`, error.message);
+
+      if (retryCount < MAX_RETRIES) {
+        console.log(`♻️ Mencoba ulang dalam ${RETRY_DELAY}ms...`);
+        setTimeout(() => {
+          fetchProfile(userId, retryCount + 1);
+        }, RETRY_DELAY);
+      } else {
+        console.error("🔥 Gagal mengambil profil setelah batas maksimal.");
+        // Fallback biar gak blank putih selamanya
+        setLoading(false); 
+        // Opsional: Toast error kalau mau
+        // toast({ title: "Koneksi Lambat", description: "Gagal memuat profil user.", variant: "destructive" });
       }
     }
-    console.error("🔥 Gagal mengambil profil setelah 3x percobaan.");
   };
 
-  // 🔹 INIT SESSION
   useEffect(() => {
-    isMounted.current = true;
+    let mounted = true;
 
-    const initializeAuth = async () => {
+    const initSession = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
-
-        if (isMounted.current && initialSession) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          // Pakai fungsi retry yang baru
-          await fetchProfileWithRetry(initialSession.user.id);
+        
+        if (mounted) {
+          if (initialSession) {
+            setSession(initialSession);
+            setUser(initialSession.user);
+            // Langsung fetch profile
+            fetchProfile(initialSession.user.id);
+          } else {
+            // Kalau gak ada session, ya udah stop loading (masuk login page)
+            setLoading(false);
+          }
         }
-      } catch (error) {
-        console.error("Auth Init Error:", error);
-      } finally {
-        if (isMounted.current) {
-          console.log("🏁 Init selesai. Mematikan loading.");
-          setLoading(false);
-        }
+      } catch (err) {
+        console.error("Session init error:", err);
+        setLoading(false);
       }
     };
 
-    initializeAuth();
+    initSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!isMounted.current) return;
-        console.log("🔔 Auth Event:", event);
+    // Listener Perubahan Auth (Login/Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+      console.log("🔔 Auth Event:", _event);
+      
+      if (mounted) {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
 
-        if (event === 'SIGNED_IN' && session) {
-            setSession(session);
-            setUser(session.user);
-            // Pakai retry saat login juga
-            await fetchProfileWithRetry(session.user.id);
-            if (isMounted.current) setLoading(false);
-        } else if (event === 'SIGNED_OUT') {
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-            if (isMounted.current) setLoading(false);
+        if (currentSession?.user) {
+          // Cek dulu apakah role sudah ada? Kalau null/pending, baru fetch ulang
+          // Ini mencegah fetch ganda saat event SIGNED_IN dan INITIAL_SESSION tabrakan
+          setLoading(true);
+          fetchProfile(currentSession.user.id);
+        } else {
+          setRole(null);
+          setLoading(false);
         }
       }
-    );
+    });
 
     return () => {
-      isMounted.current = false;
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string, role: "admin" | "viewer") => {
-    const { data, error } = await supabase.auth.signUp({
-      email, password, options: { data: { full_name: fullName, role } },
-    });
-    if (error) {
-      toast({ title: "Gagal", description: error.message, variant: "destructive" });
-      return { data: null, error };
-    }
-    toast({ title: "Berhasil", description: "Cek email/Login." });
-    return { data, error: null };
-  };
-
-  const signIn = async (email: string, password: string) => {
-    setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setLoading(false);
-      toast({ title: "Gagal Login", description: error.message, variant: "destructive" });
-      return { data: null, error };
-    }
-    toast({ title: "Login Berhasil" });
-    return { data, error: null };
-  };
-
   const signOut = async () => {
     setLoading(true);
     await supabase.auth.signOut();
+    setRole(null);
+    setSession(null);
+    setUser(null);
+    setLoading(false);
+    toast({ title: "Logout Berhasil", description: "Sampai jumpa lagi!" });
   };
 
+  const isAdmin = role === "admin" || role === "super_admin";
+
   return (
-    <AuthContext.Provider
-      value={{
-        user, session, profile, loading,
-        signUp, signIn, signOut,
-        isAdmin: profile?.role === "admin",
-      }}
-    >
+    <AuthContext.Provider value={{ session, user, loading, isAdmin, role, signOut }}>
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 };
