@@ -253,8 +253,8 @@ const Index = () => {
            <div className="h-24 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
                <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
                <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
-                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIM-PESANTREN</h1>
-                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Manajemen Terpadu</p>
+                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIMATREN</h1>
+                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Informasi Pesantren</p>
                </div>
                <button onClick={() => setSidebarOpen(false)} className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"><PanelLeftClose size={24} /></button>
            </div>
