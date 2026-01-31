@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SaldoKelas from "@/pages/SaldoKelas";
+import CashierPage from "./components/CashierPage"; 
 
 const queryClient = new QueryClient();
 
@@ -21,12 +22,17 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/santri" element={<Index />} />
             <Route path="/keuangan" element={<Index />} />
-            <Route path="/users" element={<Index />} />
-            <Route path="*" element={<NotFound />} />
+            <Route path="/users" element={<Index />} /> {/* Biar refresh di menu users gak 404 */}
+            <Route path="/pengguna" element={<Index />} /> {/* Jaga-jaga kalau pathnya pengguna */}
+            
             <Route path="/saldo-kelas/:kelas" element={<SaldoKelas />} />
+            
+            {/* 🔥 ROUTE KASIR (Sekarang aman karena sudah di-import) */}
             <Route path="/kasir" element={<CashierPage />} />
-            </Routes>
-            </HashRouter>
+            
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </HashRouter>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
