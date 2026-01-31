@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom"; // 🔥 PENTING UNTUK PINDAH KE KASIR
+import { useNavigate } from "react-router-dom"; 
 import AuthPage from "@/components/AuthPage";
 import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
@@ -15,20 +15,22 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2, ScanBarcode // 🔥 Tambah Icon ScanBarcode
-} from "lucide-react";
+  Clock, ShieldAlert, Trash2, ScanBarcode, Store
+} from "lucide-react"; // 🔥 Tambah Icon Store
 
 /* ================= TYPES ================= */
 interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
 interface TransaksiItem {
   id: string; amount: number; type: "income" | "expense"; description: string;
   transaction_date: string; santri: { nama_lengkap: string; kelas: number; } | null;
+  // 🔥 TAMBAH FIELD MERCHANT
+  merchant: { full_name: string; } | null; 
 }
 
 const Index = () => {
   const { user, loading, isAdmin, signOut } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate(); // 🔥 Hook untuk navigasi
+  const navigate = useNavigate();
   
   /* ================= STATE ================= */
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
@@ -85,21 +87,16 @@ const Index = () => {
             if (data) {
                 setUserRole(data.role);
                 setLinkedSantriId(data.linked_santri_id);
-                // 🔥 LOGIC REDIRECT WARUNG
-                if (data.role === 'kantin') {
-                    navigate('/kasir'); // Langsung lempar ke kasir
-                    return;
-                }
+                // Redirect Kasir
+                if (data.role === 'kantin') { navigate('/kasir'); return; }
                 if (data.role === 'parent' && data.linked_santri_id) {
-                    setDetailSantriId(data.linked_santri_id);
-                    setActiveMenu("santri");
-                    setSidebarOpen(false);
+                    setDetailSantriId(data.linked_santri_id); setActiveMenu("santri"); setSidebarOpen(false);
                 }
             }
         } catch (err) { console.error("Gagal cek role:", err); }
     };
     checkUserRole();
-  }, [user]);
+  }, [user, navigate]);
 
   /* ================= FETCH DATA ================= */
   const fetchKeuangan = useCallback(async () => {
@@ -120,9 +117,16 @@ const Index = () => {
         });
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7); setKeluarHariIni(kToday);
     }
+    
+    // 🔥 UPDATE FETCH: Ambil Data Merchant
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas )`)
+      .select(`
+        id, amount, type, description, transaction_date, created_at, 
+        santri:santri_id ( nama_lengkap, kelas ),
+        merchant:merchant_id ( full_name ) 
+      `)
       .eq("transaction_date", todayStr).order("created_at", { ascending: false });
+      
     if (detailHariIni) setTrxHariIni(detailHariIni as any);
   }, [userRole]);
 
@@ -148,7 +152,7 @@ const Index = () => {
     window.addEventListener("refresh-keuangan", handleRefresh); return () => { window.removeEventListener("refresh-keuangan", handleRefresh); };
   }, [fetchKeuangan, fetchRekapSaldo]);
 
-  /* AUTO REFRESH 00:00 */
+  /* AUTO REFRESH */
   useEffect(() => {
     const calculateTimeToMidnight = () => {
         const now = new Date(); const tomorrow = new Date(now);
@@ -159,7 +163,7 @@ const Index = () => {
         const timeToWait = calculateTimeToMidnight();
         const timerId = setTimeout(() => {
             fetchKeuangan(); fetchRekapSaldo();
-            toast({ title: "Pergantian Hari 🕛", description: "Data transaksi harian telah di-reset.", duration: 5000 });
+            toast({ title: "Pergantian Hari 🕛", description: "Data reset.", duration: 5000 });
             scheduleRefresh();
         }, timeToWait);
         return timerId;
@@ -167,12 +171,12 @@ const Index = () => {
     const timer = scheduleRefresh(); return () => clearTimeout(timer);
   }, [fetchKeuangan, fetchRekapSaldo, toast]);
 
-  /* ================= FUNGSI INTERAKSI ================= */
+  /* ACTIONS */
   const handleDeleteTransaction = async (id: string) => {
-    if (!window.confirm("Apakah Anda yakin ingin menghapus transaksi ini? Saldo akan otomatis berubah.")) return;
+    if (!window.confirm("Hapus transaksi ini?")) return;
     try {
         const { error } = await supabase.from('transactions_2025_12_01_21_34').delete().eq('id', id);
-        if (error) throw error; toast({ title: "Dihapus", description: "Transaksi berhasil dihapus.", duration: 3000 }); fetchKeuangan(); fetchRekapSaldo();
+        if (error) throw error; toast({ title: "Dihapus", description: "Transaksi dihapus." }); fetchKeuangan(); fetchRekapSaldo();
     } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
@@ -181,10 +185,18 @@ const Index = () => {
     const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
     const lastDay = new Date(tahun, bulan + 1, 0).getDate(); const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-${lastDay}`;
     const { data, error } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`transaction_date, type, amount, description, santri:santri_id ( nama_lengkap, kelas )`)
+      .select(`transaction_date, type, amount, description, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
       .gte("transaction_date", awal).lte("transaction_date", akhir).order("transaction_date");
     if (error || !data) return;
-    const rows = data.map((d: any) => ({ Tanggal: d.transaction_date, Santri: d.santri?.nama_lengkap || "-", Kelas: d.santri?.kelas || "-", Jenis: d.type === "income" ? "Pemasukan" : "Pengeluaran", Nominal: d.amount, Keterangan: d.description, }));
+    const rows = data.map((d: any) => ({ 
+        Tanggal: d.transaction_date, 
+        Santri: d.santri?.nama_lengkap || "-", 
+        Kelas: d.santri?.kelas || "-", 
+        Jenis: d.type === "income" ? "Pemasukan" : "Pengeluaran", 
+        Nominal: d.amount, 
+        Keterangan: d.description, 
+        Kasir: d.merchant?.full_name || "-" 
+    }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Laporan"); XLSX.writeFile(wb, `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`);
   };
 
@@ -200,7 +212,7 @@ const Index = () => {
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
   const isParent = userRole === 'parent';
   const isSuperAdmin = userRole === 'super_admin';
-  const hasAdminAccess = isAdmin || isSuperAdmin; // ✅ KUNCI AKSES
+  const hasAdminAccess = isAdmin || isSuperAdmin; 
 
   if (userRole === 'pending') {
       return (
@@ -212,7 +224,6 @@ const Index = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                       <p className="text-gray-500">Halo <strong>{userName}</strong>, akun Anda sedang ditinjau oleh Admin.</p>
-                      <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-md text-sm text-yellow-800 text-left flex gap-2"><ShieldAlert className="h-5 w-5 flex-shrink-0" /><span>Mohon lapor ke Admin Sekolah untuk aktivasi akun sebagai Wali Santri.</span></div>
                       <Button onClick={signOut} variant="outline" className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"><LogOut className="mr-2 h-4 w-4" /> Keluar Aplikasi</Button>
                   </CardContent>
               </Card>
@@ -237,10 +248,7 @@ const Index = () => {
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Database</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
-             
-             {isSuperAdmin && (
-                 <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>
-             )}
+             {isSuperAdmin && (<button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>)}
            </nav>
            <div className="p-4 border-t border-green-800 bg-green-950 flex-shrink-0"><button onClick={signOut} className="flex items-center w-full px-4 py-3 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-200 transition-colors text-sm font-medium whitespace-nowrap"><LogOut className="mr-3 h-5 w-5 flex-shrink-0" />Keluar Aplikasi</button></div>
         </aside>
@@ -252,22 +260,12 @@ const Index = () => {
             {!isParent ? (
               <div className="flex items-center gap-2">
                   <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
-                  {/* 🔥 TOMBOL MODE KASIR (HANYA MUNCUL DI HP/PC ADMIN) */}
-                  {hasAdminAccess && (
-                      <Button onClick={() => navigate('/kasir')} variant="outline" size="sm" className="hidden md:flex border-green-200 text-green-700 hover:bg-green-50 ml-2">
-                          <ScanBarcode className="mr-2 h-4 w-4" /> Mode Kasir
-                      </Button>
-                  )}
+                  {hasAdminAccess && (<Button onClick={() => navigate('/kasir')} variant="outline" size="sm" className="hidden md:flex border-green-200 text-green-700 hover:bg-green-50 ml-2"><ScanBarcode className="mr-2 h-4 w-4" /> Mode Kasir</Button>)}
               </div>
             ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
           <div className="flex items-center gap-3 max-w-[60%]">
-                <div className="text-right hidden sm:block truncate">
-                    <p className="text-sm font-bold text-gray-800 truncate">{userName}</p>
-                    <p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">
-                        {isParent ? "Orang Tua" : (isSuperAdmin ? "🚀 Super Admin" : (isAdmin ? "Admin" : "Viewer"))}
-                    </p>
-                </div>
+                <div className="text-right hidden sm:block truncate"><p className="text-sm font-bold text-gray-800 truncate">{userName}</p><p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">{isParent ? "Orang Tua" : (isSuperAdmin ? "🚀 Super Admin" : (isAdmin ? "Admin" : "Viewer"))}</p></div>
                 {isParent && <button onClick={signOut} className="ml-2 text-red-500 hover:bg-red-50 p-2 rounded-full" title="Keluar"><LogOut size={18} /></button>}
                 {!isParent && <div className="h-9 w-9 rounded-full border-2 border-green-100 shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">{avatarUrl ? <img src={avatarUrl} alt="User" className="h-full w-full object-cover" /> : <span className="text-green-700 font-bold text-lg">{user?.email?.charAt(0).toUpperCase()}</span>}</div>}
           </div>
@@ -276,7 +274,7 @@ const Index = () => {
         <main className="flex-1 overflow-y-auto p-3 md:p-8 bg-gray-50/50 w-full">
           <div className="max-w-7xl mx-auto space-y-6 pb-20">
             {isParent ? (
-                detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={() => {}} /> : <div className="text-center py-20 text-gray-500"><p className="font-bold mb-2">Akun belum terhubung</p><p className="text-sm">Silakan hubungi Admin untuk menghubungkan akun Anda dengan data santri.</p></div>
+                detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={() => {}} /> : <div className="text-center py-20 text-gray-500"><p className="font-bold mb-2">Akun belum terhubung</p><p className="text-sm">Silakan hubungi Admin.</p></div>
             ) : (
                 <>
                     {activeMenu === "dashboard" && (
@@ -301,7 +299,7 @@ const Index = () => {
                           <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
-                    {/* 🔥 MENU KEUANGAN (Hanya Admin & Super Admin) */}
+                    
                     {activeMenu === "keuangan" && hasAdminAccess && (
                         <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                            <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
@@ -317,16 +315,23 @@ const Index = () => {
                                             {trx.type === 'income' ? <ArrowUpCircle className="text-green-600 w-8 h-8 opacity-80" /> : <ArrowDownCircle className="text-red-500 w-8 h-8 opacity-80" />}
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-gray-800 text-sm">{trx.santri ? trx.santri.nama_lengkap : "Tanpa Nama"}</span>
-                                                <span className="text-xs text-gray-500 flex gap-2"><span>{trx.santri ? `Kelas ${trx.santri.kelas}` : "-"}</span><span>•</span><span className="italic">{trx.description || "Tanpa Keterangan"}</span></span>
+                                                <div className="text-xs text-gray-500 flex gap-2 flex-wrap">
+                                                    <span>{trx.santri ? `Kelas ${trx.santri.kelas}` : "-"}</span>
+                                                    <span>•</span>
+                                                    <span className="italic">{trx.description || "Tanpa Keterangan"}</span>
+                                                    
+                                                    {/* 🔥 INFO NAMA WARUNG */}
+                                                    {trx.merchant && (
+                                                        <span className="bg-teal-50 text-teal-700 px-1.5 rounded flex items-center gap-1">
+                                                            <Store className="w-3 h-3" /> {trx.merchant.full_name}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <div className={`font-bold text-sm ${trx.type === 'income' ? 'text-green-700' : 'text-red-600'}`}>{trx.type === 'income' ? '+' : '-'} Rp {trx.amount.toLocaleString("id-ID")}</div>
-                                            {hasAdminAccess && (
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteTransaction(trx.id)}>
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            )}
+                                            {hasAdminAccess && (<Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteTransaction(trx.id)}><Trash2 size={16} /></Button>)}
                                         </div>
                                     </div>
                                   ))}
@@ -340,7 +345,6 @@ const Index = () => {
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
-                    {/* 🔥 MENU PENGGUNA (Hanya Super Admin) */}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                 </>
             )}
