@@ -203,7 +203,7 @@ const CashierPage = () => {
                     <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
                         <div className="flex justify-between text-sm font-bold text-yellow-800 mb-1"><span className="flex items-center gap-1"><Coins className="w-4 h-4" /> Limit Harian</span><span>{santri.today_expense.toLocaleString()} / 10.000</span></div>
                         <div className="w-full bg-yellow-200 rounded-full h-3 overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${usedPercent >= 100 ? 'bg-red-500' : 'bg-yellow-500'}`} style={{ width: `${usedPercent}%` }}></div></div>
-                        <p className={`text-center text-xs mt-2 font-bold ${sisaJatah <= 0 ? 'text-red-600' : 'text-green-700'}`}>{sisaJatah <= 0 ? "🚫 JATAH HABIS!" : `Sisa Rp ${sisaJatah.toLocaleString()}`}</p>
+                        <p className={`text-center text-xs mt-2 font-bold ${sisaJatah <= 0 ? 'text-red-600' : 'text-green-700'}`}>{sisaJatah <= 0 ? "🚫 SISA LIMIT HARIAN HABIS!" : `Sisa Rp ${sisaJatah.toLocaleString()}`}</p>
                     </div>
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
                         <div className="flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-full"><Wallet className="text-blue-600 w-6 h-6" /></div><div><p className="text-xs text-gray-500 font-bold uppercase">Sisa Saldo</p></div></div>
