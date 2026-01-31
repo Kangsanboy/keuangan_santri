@@ -28,9 +28,10 @@ interface TransactionHistory {
 
 interface SantriSaldo {
   id: string; nama_lengkap: string; nis: string; kelas: number;
+  rombel: string; // 🔥 Field Baru
   gender: "ikhwan" | "akhwat"; saldo: number; status: string;
   nama_wali: string; 
-  rfid_card_id: string | null; // 🔥 Field Baru
+  rfid_card_id: string | null;
   recent_trx: TransactionHistory[];
 }
 
@@ -60,7 +61,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState<Partial<SantriSaldo>>({
-    gender: 'ikhwan', status: 'Aktif', kelas: 7, rfid_card_id: ''
+    gender: 'ikhwan', status: 'Aktif', kelas: 7, rombel: 'A', rfid_card_id: ''
   });
 
   /* FETCH DATA */
@@ -86,7 +87,12 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     if (activeKelas === null) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('view_santri_saldo').select('*').eq('kelas', activeKelas).order('nama_lengkap', { ascending: true });
+      // 🔥 Fetch data termasuk ROMBEL
+      const { data, error } = await supabase.from('view_santri_saldo')
+        .select('*')
+        .eq('kelas', activeKelas)
+        .order('rombel', { ascending: true }) // Urutkan rombel A, B, C
+        .order('nama_lengkap', { ascending: true });
       if (error) throw error;
       // @ts-ignore
       setSantris(data || []);
@@ -112,11 +118,12 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
       const payload = { 
           nama_lengkap: formData.nama_lengkap, 
           nis: formData.nis, 
-          kelas: formData.kelas, 
+          kelas: formData.kelas,
+          rombel: formData.rombel || 'A', // 🔥 Simpan Rombel
           gender: formData.gender, 
           nama_wali: formData.nama_wali, 
           status: formData.status,
-          rfid_card_id: formData.rfid_card_id || null // 🔥 Kirim data kartu
+          rfid_card_id: formData.rfid_card_id || null
       };
 
       if (isEditMode && formData.id) {
@@ -126,7 +133,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         const { error } = await supabase.from('santri_2025_12_01_21_34').insert([payload]);
         if (error) throw error; toast({ title: "Sukses", description: "Santri baru ditambahkan" });
       }
-      setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: 7, rfid_card_id: '' });
+      setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: 7, rombel: 'A', rfid_card_id: '' });
     } catch (error: any) { toast({ title: "Gagal", description: "Cek kembali data (Mungkin NIS/Kartu sudah dipakai).", variant: "destructive" }); }
   };
 
@@ -138,7 +145,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
   };
 
-  const openAdd = () => { setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: activeKelas || 7, rfid_card_id: '' }); setIsEditMode(false); setIsDialogOpen(true); };
+  const openAdd = () => { setFormData({ gender: 'ikhwan', status: 'Aktif', kelas: activeKelas || 7, rombel: 'A', rfid_card_id: '' }); setIsEditMode(false); setIsDialogOpen(true); };
   const openEdit = (e: React.MouseEvent, santri: SantriSaldo) => { e.stopPropagation(); setFormData(santri); setIsEditMode(true); setIsDialogOpen(true); };
   const onDeleteClick = (e: React.MouseEvent, id: string) => { e.stopPropagation(); handleDelete(id); }
 
@@ -172,7 +179,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
             ))}
         </div>
         
-        {/* DIALOG FORM (Global untuk Dashboard) */}
+        {/* DIALOG FORM (Global) */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent>
                 <DialogHeader><DialogTitle>Tambah Santri Baru</DialogTitle></DialogHeader>
@@ -181,23 +188,25 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                         <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
                     </div>
-                    
-                    {/* 🔥 INPUT RFID BARU */}
                     <div className="space-y-2">
                         <label className="text-sm font-bold text-blue-600 flex items-center gap-2"><ScanBarcode className="w-4 h-4"/> Kode Kartu RFID (Opsional)</label>
-                        <Input 
-                            value={formData.rfid_card_id || ''} 
-                            onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} 
-                            placeholder="Klik disini lalu tempel kartu..." 
-                            className="border-blue-300 focus:border-blue-500 bg-blue-50/50"
-                        />
-                        <p className="text-[10px] text-gray-500">Klik kolom di atas, lalu tempelkan kartu pada alat reader.</p>
+                        <Input value={formData.rfid_card_id || ''} onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} placeholder="Klik disini lalu tempel kartu..." className="border-blue-300 focus:border-blue-500 bg-blue-50/50 font-mono" />
+                    </div>
+                    
+                    {/* 🔥 INPUT KELAS + ROMBEL */}
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2 space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="col-span-1 space-y-2"><label className="text-sm font-medium">Rombel</label>
+                            <Select value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                    </div>
+                    <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
                     <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
                 </form>
@@ -234,8 +243,8 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
             <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
               <tr>
                 <th className="p-4 w-[100px]">NIS</th>
-                <th className="p-4 w-[200px]">Nama Lengkap</th>
-                <th className="p-4 text-center">Riwayat</th>
+                <th className="p-4 w-[250px]">Nama Lengkap</th>
+                <th className="p-4 w-[100px] text-center">Kelas</th> {/* 🔥 Kolom Baru */}
                 <th className="p-4 text-right">Saldo</th>
                 <th className="p-4 text-center w-[100px]">Aksi</th>
               </tr>
@@ -250,25 +259,15 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                       <td className="p-4">
                           <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
                               {santri.nama_lengkap}
-                              {/* 🔥 INDIKATOR KARTU */}
-                              {santri.rfid_card_id && (
-                                  <span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>
-                              )}
+                              {santri.rfid_card_id && (<span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>)}
                           </div>
                       </td>
                       
-                      <td className="p-4">
-                        <div className="flex justify-center gap-1.5 flex-wrap max-w-[250px] mx-auto">
-                            {Array.isArray(santri.recent_trx) && santri.recent_trx.length > 0 ? (
-                                santri.recent_trx.map((trx, idx) => (
-                                    <div key={idx} title={`${trx.date}: ${trx.type === 'income' ? 'Masuk' : 'Keluar'}`}
-                                        className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center ${trx.type === 'income' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}
-                                    >
-                                        {trx.type === 'income' ? '+' : '-'}{(trx.amount / 1000).toFixed(0)}k
-                                    </div>
-                                ))
-                            ) : (<span className="text-gray-300 text-xs">-</span>)}
-                        </div>
+                      {/* 🔥 TAMPILKAN KELAS + ROMBEL */}
+                      <td className="p-4 text-center">
+                          <span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-600 border">
+                              {santri.kelas} - {santri.rombel || 'A'}
+                          </span>
                       </td>
 
                       <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
@@ -292,22 +291,25 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                         <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
                     </div>
-
-                    {/* 🔥 INPUT RFID BARU */}
                     <div className="space-y-2">
                         <label className="text-sm font-bold text-blue-600 flex items-center gap-2"><ScanBarcode className="w-4 h-4"/> Kode Kartu RFID (Opsional)</label>
-                        <Input 
-                            value={formData.rfid_card_id || ''} 
-                            onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} 
-                            placeholder="Klik disini lalu tempel kartu..." 
-                            className="border-blue-300 focus:border-blue-500 bg-blue-50/50 font-mono"
-                        />
+                        <Input value={formData.rfid_card_id || ''} onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} placeholder="Klik disini lalu tempel kartu..." className="border-blue-300 focus:border-blue-500 bg-blue-50/50 font-mono" />
+                    </div>
+                    
+                    {/* 🔥 EDIT KELAS + ROMBEL */}
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2 space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="col-span-1 space-y-2"><label className="text-sm font-medium">Rombel</label>
+                            <Select value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                    </div>
+                    <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
                     <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
                 </form>
