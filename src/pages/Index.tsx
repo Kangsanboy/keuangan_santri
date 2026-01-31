@@ -85,8 +85,15 @@ const Index = () => {
             if (data) {
                 setUserRole(data.role);
                 setLinkedSantriId(data.linked_santri_id);
+                // 🔥 LOGIC REDIRECT WARUNG
+                if (data.role === 'kantin') {
+                    navigate('/kasir'); // Langsung lempar ke kasir
+                    return;
+                }
                 if (data.role === 'parent' && data.linked_santri_id) {
-                    setDetailSantriId(data.linked_santri_id); setActiveMenu("santri"); setSidebarOpen(false);
+                    setDetailSantriId(data.linked_santri_id);
+                    setActiveMenu("santri");
+                    setSidebarOpen(false);
                 }
             }
         } catch (err) { console.error("Gagal cek role:", err); }
