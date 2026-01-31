@@ -24,6 +24,7 @@ const App = () => (
             <Route path="/users" element={<Index />} />
             <Route path="*" element={<NotFound />} />
             <Route path="/saldo-kelas/:kelas" element={<SaldoKelas />} />
+            <Route path="/kasir" element={<CashierPage />} />
             </Routes>
             </HashRouter>
       </TooltipProvider>
