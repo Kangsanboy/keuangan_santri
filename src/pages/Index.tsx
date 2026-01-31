@@ -6,6 +6,7 @@ import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
 import SantriDetail from "@/components/SantriDetail"; 
 import UserManagement from "@/components/UserManagement";
+import WarungMonitoring from "@/components/WarungMonitoring"; // 🔥 IMPORT KOMPONEN BARU
 import FinanceChart from "@/components/FinanceChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,15 +16,14 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2, ScanBarcode, Store
-} from "lucide-react"; // 🔥 Tambah Icon Store
+  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3 // 🔥 Tambah Icon
+} from "lucide-react"; 
 
 /* ================= TYPES ================= */
 interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
 interface TransaksiItem {
   id: string; amount: number; type: "income" | "expense"; description: string;
   transaction_date: string; santri: { nama_lengkap: string; kelas: number; } | null;
-  // 🔥 TAMBAH FIELD MERCHANT
   merchant: { full_name: string; } | null; 
 }
 
@@ -33,7 +33,8 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
+  // 🔥 TAMBAH STATE MENU BARU: 'monitoring_warung'
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
@@ -87,7 +88,6 @@ const Index = () => {
             if (data) {
                 setUserRole(data.role);
                 setLinkedSantriId(data.linked_santri_id);
-                // Redirect Kasir
                 if (data.role === 'kantin') { navigate('/kasir'); return; }
                 if (data.role === 'parent' && data.linked_santri_id) {
                     setDetailSantriId(data.linked_santri_id); setActiveMenu("santri"); setSidebarOpen(false);
@@ -118,13 +118,8 @@ const Index = () => {
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7); setKeluarHariIni(kToday);
     }
     
-    // 🔥 UPDATE FETCH: Ambil Data Merchant
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`
-        id, amount, type, description, transaction_date, created_at, 
-        santri:santri_id ( nama_lengkap, kelas ),
-        merchant:merchant_id ( full_name ) 
-      `)
+      .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
       .eq("transaction_date", todayStr).order("created_at", { ascending: false });
       
     if (detailHariIni) setTrxHariIni(detailHariIni as any);
@@ -245,6 +240,14 @@ const Index = () => {
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Menu Utama</p>
              <button onClick={() => handleMenuClick("dashboard")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "dashboard" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><LayoutDashboard className="mr-3 h-5 w-5 flex-shrink-0" />Dashboard</button>
              <button onClick={() => handleMenuClick("keuangan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Wallet className="mr-3 h-5 w-5 flex-shrink-0" />Keuangan</button>
+             
+             {/* 🔥 MENU MONITORING WARUNG (KHUSUS SUPER ADMIN) */}
+             {isSuperAdmin && (
+                 <button onClick={() => handleMenuClick("monitoring_warung")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "monitoring_warung" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+                    <BarChart3 className="mr-3 h-5 w-5 flex-shrink-0" /> Monitoring Warung
+                 </button>
+             )}
+
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Database</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
@@ -319,13 +322,7 @@ const Index = () => {
                                                     <span>{trx.santri ? `Kelas ${trx.santri.kelas}` : "-"}</span>
                                                     <span>•</span>
                                                     <span className="italic">{trx.description || "Tanpa Keterangan"}</span>
-                                                    
-                                                    {/* 🔥 INFO NAMA WARUNG */}
-                                                    {trx.merchant && (
-                                                        <span className="bg-teal-50 text-teal-700 px-1.5 rounded flex items-center gap-1">
-                                                            <Store className="w-3 h-3" /> {trx.merchant.full_name}
-                                                        </span>
-                                                    )}
+                                                    {trx.merchant && (<span className="bg-teal-50 text-teal-700 px-1.5 rounded flex items-center gap-1"><Store className="w-3 h-3" /> {trx.merchant.full_name}</span>)}
                                                 </div>
                                             </div>
                                         </div>
@@ -346,6 +343,10 @@ const Index = () => {
                       </div>
                     )}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
+                    
+                    {/* 🔥 RENDER MENU MONITORING WARUNG */}
+                    {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
+
                 </>
             )}
           </div>
