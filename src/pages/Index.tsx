@@ -191,7 +191,10 @@ const Index = () => {
   const avatarUrl = user?.user_metadata?.avatar_url;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
   const isParent = userRole === 'parent';
-  const isSuperAdmin = userRole === 'super_admin'; // 🔥 CEK SUPER ADMIN
+  
+  // 🔥 DEFINISI ROLE LEVEL TINGGI (PENTING BIAR SUPER ADMIN BISA AKSES SEMUA)
+  const isSuperAdmin = userRole === 'super_admin'; 
+  const hasAdminAccess = isAdmin || isSuperAdmin; // Admin ATAU Super Admin
 
   if (userRole === 'pending') {
       return (
@@ -229,11 +232,10 @@ const Index = () => {
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Database</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
              
-             {/* 🔥 MENU ADMIN HANYA UNTUK SUPER ADMIN 🔥 */}
+             {/* MENU ADMIN UNTUK SUPER ADMIN */}
              {isSuperAdmin && (
                  <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>
              )}
-
            </nav>
            <div className="p-4 border-t border-green-800 bg-green-950 flex-shrink-0"><button onClick={signOut} className="flex items-center w-full px-4 py-3 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-200 transition-colors text-sm font-medium whitespace-nowrap"><LogOut className="mr-3 h-5 w-5 flex-shrink-0" />Keluar Aplikasi</button></div>
         </aside>
@@ -249,7 +251,6 @@ const Index = () => {
           <div className="flex items-center gap-3 max-w-[60%]">
                 <div className="text-right hidden sm:block truncate">
                     <p className="text-sm font-bold text-gray-800 truncate">{userName}</p>
-                    {/* 🔥 UPDATE LABEL SUPER ADMIN */}
                     <p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">
                         {isParent ? "Orang Tua" : (isSuperAdmin ? "🚀 Super Admin" : (isAdmin ? "Admin" : "Viewer"))}
                     </p>
@@ -287,7 +288,8 @@ const Index = () => {
                           <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
-                    {activeMenu === "keuangan" && isAdmin && (
+                    {/* 🔥 PERBAIKAN DI SINI: GUNAKAN hasAdminAccess 🔥 */}
+                    {activeMenu === "keuangan" && hasAdminAccess && (
                         <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                            <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
                            <Card className="border-green-200 bg-white shadow-sm overflow-hidden"><CardHeader className="bg-green-50/50 border-b border-green-100 pb-3 p-4"><div className="flex items-center gap-2 text-green-800"><FileSpreadsheet className="w-5 h-5" /><CardTitle className="text-base md:text-lg">Laporan Bulanan</CardTitle></div></CardHeader><CardContent className="p-4"><div className="flex flex-col gap-3"><div className="flex gap-2"><div className="flex-1"><label className="text-xs font-medium text-gray-600">Bulan</label><select value={exportMonth} onChange={(e) => setExportMonth(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-md text-sm">{monthsList.map((m, idx) => (<option key={idx} value={idx}>{m}</option>))}</select></div><div className="w-24"><label className="text-xs font-medium text-gray-600">Tahun</label><select value={exportYear} onChange={(e) => setExportYear(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-md text-sm">{yearsList.map((y) => (<option key={y} value={y}>{y}</option>))}</select></div></div><Button onClick={exportExcelBulanan} className="bg-green-700 hover:bg-green-800 shadow-md w-full"><FileSpreadsheet className="mr-2 h-4 w-4" />Unduh Excel</Button></div></CardContent></Card>
@@ -307,7 +309,7 @@ const Index = () => {
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <div className={`font-bold text-sm ${trx.type === 'income' ? 'text-green-700' : 'text-red-600'}`}>{trx.type === 'income' ? '+' : '-'} Rp {trx.amount.toLocaleString("id-ID")}</div>
-                                            {isAdmin && (
+                                            {hasAdminAccess && (
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteTransaction(trx.id)}>
                                                     <Trash2 size={16} />
                                                 </Button>
@@ -325,7 +327,6 @@ const Index = () => {
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
-                    {/* 🔥 HANYA SUPER ADMIN YANG BISA AKSES MENU PENGGUNA 🔥 */}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                 </>
             )}
