@@ -7,8 +7,8 @@ import SantriManagement from "@/components/SantriManagement";
 import SantriDetail from "@/components/SantriDetail"; 
 import UserManagement from "@/components/UserManagement";
 import WarungMonitoring from "@/components/WarungMonitoring"; 
-import AcademicSettings from "@/components/AcademicSettings"; // 🔥 KOMPONEN BARU
-import AttendanceMonitoring from "@/components/AttendanceMonitoring";
+import AcademicSettings from "@/components/AcademicSettings"; 
+import AttendanceMonitoring from "@/components/AttendanceMonitoring"; // Import Absensi
 import FinanceChart from "@/components/FinanceChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,6 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  // 🔥 MENU BARU 'AKADEMIK' DITAMBAHKAN DISINI
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
@@ -100,17 +99,15 @@ const Index = () => {
     checkUserRole();
   }, [user, navigate]);
 
-  /* ================= FETCH DATA (FIX WIB & COUNTER) ================= */
+  /* ================= FETCH DATA ================= */
   const fetchKeuangan = useCallback(async () => {
     if (userRole === 'pending') return; 
     
-    // 1. Definisikan Hari Ini (WIB)
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(now.getDate() - 6);
 
-    // 2. Fetch DATA TOTAL (Limit bisa motong data, jadi order DESC)
     const { data } = await supabase.from("transactions_2025_12_01_21_34")
         .select("amount, type, transaction_date")
         .order('transaction_date', { ascending: false }); 
@@ -127,7 +124,6 @@ const Index = () => {
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7);
     }
     
-    // 3. Fetch DETAIL HARI INI (Sumber Kebenaran)
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
       .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
       .eq("transaction_date", todayStr)
@@ -135,7 +131,6 @@ const Index = () => {
       
     if (detailHariIni) {
         setTrxHariIni(detailHariIni as any);
-        // 🔥 HITUNG KELUAR HARI INI DARI SINI BIAR SINKRON
         const pengeluaranHariIni = detailHariIni
             .filter(d => d.type === 'expense')
             .reduce((acc, curr) => acc + curr.amount, 0);
@@ -249,12 +244,12 @@ const Index = () => {
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in" onClick={() => setSidebarOpen(false)} />}
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
-           {/* 🔥 HEADER SIDEBAR REBRANDING */}
+           {/* HEADER SIDEBAR */}
            <div className="h-24 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
                <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
                <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
-                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIMATREN</h1>
-                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Informasi Pesantren</p>
+                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIM-PESANTREN</h1>
+                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Manajemen Terpadu</p>
                </div>
                <button onClick={() => setSidebarOpen(false)} className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"><PanelLeftClose size={24} /></button>
            </div>
@@ -268,11 +263,14 @@ const Index = () => {
              {/* GROUP 2: AKADEMIK */}
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
-             <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
-    <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
-</button>
+             <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
              
-             {/* 🔥 MENU JADWAL BARU */}
+             {/* MENU ABSENSI SUDAH AKTIF */}
+             <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+                <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
+             </button>
+             
+             {/* MENU JADWAL */}
              {isSuperAdmin && (
                 <button onClick={() => handleMenuClick("akademik")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "akademik" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                     <CalendarClock className="mr-3 h-5 w-5 flex-shrink-0" />Atur Jadwal & Kegiatan
@@ -304,11 +302,13 @@ const Index = () => {
       )}
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
+        {/* HEADER ATAS - TOMBOL KASIR SUDAH DIHAPUS DISINI */}
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             {!isParent ? (
               <div className="flex items-center gap-2">
                   <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
+                  {/* TOMBOL MODE KASIR SUDAH DIHAPUS DARI SINI */}
               </div>
             ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
@@ -325,7 +325,7 @@ const Index = () => {
                 detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={() => {}} /> : <div className="text-center py-20 text-gray-500"><p className="font-bold mb-2">Akun belum terhubung</p><p className="text-sm">Silakan hubungi Admin.</p></div>
             ) : (
                 <>
-                    {/* MENU DASHBOARD */}
+                    {/* DASHBOARD */}
                     {activeMenu === "dashboard" && (
                        <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                           <div className="text-center space-y-2 pb-4 border-b border-gray-200"><h1 className="text-xl md:text-3xl font-bold text-green-700 uppercase tracking-wide px-2">DASHBOARD PUSAT</h1><p className="text-gray-500 max-w-3xl mx-auto text-xs md:text-base leading-relaxed px-4">Ringkasan data pesantren secara real-time.</p></div>
@@ -349,7 +349,7 @@ const Index = () => {
                        </div>
                     )}
                     
-                    {/* MENU KEUANGAN */}
+                    {/* KEUANGAN */}
                     {activeMenu === "keuangan" && hasAdminAccess && (
                         <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                            <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
@@ -385,16 +385,16 @@ const Index = () => {
                         </div>
                     )}
 
+                    {/* DATA SANTRI */}
                     {activeMenu === "santri" && (
                       <div className="animate-in fade-in zoom-in duration-300 space-y-4">
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
                     
+                    {/* LAIN-LAIN */}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                     {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
-                    
-                    {/* 🔥 RENDER MENU AKADEMIK */}
                     {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
                     {activeMenu === "absensi" && <AttendanceMonitoring />}
                 </>
