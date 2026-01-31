@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom"; // 🔥 PENTING UNTUK PINDAH KE KASIR
 import AuthPage from "@/components/AuthPage";
 import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
@@ -15,7 +15,7 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2, RefreshCw
+  Clock, ShieldAlert, Trash2, ScanBarcode // 🔥 Tambah Icon ScanBarcode
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -28,6 +28,7 @@ interface TransaksiItem {
 const Index = () => {
   const { user, loading, isAdmin, signOut } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate(); // 🔥 Hook untuk navigasi
   
   /* ================= STATE ================= */
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna">("dashboard");
@@ -191,10 +192,8 @@ const Index = () => {
   const avatarUrl = user?.user_metadata?.avatar_url;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
   const isParent = userRole === 'parent';
-  
-  // 🔥 DEFINISI ROLE LEVEL TINGGI (PENTING BIAR SUPER ADMIN BISA AKSES SEMUA)
-  const isSuperAdmin = userRole === 'super_admin'; 
-  const hasAdminAccess = isAdmin || isSuperAdmin; // Admin ATAU Super Admin
+  const isSuperAdmin = userRole === 'super_admin';
+  const hasAdminAccess = isAdmin || isSuperAdmin; // ✅ KUNCI AKSES
 
   if (userRole === 'pending') {
       return (
@@ -232,7 +231,6 @@ const Index = () => {
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Database</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
              
-             {/* MENU ADMIN UNTUK SUPER ADMIN */}
              {isSuperAdmin && (
                  <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Admin</button>
              )}
@@ -245,25 +243,16 @@ const Index = () => {
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             {!isParent ? (
-<div className="flex items-center gap-3">
-  {!isParent ? (
-    <div className="flex items-center gap-2">
-        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
-        
-        {/* 🔥 TOMBOL SHORTCUT KE KASIR (HANYA MUNCUL DI HP/PC ADMIN) */}
-        {hasAdminAccess && (
-            <Button 
-                onClick={() => setDetailedView("kasir")} // Nanti kita atur logic pindah halamannya
-                variant="outline" 
-                size="sm" 
-                className="hidden md:flex border-green-200 text-green-700 hover:bg-green-50 ml-2"
-            >
-                <ScanBarcode className="mr-2 h-4 w-4" /> Mode Kasir
-            </Button>
-        )}
-    </div>
-  ) : ( ... )}
-</div>            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
+                  {/* 🔥 TOMBOL MODE KASIR (HANYA MUNCUL DI HP/PC ADMIN) */}
+                  {hasAdminAccess && (
+                      <Button onClick={() => navigate('/kasir')} variant="outline" size="sm" className="hidden md:flex border-green-200 text-green-700 hover:bg-green-50 ml-2">
+                          <ScanBarcode className="mr-2 h-4 w-4" /> Mode Kasir
+                      </Button>
+                  )}
+              </div>
+            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
           <div className="flex items-center gap-3 max-w-[60%]">
                 <div className="text-right hidden sm:block truncate">
@@ -305,7 +294,7 @@ const Index = () => {
                           <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
-                    {/* 🔥 PERBAIKAN DI SINI: GUNAKAN hasAdminAccess 🔥 */}
+                    {/* 🔥 MENU KEUANGAN (Hanya Admin & Super Admin) */}
                     {activeMenu === "keuangan" && hasAdminAccess && (
                         <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                            <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
@@ -344,6 +333,7 @@ const Index = () => {
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
+                    {/* 🔥 MENU PENGGUNA (Hanya Super Admin) */}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                 </>
             )}
