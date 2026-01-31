@@ -259,8 +259,13 @@ const Index = () => {
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in" onClick={() => setSidebarOpen(false)} />}
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
-           <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
-               <Banknote className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
+          <div className="h-20 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
+    {/* Ganti Icon Banknote jadi Icon Gedung/School */}
+    <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
+    <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
+        <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIM-PESANTREN</h1>
+        <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Manajemen Terpadu</p>
+    </div>
                <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}><h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">PPS AL-JAWAHIR</h1><p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Keuangan Digital</p></div>
                <button onClick={() => setSidebarOpen(false)} className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"><PanelLeftClose size={24} /></button>
            </div>
