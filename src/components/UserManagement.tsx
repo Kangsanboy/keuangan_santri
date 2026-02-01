@@ -12,19 +12,19 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Baby, Store } from "lucide-react";
 
-// Interface User (Pastikan kolom santri_id ada di tabel users di Supabase)
+// Update Interface sesuai kolom di tabel 'users' (image_69e946.png)
 interface AppUser {
   id: string;
   email: string;
   role: "super_admin" | "admin" | "viewer" | "parent" | "pending" | "kantin";
   full_name: string;
-  santri_id?: string | null; 
+  linked_santri_id?: string | null; // Nama kolom sesuai screenshot
 }
 
-// Interface Santri
+// Update Interface sesuai kolom di tabel 'santri_...' (image_69e97e.png)
 interface SantriData {
   id: string;
-  nama: string; // Sesuaikan dengan nama kolom di tabel santri_2025...
+  nama_lengkap: string; // Nama kolom sesuai screenshot
 }
 
 const UserManagement = () => {
@@ -38,13 +38,14 @@ const UserManagement = () => {
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [newRole, setNewRole] = useState<string>("viewer");
   
-  // State Baru: List Santri & Santri Terpilih
+  // State Santri
   const [santriList, setSantriList] = useState<SantriData[]>([]);
   const [selectedSantriId, setSelectedSantriId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
+      // Mengambil semua data users termasuk linked_santri_id
       const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       // @ts-ignore
@@ -54,20 +55,18 @@ const UserManagement = () => {
     } finally { setLoading(false); }
   };
 
-  // 櫨 UPDATE: Ambil dari tabel santri yang ada di screenshot
+  // Ambil data dari tabel santri yang spesifik
   const fetchSantriList = async () => {
     try {
-      // Menggunakan nama tabel spesifik dari screenshot Abang
       const { data, error } = await supabase
-        .from('santri_2025_12_01_21_34') 
-        .select('id, nama') // Pastikan kolom 'nama' ada, kalau error ganti jadi 'nama_lengkap' dsb
-        .order('nama', { ascending: true });
+        .from('santri_2025_12_01_21_34') // Nama tabel sesuai screenshot
+        .select('id, nama_lengkap')       // Kolom sesuai screenshot
+        .order('nama_lengkap', { ascending: true });
 
       if (error) throw error;
       setSantriList(data || []);
     } catch (error: any) {
       console.error("Gagal ambil data santri:", error.message);
-      // Jangan toast error ke user agar tidak mengganggu jika tabel belum siap
     }
   };
 
@@ -81,11 +80,11 @@ const UserManagement = () => {
     try {
       const updates: any = { role: newRole };
       
-      // Logika simpan santri_id kalau role-nya Parent
+      // Update kolom linked_santri_id
       if (newRole === 'parent') {
-        updates.santri_id = selectedSantriId;
+        updates.linked_santri_id = selectedSantriId;
       } else {
-        updates.santri_id = null; 
+        updates.linked_santri_id = null; // Reset jika bukan parent
       }
 
       const { error } = await supabase.from('users').update(updates).eq('id', editingUser.id);
@@ -126,7 +125,8 @@ const UserManagement = () => {
   const handleEditClick = (user: AppUser) => {
     setEditingUser(user);
     setNewRole(user.role);
-    setSelectedSantriId(user.santri_id || null);
+    // Load existing linked_santri_id
+    setSelectedSantriId(user.linked_santri_id || null);
   };
 
   return (
@@ -188,7 +188,7 @@ const UserManagement = () => {
                     </Select>
                 </div>
 
-                {/* Dropdown Santri muncul JIKA role = parent */}
+                {/* Tampilan Dropdown Santri: Menggunakan 'nama_lengkap' */}
                 {newRole === 'parent' && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                         <label className="text-sm font-medium text-orange-700">Hubungkan dengan Santri</label>
@@ -202,17 +202,17 @@ const UserManagement = () => {
                             <SelectContent>
                                 {santriList.length > 0 ? santriList.map((santri) => (
                                     <SelectItem key={santri.id} value={santri.id}>
-                                        {santri.nama}
+                                        {santri.nama_lengkap}
                                     </SelectItem>
                                 )) : (
                                     <div className="p-2 text-sm text-gray-500 text-center">
-                                        Data santri kosong / tabel tidak ditemukan
+                                        Data santri kosong
                                     </div>
                                 )}
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-gray-500">
-                            Data diambil dari tabel <code>santri_2025_12_01_21_34</code>
+                            Santri yang dipilih akan terhubung dengan akun ini.
                         </p>
                     </div>
                 )}
