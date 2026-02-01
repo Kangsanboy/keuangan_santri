@@ -212,7 +212,7 @@ const AuthPage = () => {
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 ) : (
                   <>
-                    {isLogin ? "Masuk ke Dashboard" : "Daftar Akun"} 
+                    {isLogin ? "Masuk" : "Daftar Akun"} 
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </>
                 )}
