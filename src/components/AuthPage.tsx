@@ -1,186 +1,234 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/contexts/AuthContext';
-import { Wallet, UserPlus, LogIn } from 'lucide-react';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client"; // KITA PAKAI INI SEKARANG
+import { Wallet, ArrowRight, Loader2, UserPlus, LogIn, ShieldCheck } from "lucide-react";
 
-const AuthPage: React.FC = () => {
-  const { signUp, signIn, loading } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+const AuthPage = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-  // Login form state
-  const [loginData, setLoginData] = useState({
-    email: '',
-    password: '',
-  });
-
-  // Register form state
-  const [registerData, setRegisterData] = useState({
-    email: '',
-    password: '',
-    fullName: '',
-  });
-
+  // --- LOGIC BARU (MESIN BARU) ---
+  
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    
-    await signIn(loginData.email, loginData.password);
-    
-    setIsLoading(false);
+    setLoading(true);
+
+    try {
+      // Panggil Supabase Langsung (Anti Error "is not a function")
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Login Berhasil",
+        description: "Selamat datang kembali di Sistem Keuangan.",
+        className: "bg-green-50 border-green-200 text-green-800",
+      });
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Masuk",
+        description: error.message || "Periksa email dan password Anda.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    
-    await signUp(registerData.email, registerData.password, registerData.fullName, 'viewer');
-    
-    setIsLoading(false);
+    setLoading(true);
+
+    try {
+      // Panggil Supabase Langsung
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: email.split('@')[0],
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.user && !data.session) {
+        toast({
+          title: "Cek Email Anda",
+          description: "Link konfirmasi telah dikirim ke email tersebut.",
+          className: "bg-blue-50 border-blue-200 text-blue-800",
+        });
+      } else {
+        toast({
+          title: "Pendaftaran Berhasil",
+          description: "Akun Anda telah dibuat. Silakan login.",
+          className: "bg-green-50 border-green-200 text-green-800",
+        });
+        navigate("/");
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Mendaftar",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  // --- TAMPILAN TETAP CANTIK (TIDAK DIUBAH) ---
 
   return (
-    <div className="min-h-screen hero-gradient islamic-pattern flex items-center justify-center p-4">
-      <div className="w-full max-w-md animate-fade-in-up">
-        <div className="text-center mb-8">
-          {/* Logo Mahad */}
-          <div className="flex justify-center mb-6">
-            <div className="relative bg-white/20 backdrop-blur-sm rounded-full p-4 border border-white/30">
-              <img 
-                src="./images/logo mahad.png" 
-                alt="Logo Mahad PPS Al-Jawahir" 
-                className="w-auto h-24 object-contain drop-shadow-lg"
-              />
-            </div>
+    <div className="min-h-screen flex w-full bg-gray-50">
+      {/* Bagian Kiri - Branding & Info */}
+      <div className="hidden lg:flex w-1/2 bg-green-900 relative overflow-hidden flex-col justify-between p-12 text-white">
+        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+          <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl"></div>
+          <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-yellow-400 blur-3xl"></div>
+        </div>
+        
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+            <Wallet className="h-8 w-8 text-yellow-400" />
           </div>
-          
-          {/* Icon Wallet */}
-          <div className="flex justify-center mb-6">
-            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-full pulse-green border border-white/30">
-              <Wallet className="h-10 w-10 text-white" />
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-wider font-serif">AL-JAWAHIR</h1>
+            <p className="text-green-200 text-xs tracking-widest uppercase">Financial System</p>
           </div>
-          
-          <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg outline-text">Keuangan PPS Al-Jawahir</h1>
-          <p className="text-white/90 drop-shadow-md outline-text-sm">Sistem Pengelolaan Keuangan Santri</p>
-          <div className="mt-4 w-24 h-1 bg-white/30 mx-auto rounded-full"></div>
         </div>
 
-        <Card className="card-gradient border-0 shadow-2xl backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-center">Akses Sistem</CardTitle>
-            <CardDescription className="text-center">
-              Masuk atau daftar untuk mengakses sistem keuangan
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login" className="flex items-center gap-2">
-                  <LogIn className="h-4 w-4" />
-                  Masuk
-                </TabsTrigger>
-                <TabsTrigger value="register" className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  Daftar
-                </TabsTrigger>
-              </TabsList>
+        <div className="relative z-10 space-y-6 max-w-lg">
+          <h2 className="text-4xl font-bold leading-tight">
+            Sistem Pengelolaan <span className="text-yellow-400">Keuangan Santri</span> Terpadu
+          </h2>
+          <p className="text-green-100 text-lg leading-relaxed opacity-90">
+            Platform digital untuk memantau tabungan, transaksi, dan administrasi keuangan pondok pesantren secara transparan dan realtime.
+          </p>
+          <div className="flex gap-4 pt-4">
+            <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
+              <ShieldCheck className="h-5 w-5 text-green-400" />
+              <span className="text-sm font-medium">Aman & Terpercaya</span>
+            </div>
+            <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
+              <Wallet className="h-5 w-5 text-yellow-400" />
+              <span className="text-sm font-medium">Monitoring Realtime</span>
+            </div>
+          </div>
+        </div>
 
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="masukkan@email.com"
-                      value={loginData.email}
-                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="Masukkan password"
-                      value={loginData.password}
-                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Memproses...' : 'Masuk'}
-                  </Button>
-                </form>
-              </TabsContent>
+        <div className="relative z-10 text-sm text-green-300/60">
+          &copy; 2024 Pondok Pesantren Salafiyah Al-Jawahir. All rights reserved.
+        </div>
+      </div>
 
-              <TabsContent value="register">
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="register-name">Nama Lengkap</Label>
-                    <Input
-                      id="register-name"
-                      type="text"
-                      placeholder="Masukkan nama lengkap"
-                      value={registerData.fullName}
-                      onChange={(e) => setRegisterData({ ...registerData, fullName: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-email">Email</Label>
-                    <Input
-                      id="register-email"
-                      type="email"
-                      placeholder="masukkan@email.com"
-                      value={registerData.email}
-                      onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password">Password</Label>
-                    <Input
-                      id="register-password"
-                      type="password"
-                      placeholder="Masukkan password"
-                      value={registerData.password}
-                      onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Semua akun baru akan terdaftar sebagai Viewer. Hubungi admin untuk upgrade ke Admin.
-                  </p>
+      {/* Bagian Kanan - Form Login/Register */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-12 relative">
+        {/* Mobile Branding (Only visible on small screens) */}
+        <div className="absolute top-6 left-6 flex lg:hidden items-center gap-2 mb-8">
+           <div className="bg-green-900 p-2 rounded-lg">
+            <Wallet className="h-6 w-6 text-yellow-400" />
+          </div>
+          <span className="font-bold text-green-900 font-serif tracking-wider">AL-JAWAHIR</span>
+        </div>
 
-                  <Button
-                    type="submit" 
-                    className="w-full" 
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Memproses...' : 'Daftar'}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+        <Card className="w-full max-w-md border-none shadow-none bg-transparent">
+          <CardContent className="p-0 space-y-8">
+            <div className="space-y-2 text-center lg:text-left">
+              <h2 className="text-3xl font-bold text-gray-900">
+                {isLogin ? "Selamat Datang Kembali" : "Buat Akun Baru"}
+              </h2>
+              <p className="text-gray-500">
+                {isLogin 
+                  ? "Masukan kredensial akun anda untuk mengakses sistem." 
+                  : "Isi data berikut untuk mendaftarkan akun baru."}
+              </p>
+            </div>
+
+            <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="nama@email.com" 
+                    className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                  </div>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    {isLogin ? "Masuk ke Dashboard" : "Daftar Akun"} 
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-gray-50 px-2 text-gray-500">Atau</span>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                {isLogin ? "Belum memiliki akun?" : "Sudah memiliki akun?"}
+                <button 
+                  onClick={() => setIsLogin(!isLogin)}
+                  className="ml-2 font-bold text-green-700 hover:text-green-800 hover:underline transition-colors inline-flex items-center"
+                >
+                  {isLogin ? (
+                    <>Daftar Sekarang <UserPlus className="ml-1 h-4 w-4" /></>
+                  ) : (
+                    <>Masuk Disini <LogIn className="ml-1 h-4 w-4" /></>
+                  )}
+                </button>
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
