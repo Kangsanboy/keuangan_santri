@@ -8,12 +8,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-    }
-});
+
 // Import the supabase client like this:
 // For React:
 // import { supabase } from "@/integrations/supabase/client";
