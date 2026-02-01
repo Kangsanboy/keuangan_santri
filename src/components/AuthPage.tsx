@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client"; // KITA PAKAI INI SEKARANG
-import { Wallet, ArrowRight, Loader2, UserPlus, LogIn, ShieldCheck } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+// Kita ganti beberapa icon biar lebih relevan dengan SIMATREN
+import { Database, ArrowRight, Loader2, UserPlus, LogIn, ShieldCheck, GraduationCap } from "lucide-react";
 
 const AuthPage = () => {
   const [email, setEmail] = useState("");
@@ -16,14 +17,13 @@ const AuthPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // --- LOGIC BARU (MESIN BARU) ---
+  // --- LOGIC (TIDAK DIUBAH, SUDAH AMAN) ---
   
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Panggil Supabase Langsung (Anti Error "is not a function")
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -33,7 +33,7 @@ const AuthPage = () => {
 
       toast({
         title: "Login Berhasil",
-        description: "Selamat datang kembali di Sistem Keuangan.",
+        description: "Selamat datang di SIMATREN Al-Jawahir.",
         className: "bg-green-50 border-green-200 text-green-800",
       });
       navigate("/");
@@ -53,7 +53,6 @@ const AuthPage = () => {
     setLoading(true);
 
     try {
-      // Panggil Supabase Langsung
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -91,71 +90,87 @@ const AuthPage = () => {
     }
   };
 
-  // --- TAMPILAN TETAP CANTIK (TIDAK DIUBAH) ---
+  // --- TAMPILAN BARU (REBRANDING SIMATREN + LOGO) ---
 
   return (
     <div className="min-h-screen flex w-full bg-gray-50">
       {/* Bagian Kiri - Branding & Info */}
       <div className="hidden lg:flex w-1/2 bg-green-900 relative overflow-hidden flex-col justify-between p-12 text-white">
+        {/* Background Blur Effects */}
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
           <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl"></div>
           <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-yellow-400 blur-3xl"></div>
         </div>
         
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-            <Wallet className="h-8 w-8 text-yellow-400" />
+        {/* Header Kiri dengan LOGO MA'HAD */}
+        <div className="relative z-10 flex items-center gap-4">
+          {/* Tempat Logo - Menggunakan file dari folder public */}
+          <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/20">
+            <img 
+              src="/logo mahad.png" 
+              alt="Logo Al-Jawahir" 
+              className="h-12 w-auto object-contain"
+              onError={(e) => {
+                // Fallback kalau gambar gak ketemu, balik jadi icon database
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>';
+              }}
+            />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-wider font-serif">AL-JAWAHIR</h1>
-            <p className="text-green-200 text-xs tracking-widest uppercase">Financial System</p>
+            <p className="text-green-200 text-sm tracking-widest uppercase">Sistem Informasi Pesantren</p>
           </div>
         </div>
 
+        {/* Konten Utama Kiri - Rebranding SIMATREN */}
         <div className="relative z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-bold leading-tight">
-            Sistem Pengelolaan <span className="text-yellow-400">Keuangan Santri</span> Terpadu
+            Transformasi Digital <span className="text-yellow-400">SIMATREN</span> Terpadu
           </h2>
           <p className="text-green-100 text-lg leading-relaxed opacity-90">
-            Platform digital untuk memantau tabungan, transaksi, dan administrasi keuangan pondok pesantren secara transparan dan realtime.
+            Platform digital terintegrasi untuk pengelolaan akademik, kesantrian, dan administrasi pondok pesantren secara efisien dan real-time.
           </p>
+          {/* Fitur Badges - Diupdate icon & teksnya */}
           <div className="flex gap-4 pt-4">
             <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
-              <ShieldCheck className="h-5 w-5 text-green-400" />
-              <span className="text-sm font-medium">Aman & Terpercaya</span>
+              <Database className="h-5 w-5 text-green-400" />
+              <span className="text-sm font-medium">Data Terintegrasi</span>
             </div>
             <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
-              <Wallet className="h-5 w-5 text-yellow-400" />
-              <span className="text-sm font-medium">Monitoring Realtime</span>
+              <GraduationCap className="h-5 w-5 text-yellow-400" />
+              <span className="text-sm font-medium">Manajemen Akademik</span>
             </div>
           </div>
         </div>
 
         <div className="relative z-10 text-sm text-green-300/60">
-          &copy; 2024 Pondok Pesantren Salafiyah Al-Jawahir. All rights reserved.
+          &copy; {new Date().getFullYear()} Pondok Pesantren Salafiyah Al-Jawahir. All rights reserved.
         </div>
       </div>
 
       {/* Bagian Kanan - Form Login/Register */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-12 relative">
-        {/* Mobile Branding (Only visible on small screens) */}
+        {/* Mobile Branding (Hanya muncul di layar kecil) */}
         <div className="absolute top-6 left-6 flex lg:hidden items-center gap-2 mb-8">
-           <div className="bg-green-900 p-2 rounded-lg">
-            <Wallet className="h-6 w-6 text-yellow-400" />
+           <div className="bg-green-900/10 p-2 rounded-lg">
+            {/* Logo kecil untuk mobile */}
+            <img src="/logo mahad.png" alt="Logo" className="h-8 w-auto object-contain" />
           </div>
-          <span className="font-bold text-green-900 font-serif tracking-wider">AL-JAWAHIR</span>
+          <span className="font-bold text-green-900 font-serif tracking-wider">SIMATREN AL-JAWAHIR</span>
         </div>
 
         <Card className="w-full max-w-md border-none shadow-none bg-transparent">
           <CardContent className="p-0 space-y-8">
             <div className="space-y-2 text-center lg:text-left">
+              {/* Judul Form Diupdate */}
               <h2 className="text-3xl font-bold text-gray-900">
-                {isLogin ? "Selamat Datang Kembali" : "Buat Akun Baru"}
+                {isLogin ? "SIMATREN Al-Jawahir" : "Buat Akun Pengurus"}
               </h2>
               <p className="text-gray-500">
                 {isLogin 
-                  ? "Masukan kredensial akun anda untuk mengakses sistem." 
-                  : "Isi data berikut untuk mendaftarkan akun baru."}
+                  ? "Masukan kredensial Anda untuk mengakses sistem pesantren." 
+                  : "Daftarkan akun baru untuk staf atau pengurus pondok."}
               </p>
             </div>
 
@@ -166,7 +181,7 @@ const AuthPage = () => {
                   <Input 
                     id="email" 
                     type="email" 
-                    placeholder="nama@email.com" 
+                    placeholder="nama@aljawahir.com" 
                     className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -216,7 +231,7 @@ const AuthPage = () => {
 
             <div className="text-center">
               <p className="text-sm text-gray-600">
-                {isLogin ? "Belum memiliki akun?" : "Sudah memiliki akun?"}
+                {isLogin ? "Belum memiliki akun staff? " : "Sudah memiliki akun? "}
                 <button 
                   onClick={() => setIsLogin(!isLogin)}
                   className="ml-2 font-bold text-green-700 hover:text-green-800 hover:underline transition-colors inline-flex items-center"
