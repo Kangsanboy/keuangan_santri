@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-// Kita ganti beberapa icon biar lebih relevan dengan SIMATREN
 import { Database, ArrowRight, Loader2, UserPlus, LogIn, ShieldCheck, GraduationCap } from "lucide-react";
 
 const AuthPage = () => {
@@ -118,7 +117,7 @@ const AuthPage = () => {
             />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-wider font-serif">AL-JAWAHIR</h1>
+            <h1 className="text-2xl font-bold tracking-wider font-serif">SIMATREN AL-JAWAHIR</h1>
             <p className="text-green-200 text-sm tracking-widest uppercase">Sistem Informasi Pesantren</p>
           </div>
         </div>
@@ -165,7 +164,7 @@ const AuthPage = () => {
             <div className="space-y-2 text-center lg:text-left">
               {/* Judul Form Diupdate */}
               <h2 className="text-3xl font-bold text-gray-900">
-                {isLogin ? "SIMATREN Al-Jawahir" : "Buat Akun Pengurus"}
+                {isLogin ? "PORTAL SIMATREN" : "Buat Akun Pengurus"}
               </h2>
               <p className="text-gray-500">
                 {isLogin 
