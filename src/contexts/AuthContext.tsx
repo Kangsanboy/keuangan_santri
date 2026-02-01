@@ -20,73 +20,78 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const { toast } = useToast();
 
-  // FUNGSI CEK ADMIN (Versi Anti-Crash)
+  // FUNGSI CEK ADMIN (Berjalan di Background)
   const checkUserRole = async (userId: string) => {
     try {
-      // Kita pakai 'maybeSingle()' bukan 'single()' biar kalau datanya ga ada, dia gak error merah
       const { data, error } = await supabase
         .from('users')
         .select('role')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) {
-        console.warn("Gagal cek role (Tapi User tetap boleh login):", error.message);
-        return; // Stop disini, jangan bikin crash
-      }
-
-      // Set status Admin
-      if (data?.role === 'admin' || data?.role === 'super_admin') {
+      if (!error && (data?.role === 'admin' || data?.role === 'super_admin')) {
         setIsAdmin(true);
-        console.log("User terdeteksi sebagai ADMIN");
+        console.log("Role Admin Terkonfirmasi");
       } else {
         setIsAdmin(false);
       }
-      
     } catch (err) {
-      console.error("Error Cek Role:", err);
-      // Biarkan user tetap login sebagai user biasa
-      setIsAdmin(false);
+      console.error("Background Role Check Error:", err);
+      // Jangan lakukan apa-apa, biarkan user tetap login sebagai user biasa
     }
   };
 
   useEffect(() => {
-    // 1. Cek Sesi Awal
+    let mounted = true;
+
+    // 1. Inisialisasi Sesi
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
+        // Ambil sesi
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
         
-        if (session?.user) {
-          await checkUserRole(session.user.id);
+        if (mounted) {
+          if (initialSession) {
+            setSession(initialSession);
+            setUser(initialSession.user);
+            // JALANKAN CEK ADMIN TAPI JANGAN DITUNGGU (AWAIT)
+            // Biar loading cepat selesai
+            checkUserRole(initialSession.user.id);
+          }
         }
       } catch (error) {
-        console.error("Init Error:", error);
+        console.error("Session Init Error:", error);
       } finally {
-        setLoading(false);
+        // KUNCI ANTI LOADING ABADI:
+        // Apapun yang terjadi, Loading HARUS berhenti!
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     initSession();
 
-    // 2. Pantau Login/Logout
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    // 2. Listener Perubahan Auth (Login/Logout Realtime)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      if (!mounted) return;
+
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
       
-      if (session?.user) {
-        // Kalau login, cek role lagi
-        await checkUserRole(session.user.id);
+      if (currentSession?.user) {
+        // Cek admin di background
+        checkUserRole(currentSession.user.id);
       } else {
-        // Kalau logout, reset admin
         setIsAdmin(false);
       }
-      
+
+      // Pastikan loading mati setiap ada perubahan status
       setLoading(false);
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -98,6 +103,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(null);
         setIsAdmin(false);
         toast({ title: "Logout Berhasil", description: "Sampai jumpa lagi!" });
+        // Paksa refresh biar bersih
+        window.location.href = "/";
     } catch (error: any) {
         toast({ title: "Error Logout", description: error.message });
     }
