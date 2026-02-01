@@ -5,7 +5,7 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 console.log("Mencoba connect ke:", supabaseUrl); // Cek di console nanti muncul gak
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);{
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         autoRefreshToken: true,
         persistSession: true,
