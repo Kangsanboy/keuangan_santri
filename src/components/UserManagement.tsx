@@ -1,142 +1,333 @@
-import React, { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Baby, Store } from "lucide-react"; // 🔥 Pastikan Baby & Store ada
+import { 
+  Loader2, 
+  Search, 
+  UserCog, 
+  Trash2, 
+  Link as LinkIcon, 
+  UserCheck 
+} from "lucide-react";
 
-interface AppUser {
-  id: string; email: string; role: "super_admin" | "admin" | "viewer" | "parent" | "pending" | "kantin"; full_name: string;
-}
+// Tipe data User
+type UserData = {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  nama_lengkap?: string; // Optional metadata
+};
+
+// Tipe data Santri (untuk dropdown)
+type SantriData = {
+  id: number;
+  nama: string;
+  nis: string;
+  wali_id?: string;
+};
 
 const UserManagement = () => {
-  const { toast } = useToast();
-  const [users, setUsers] = useState<AppUser[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterRole, setFilterRole] = useState<string | null>(null);
-  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
-  const [newRole, setNewRole] = useState<string>("viewer");
+  const { toast } = useToast();
 
+  // State untuk fitur Hubungkan Santri
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [selectedWali, setSelectedWali] = useState<UserData | null>(null);
+  const [santriList, setSantriList] = useState<SantriData[]>([]);
+  const [selectedSantriId, setSelectedSantriId] = useState<string>("");
+  const [linking, setLinking] = useState(false);
+
+  // 1. Fetch Data User
   const fetchUsers = async () => {
-    setLoading(true);
     try {
-      const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+      setLoading(true);
+      // Ambil data dari tabel users (metadata) atau auth custom table
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .order("created_at", { ascending: false });
+
       if (error) throw error;
-      // @ts-ignore
       setUsers(data || []);
     } catch (error: any) {
-      toast({ title: "Gagal", description: error.message, variant: "destructive" });
-    } finally { setLoading(false); }
+      console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
-
-  const handleUpdateRole = async () => {
-    if (!editingUser) return;
+  // 2. Fetch Data Santri (Untuk Pilihan di Modal)
+  const fetchSantriList = async () => {
     try {
-      const { error } = await supabase.from('users').update({ role: newRole }).eq('id', editingUser.id);
+      const { data, error } = await supabase
+        .from("santri")
+        .select("id, nama, nis, wali_id")
+        .order("nama", { ascending: true });
+      
       if (error) throw error;
-      toast({ title: "Berhasil", description: `Role diubah menjadi ${newRole}.` });
-      setEditingUser(null); fetchUsers();
-    } catch (error: any) { toast({ title: "Gagal", description: error.message, variant: "destructive" }); }
+      setSantriList(data || []);
+    } catch (error) {
+      console.error("Gagal ambil data santri", error);
+    }
   };
 
-  const handleDeleteUser = async (user: AppUser) => {
-    if (!window.confirm(`Hapus user "${user.full_name}"?`)) return;
+  useEffect(() => {
+    fetchUsers();
+    fetchSantriList(); // Load data santri di awal
+  }, []);
+
+  // 3. Fungsi Hapus User
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm("Apakah anda yakin ingin menghapus user ini?")) return;
+    
     try {
-      const { error } = await supabase.from('users').delete().eq('id', user.id);
-      if (error) throw error; toast({ title: "Terhapus", description: "User dihapus." }); fetchUsers();
-    } catch (error: any) { toast({ title: "Gagal", description: error.message, variant: "destructive" }); }
+      // Hapus dari tabel users public
+      const { error } = await supabase.from("users").delete().eq("id", userId);
+      if (error) throw error;
+      
+      // Catatan: Menghapus user dari Auth Supabase butuh Admin API (Edge Function),
+      // Di sini kita hanya hapus data profil publiknya dulu.
+      
+      toast({ title: "User dihapus", description: "Data user berhasil dihapus dari database." });
+      fetchUsers();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Gagal", description: error.message });
+    }
   };
 
-  const toggleFilter = (role: string) => { setFilterRole(filterRole === role ? null : role); };
+  // 4. Fungsi Buka Modal Link Santri
+  const openLinkModal = (user: UserData) => {
+    setSelectedWali(user);
+    setSelectedSantriId(""); // Reset pilihan
+    setIsLinkModalOpen(true);
+  };
 
-  const filteredUsers = users.filter(u => {
-    const matchesSearch = u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = filterRole ? u.role === filterRole : true;
-    return matchesSearch && matchesRole;
-  });
+  // 5. Fungsi Simpan Hubungan (Wali -> Santri)
+  const handleLinkSantri = async () => {
+    if (!selectedWali || !selectedSantriId) {
+      toast({ variant: "destructive", title: "Pilih Santri dulu!" });
+      return;
+    }
 
-  // Statistik
-  const superAdminCount = users.filter(u => u.role === 'super_admin').length;
-  const adminCount = users.filter(u => u.role === 'admin').length;
-  const kantinCount = users.filter(u => u.role === 'kantin').length;
-  const parentCount = users.filter(u => u.role === 'parent').length; // 🔥 Hitung Parent
-  const viewerCount = users.filter(u => u.role === 'viewer').length;
-  const pendingCount = users.filter(u => u.role === 'pending').length;
+    setLinking(true);
+    try {
+      // Update tabel santri: Set kolom wali_id dengan ID user yang dipilih
+      const { error } = await supabase
+        .from("santri")
+        .update({ wali_id: selectedWali.id })
+        .eq("id", parseInt(selectedSantriId));
+
+      if (error) throw error;
+
+      toast({ 
+        title: "Berhasil Terhubung! 🔗", 
+        description: `Akun ${selectedWali.email} sekarang terhubung dengan santri.` 
+      });
+      
+      setIsLinkModalOpen(false);
+      fetchSantriList(); // Refresh data santri biar kelihatan updatenya
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Gagal Menghubungkan", description: error.message });
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  // Filter Search
+  const filteredUsers = users.filter((user) =>
+    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.role?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      
-      {/* 🔥 GRID 6 KARTU (3 KOLOM BIAR RAPI) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        
-        {/* 1. SUPER ADMIN */}
-        <Card onClick={() => toggleFilter('super_admin')} className={`cursor-pointer bg-purple-50 border-purple-200 ${filterRole === 'super_admin' ? 'ring-2 ring-purple-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-purple-700">Super Admin</CardTitle><Rocket className="h-4 w-4 text-purple-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-purple-900">{superAdminCount}</div></CardContent>
-        </Card>
-        
-        {/* 2. ADMIN */}
-        <Card onClick={() => toggleFilter('admin')} className={`cursor-pointer bg-green-50 border-green-200 ${filterRole === 'admin' ? 'ring-2 ring-green-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-green-700">Admin</CardTitle><Shield className="h-4 w-4 text-green-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-green-900">{adminCount}</div></CardContent>
-        </Card>
-        
-        {/* 3. WARUNG (KANTIN) */}
-        <Card onClick={() => toggleFilter('kantin')} className={`cursor-pointer bg-teal-50 border-teal-200 ${filterRole === 'kantin' ? 'ring-2 ring-teal-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-teal-700">Warung/Kantin</CardTitle><Store className="h-4 w-4 text-teal-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-teal-900">{kantinCount}</div></CardContent>
-        </Card>
-
-        {/* 4. ORANG TUA (KEMBALI LAGI! 🔥) */}
-        <Card onClick={() => toggleFilter('parent')} className={`cursor-pointer bg-orange-50 border-orange-200 ${filterRole === 'parent' ? 'ring-2 ring-orange-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-orange-700">Orang Tua</CardTitle><Baby className="h-4 w-4 text-orange-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-orange-900">{parentCount}</div></CardContent>
-        </Card>
-
-        {/* 5. VIEWER */}
-        <Card onClick={() => toggleFilter('viewer')} className={`cursor-pointer bg-blue-50 border-blue-200 ${filterRole === 'viewer' ? 'ring-2 ring-blue-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-blue-700">Viewer</CardTitle><Users className="h-4 w-4 text-blue-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-blue-900">{viewerCount}</div></CardContent>
-        </Card>
-        
-        {/* 6. PENDING */}
-        <Card onClick={() => toggleFilter('pending')} className={`cursor-pointer bg-yellow-50 border-yellow-200 ${filterRole === 'pending' ? 'ring-2 ring-yellow-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-yellow-700">Pending</CardTitle><User className="h-4 w-4 text-yellow-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-yellow-900">{pendingCount}</div></CardContent>
-        </Card>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg border shadow-sm">
+        <h2 className="text-xl font-bold flex items-center gap-2 text-green-800">
+          <UserCog className="h-6 w-6" /> Manajemen Pengguna
+        </h2>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Cari email atau role..."
+            className="pl-8"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
       </div>
 
-      {/* Filter Reset */}
-      {filterRole && (<div className="flex items-center gap-2 bg-gray-100 p-2 rounded-md border text-sm text-gray-600"><span>Filter: <strong>{filterRole.replace('_',' ').toUpperCase()}</strong></span><button onClick={() => setFilterRole(null)} className="ml-auto text-red-500 font-bold flex gap-1"><XCircle className="w-4 h-4" /> Reset</button></div>)}
+      <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+        <Table>
+          <TableHeader className="bg-green-50">
+            <TableRow>
+              <TableHead>Email User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Status Santri</TableHead>
+              <TableHead className="text-right">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center">
+                  <div className="flex justify-center items-center gap-2 text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Memuat data user...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredUsers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center text-gray-500">
+                  Tidak ada user ditemukan.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredUsers.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell className="font-medium">
+                    {user.email}
+                    <div className="text-xs text-gray-400">ID: {user.id.substring(0, 8)}...</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={
+                      user.role === 'admin' ? 'default' : 
+                      user.role === 'wali_santri' ? 'secondary' : 'outline'
+                    } className={
+                      user.role === 'admin' ? 'bg-green-600' :
+                      user.role === 'wali_santri' ? 'bg-blue-100 text-blue-700' : ''
+                    }>
+                      {user.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {/* Logika Cek Status Koneksi Santri */}
+                    {user.role === 'wali_santri' ? (
+                      (() => {
+                        // Cari santri yang punya wali_id user ini
+                        const linkedSantri = santriList.filter(s => s.wali_id === user.id);
+                        return linkedSantri.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            {linkedSantri.map(s => (
+                              <Badge key={s.id} variant="outline" className="w-fit border-green-200 text-green-700 bg-green-50">
+                                <UserCheck className="w-3 h-3 mr-1" /> {s.nama}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Belum terhubung</span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-gray-300">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {/* TOMBOL KHUSUS WALI SANTRI */}
+                      {user.role === 'wali_santri' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                          onClick={() => openLinkModal(user)}
+                          title="Hubungkan ke Santri"
+                        >
+                          <LinkIcon className="h-4 w-4" />
+                        </Button>
+                      )}
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDeleteUser(user.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
-      <Card className="border-green-100 shadow-sm bg-white"><CardHeader className="flex flex-col md:flex-row justify-between gap-4 bg-gray-50/50 border-b pb-4"><div><CardTitle>Manajemen Pengguna</CardTitle></div><div className="relative w-full md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari user..." className="pl-9 h-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-700 font-semibold border-b"><tr><th className="p-4">Nama</th><th className="p-4">Email</th><th className="p-4">Role</th><th className="p-4 text-center">Aksi</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => (<tr key={user.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{user.full_name}</td><td className="p-4 text-gray-600">{user.email}</td><td className="p-4"><span className={`px-2 py-1 rounded-full text-xs font-bold border uppercase ${user.role==='super_admin'?'bg-purple-100 text-purple-700':user.role==='kantin'?'bg-teal-100 text-teal-700':user.role==='parent'?'bg-orange-100 text-orange-700':user.role==='admin'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-700'}`}>{user.role.replace('_',' ')}</span></td><td className="p-4 text-center flex justify-center gap-2"><Button variant="outline" size="sm" onClick={() => { setEditingUser(user); setNewRole(user.role); }}><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user)}><Trash2 className="h-4 w-4 text-red-500" /></Button></td></tr>))}</tbody></table></div></CardContent></Card>
+      {/* MODAL / POPUP HUBUNGKAN SANTRI */}
+      <Dialog open={isLinkModalOpen} onOpenChange={setIsLinkModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hubungkan Wali Santri</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-800">
+              Menghubungkan akun <strong>{selectedWali?.email}</strong> dengan data santri.
+            </div>
 
-      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
-        <DialogContent><DialogHeader><DialogTitle>Ubah Hak Akses</DialogTitle><DialogDescription>{editingUser?.full_name}</DialogDescription></DialogHeader>
-            <div className="space-y-4 py-4"><div className="space-y-2"><label className="text-sm font-medium">Pilih Role</label>
-                <Select value={newRole} onValueChange={setNewRole}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
-                        <SelectItem value="parent" className="text-orange-600 font-bold">Orang Tua</SelectItem>
-                        <SelectItem value="kantin" className="text-teal-600 font-bold">Warung / Kantin</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="super_admin" className="text-purple-600 font-bold">🚀 Super Admin</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div></div>
-            <DialogFooter><Button variant="outline" onClick={() => setEditingUser(null)}>Batal</Button><Button onClick={handleUpdateRole} className="bg-green-600 hover:bg-green-700">Simpan</Button></DialogFooter>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Pilih Santri</label>
+              <Select onValueChange={setSelectedSantriId} value={selectedSantriId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Cari nama santri..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[200px]">
+                  {santriList.map((santri) => (
+                    <SelectItem key={santri.id} value={santri.id.toString()}>
+                      {santri.nama} ({santri.nis}) 
+                      {santri.wali_id ? " - Sudah ada Wali" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                *Santri yang sudah punya wali akan dipindahkan ke wali ini jika dipilih.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLinkModalOpen(false)}>
+              Batal
+            </Button>
+            <Button 
+              onClick={handleLinkSantri} 
+              disabled={linking || !selectedSantriId}
+              className="bg-green-700 hover:bg-green-800"
+            >
+              {linking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
+              Simpan Hubungan
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
