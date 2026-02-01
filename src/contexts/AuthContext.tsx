@@ -17,22 +17,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // Default false dulu
   const { toast } = useToast();
 
   useEffect(() => {
-    // 1. Cek Sesi Saat Ini (Startup)
+    // 1. Cek Sesi Sederhana (Tanpa Cek Admin)
     const initSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
         setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          await checkUserRole(session.user.id);
-        }
+        console.log("Sesi ditemukan:", session?.user?.email);
       } catch (error) {
-        console.error("Auth Init Error:", error);
+        console.error("Error init session:", error);
       } finally {
         setLoading(false);
       }
@@ -40,45 +37,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     initSession();
 
-    // 2. Dengerin Perubahan Login/Logout (Realtime)
+    // 2. Listener Login/Logout Sederhana
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log("Status Auth Berubah:", _event);
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(true);
-
-      if (session?.user) {
-        await checkUserRole(session.user.id);
-      } else {
-        setIsAdmin(false); // Kalau logout, admin jadi false
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
   }, []);
-
-  const checkUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.warn("Gagal ambil role:", error.message);
-        setIsAdmin(false);
-      } else {
-        setIsAdmin(data?.role === 'admin' || data?.role === 'super_admin');
-      }
-    } catch (error) {
-      console.error("Role Check Error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const signOut = async () => {
     try {
