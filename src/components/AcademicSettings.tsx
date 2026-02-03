@@ -304,6 +304,7 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader className="pb-2"><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader><CardContent><ScheduleList data={filteredPesantren} showKelas={false} /></CardContent></Card>
         </TabsContent>
         
+        {/* ===================== TAB ANGGOTA (YANG TADI HILANG) ===================== */}
         <TabsContent value="members" className="mt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
                 <Card className="col-span-1 border-pink-200 h-full flex flex-col">
@@ -360,6 +361,7 @@ const AcademicSettings = () => {
         </TabsContent>
       </Tabs>
 
+      {/* ================= DIALOG FORM ================= */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>{isEditMode ? "Edit Data" : "Tambah Data Baru"}</DialogTitle></DialogHeader>
@@ -367,10 +369,11 @@ const AcademicSettings = () => {
                 {dialogType === 'activity' && (
                     <>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama Kegiatan</label><Input placeholder="Contoh: Matematika" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Kategori</label><Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}><SelectTrigger><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="pelajaran">Mata Pelajaran</SelectItem><SelectItem value="ibadah">Ibadah</SelectItem><SelectItem value="ekskul">Ekskul / Seni</SelectItem><SelectItem value="umum">Umum</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Kategori</label><Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}><SelectTrigger><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="pelajaran">Mata Pelajaran</SelectItem><SelectItem value="ibadah">Ibadah</SelectItem><SelectItem value="ekskul">Ekskul</SelectItem><SelectItem value="umum">Umum</SelectItem></SelectContent></Select></div>
                         {formData.category !== 'pelajaran' && <div className="space-y-2"><label className="text-sm font-medium">Tipe Kehadiran</label><Select value={formData.tipe_ekskul} onValueChange={(v) => setFormData({...formData, tipe_ekskul: v})}><SelectTrigger><SelectValue placeholder="Pilih Tipe" /></SelectTrigger><SelectContent><SelectItem value="wajib">Wajib (Semua Santri)</SelectItem><SelectItem value="pilihan">Pilihan (Sesuai Minat)</SelectItem></SelectContent></Select></div>}
                     </>
                 )}
+                {/* FORM MEMBER EKSKUL */}
                 {dialogType === 'member' && (
                     <>
                          <div className="bg-pink-50 p-3 rounded text-sm text-pink-800 mb-2">Menambahkan anggota ke: <strong>{activities.find(a => String(a.id) === selectedEkskulId)?.name}</strong></div>
