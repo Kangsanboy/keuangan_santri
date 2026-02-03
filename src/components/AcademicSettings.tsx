@@ -19,6 +19,7 @@ import {
 /* ================= TYPES ================= */
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
 interface Location { id: number; name: string; type: string; }
+interface Rombel { id: number; nama: string; kelas: number; } // 櫨 Tipe Baru
 interface Device { 
   id: number; name: string; token: string; location_id: number; is_active: boolean;
   location?: { name: string }; 
@@ -30,7 +31,9 @@ interface Schedule {
   end_time: string;
   activity_id: number;
   location_id: number;
-  kelas?: number; // 櫨 BARU: Target Kelas (7, 8, 9...)
+  kelas?: number;
+  rombel_id?: number; // 櫨 Baru
+  rombel?: { nama: string }; // Join
   activity: { name: string; category: string; tipe_ekskul?: string };
   location: { name: string; id: number };
   is_active: boolean;
@@ -49,6 +52,7 @@ const AcademicSettings = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [devices, setDevices] = useState<Device[]>([]); 
+  const [rombels, setRombels] = useState<Rombel[]>([]); // 櫨 State Rombel
 
   // FILTER STATE
   const [filterKelas, setFilterKelas] = useState<string>("all");   
@@ -57,7 +61,8 @@ const AcademicSettings = () => {
 
   // FORM STATE
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<"activity" | "schedule" | "location" | "device">("activity");
+  // Tambah tipe 'rombel'
+  const [dialogType, setDialogType] = useState<"activity" | "schedule" | "location" | "device" | "rombel">("activity");
   const [scheduleCategory, setScheduleCategory] = useState<"school" | "pesantren">("school");
   const [formData, setFormData] = useState<any>({});
   const [isEditMode, setIsEditMode] = useState(false);
@@ -71,6 +76,9 @@ const AcademicSettings = () => {
 
       const { data: locData } = await supabase.from('locations').select('*').order('name');
       if (locData) setLocations(locData);
+      
+      const { data: rmbData } = await supabase.from('rombels').select('*').order('kelas').order('nama');
+      if (rmbData) setRombels(rmbData);
 
       const { data: devData } = await supabase.from('devices').select(`*, location:location_id(name)`).order('name');
       // @ts-ignore
@@ -79,9 +87,10 @@ const AcademicSettings = () => {
       const { data: schData, error } = await supabase
         .from('schedules')
         .select(`
-            id, day_of_week, start_time, end_time, is_active, location_id, activity_id, kelas,
+            id, day_of_week, start_time, end_time, is_active, location_id, activity_id, kelas, rombel_id,
             activity:activity_id(name, category, tipe_ekskul),
-            location:location_id(name, id)
+            location:location_id(name, id),
+            rombel:rombel_id(nama)
         `)
         .order('day_of_week')
         .order('start_time');
@@ -117,6 +126,11 @@ const AcademicSettings = () => {
             if (isEditMode) error = (await supabase.from('devices').update(data).eq('id', payload.id)).error;
             else error = (await supabase.from('devices').insert([data])).error;
         }
+        else if (dialogType === 'rombel') { // 櫨 SIMPAN ROMBEL
+             const data = { nama: payload.name, kelas: parseInt(payload.kelas) };
+             if(isEditMode) error = (await supabase.from('rombels').update(data).eq('id', payload.id)).error;
+             else error = (await supabase.from('rombels').insert([data])).error;
+        }
         else if (dialogType === 'activity') {
              const data = { name: payload.name, category: payload.category || 'umum', tipe_ekskul: payload.tipe_ekskul };
              if(isEditMode) error = (await supabase.from('activities').update(data).eq('id', payload.id)).error;
@@ -134,7 +148,8 @@ const AcademicSettings = () => {
                 day_of_week: parseInt(payload.day_of_week),
                 start_time: payload.start_time,
                 end_time: payload.end_time,
-                kelas: payload.kelas ? parseInt(payload.kelas) : null // 櫨 Simpan Kelas
+                kelas: payload.kelas ? parseInt(payload.kelas) : null,
+                rombel_id: payload.rombel_id ? parseInt(payload.rombel_id) : null // 櫨 Simpan Rombel ID
              };
              if(isEditMode) error = (await supabase.from('schedules').update(data).eq('id', payload.id)).error;
              else error = (await supabase.from('schedules').insert([data])).error;
@@ -148,7 +163,7 @@ const AcademicSettings = () => {
   };
 
   // OPEN DIALOG
-  const openAdd = (type: "activity" | "location" | "schedule" | "device", category: "school" | "pesantren" = "school") => {
+  const openAdd = (type: "activity" | "location" | "schedule" | "device" | "rombel", category: "school" | "pesantren" = "school") => {
       setDialogType(type);
       setScheduleCategory(category);
       setIsEditMode(false);
@@ -157,13 +172,16 @@ const AcademicSettings = () => {
       if (type === 'schedule') {
           initialData = { 
             day_of_week: "1", start_time: "07:00", end_time: "08:00", 
-            kelas: filterKelas !== 'all' ? filterKelas : "7", // Default kelas
-            location_id: "" // Lokasi harus dipilih manual biar fleksibel
+            kelas: filterKelas !== 'all' ? filterKelas : "7", 
+            location_id: "",
+            rombel_id: "" // Reset rombel
           };
       } else if (type === 'device') {
           initialData = { token: "DEV_" + Math.floor(Math.random() * 10000) }; 
       } else if (type === 'activity') {
           initialData = { category: category === 'school' ? 'pelajaran' : 'ekskul', tipe_ekskul: 'wajib' };
+      } else if (type === 'rombel') {
+          initialData = { kelas: "7" }; // Default kelas 7
       }
       
       setFormData(initialData);
@@ -175,10 +193,12 @@ const AcademicSettings = () => {
       setIsEditMode(true);
       setFormData({
           ...data,
+          name: data.nama || data.name, // Handle beda nama kolom
           activity_id: String(data.activity_id),
           location_id: String(data.location_id),
           day_of_week: String(data.day_of_week),
-          kelas: data.kelas ? String(data.kelas) : undefined
+          kelas: data.kelas ? String(data.kelas) : undefined,
+          rombel_id: data.rombel_id ? String(data.rombel_id) : undefined
       });
       setIsDialogOpen(true);
   };
@@ -187,10 +207,7 @@ const AcademicSettings = () => {
   const schoolSchedules = schedules.filter(s => s.activity?.category === 'pelajaran');
   const pesantrenSchedules = schedules.filter(s => s.activity?.category !== 'pelajaran');
   
-  // Filter KBM: Berdasarkan Kolom 'kelas' (Bukan lokasi lagi)
   const filteredSchool = filterKelas === 'all' ? schoolSchedules : schoolSchedules.filter(s => String(s.kelas) === filterKelas);
-  
-  // Filter Pesantren: Berdasarkan Hari
   const filteredPesantren = filterHari === 'all' ? pesantrenSchedules : pesantrenSchedules.filter(s => String(s.day_of_week) === filterHari);
 
   const ScheduleList = ({ data, showKelas = false }: { data: Schedule[], showKelas?: boolean }) => (
@@ -198,7 +215,6 @@ const AcademicSettings = () => {
         {[1, 2, 3, 4, 5, 6, 0].map((dayCode) => { 
             const dayItems = data.filter(s => s.day_of_week === dayCode);
             if (dayItems.length === 0) return null;
-            // Sorting jam
             dayItems.sort((a,b) => a.start_time.localeCompare(b.start_time));
             
             return (
@@ -217,18 +233,21 @@ const AcademicSettings = () => {
                                     <div>
                                         <p className="font-bold text-gray-800 flex items-center gap-2">
                                             {sch.activity?.name}
-                                            {/* Badge untuk Ekskul Wajib/Pilihan */}
                                             {sch.activity?.category !== 'pelajaran' && sch.activity?.tipe_ekskul && (
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${sch.activity.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                    {sch.activity.tipe_ekskul}
-                                                </span>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${sch.activity.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{sch.activity.tipe_ekskul}</span>
                                             )}
                                         </p>
                                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            {/* Tampilkan Kelas jika diperlukan */}
+                                            {/* Tampilkan Kelas & Rombel */}
                                             {showKelas && sch.kelas && (
+                                                <span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold flex items-center gap-1">
+                                                    Kls {sch.kelas} {sch.rombel?.nama ? `- ${sch.rombel.nama}` : ''}
+                                                </span>
+                                            )}
+                                            {/* Kalau filter kelas aktif, tetap tampilkan rombelnya kalau ada */}
+                                            {!showKelas && sch.rombel?.nama && (
                                                 <span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold">
-                                                    Kls {sch.kelas}
+                                                    {sch.rombel.nama}
                                                 </span>
                                             )}
                                             <span className="text-xs text-gray-500 flex items-center gap-1">
@@ -256,9 +275,9 @@ const AcademicSettings = () => {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-purple-100">
         <div>
             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <CalendarDays className="text-purple-600" /> Pengaturan Akademik Fleksibel
+                <CalendarDays className="text-purple-600" /> Pengaturan Akademik
             </h2>
-            <p className="text-sm text-gray-500">Atur jadwal KBM beda ruangan dan jadwal Ekskul bentrok (paralel).</p>
+            <p className="text-sm text-gray-500">Atur jadwal KBM, Kelas, Rombel, dan Kegiatan Pesantren.</p>
         </div>
       </div>
 
@@ -270,7 +289,7 @@ const AcademicSettings = () => {
             <TabsTrigger value="activities"><Database className="w-4 h-4 mr-2" /> Master Data</TabsTrigger>
         </TabsList>
 
-        {/* ================= TAB 1: KBM SEKOLAH (FLEXIBLE ROOM) ================= */}
+        {/* TAB 1: KBM */}
         <TabsContent value="kbm" className="mt-4 space-y-4">
             <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex flex-col md:flex-row gap-4 items-center justify-between">
                 <div className="flex items-center gap-3 w-full md:w-auto">
@@ -288,45 +307,22 @@ const AcademicSettings = () => {
                 </div>
                 <Button onClick={() => openAdd('schedule', 'school')} className="bg-blue-600 hover:bg-blue-700 shadow-md"><Plus className="w-4 h-4 mr-2" /> Buat Jadwal Pelajaran</Button>
             </div>
-            
             <Card className="border-t-4 border-t-blue-600 shadow-sm">
                 <CardHeader><CardTitle>Jadwal Mata Pelajaran {filterKelas !== 'all' ? `Kelas ${filterKelas}` : 'Semua Kelas'}</CardTitle></CardHeader>
-                <CardContent>
-                    <ScheduleList data={filteredSchool} showKelas={filterKelas === 'all'} />
-                </CardContent>
+                <CardContent><ScheduleList data={filteredSchool} showKelas={filterKelas === 'all'} /></CardContent>
             </Card>
         </TabsContent>
 
-        {/* ================= TAB 2: EKSKUL (PARALLEL & FLEXIBLE) ================= */}
+        {/* TAB 2: EKSKUL */}
         <TabsContent value="pesantren" className="mt-4 space-y-4">
             <div className="bg-green-50/50 p-4 rounded-lg border border-green-100 flex flex-col md:flex-row gap-4 items-center justify-between">
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <Filter className="text-green-400 w-5 h-5" />
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold text-green-700 uppercase">Filter Hari:</label>
-                        <Select value={filterHari} onValueChange={setFilterHari}>
-                            <SelectTrigger className="w-[200px] font-bold border-green-200 bg-white"><SelectValue placeholder="Semua Hari" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Semua Hari</SelectItem>
-                                {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto"><Filter className="text-green-400 w-5 h-5" /><div className="space-y-1"><label className="text-xs font-bold text-green-700 uppercase">Filter Hari:</label><Select value={filterHari} onValueChange={setFilterHari}><SelectTrigger className="w-[200px] font-bold border-green-200 bg-white"><SelectValue placeholder="Semua Hari" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Hari</SelectItem>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div></div>
                 <Button onClick={() => openAdd('schedule', 'pesantren')} className="bg-green-600 hover:bg-green-700 shadow-md"><Plus className="w-4 h-4 mr-2" /> Tambah Kegiatan / Ekskul</Button>
             </div>
-            
-            <div className="grid grid-cols-1 gap-4">
-                 <Card className="border-t-4 border-t-green-600 shadow-sm">
-                    <CardHeader className="pb-2"><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader>
-                    <CardContent>
-                        <ScheduleList data={filteredPesantren} showKelas={false} />
-                    </CardContent>
-                </Card>
-            </div>
+            <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader className="pb-2"><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader><CardContent><ScheduleList data={filteredPesantren} showKelas={false} /></CardContent></Card>
         </TabsContent>
 
-        {/* TAB 3: DEVICES (Sama seperti sebelumnya) */}
+        {/* TAB 3: DEVICES */}
         <TabsContent value="devices" className="mt-4 space-y-4">
             <div className="bg-orange-50/50 p-4 rounded-lg border border-orange-100 flex justify-between items-center">
                 <div className="flex items-center gap-3"><Wifi className="text-orange-500 w-6 h-6" /><div><h3 className="font-bold text-orange-900">Manajemen Alat Absensi</h3><p className="text-xs text-orange-700">Daftarkan alat WT32-ETH01 dan tentukan lokasinya.</p></div></div>
@@ -339,9 +335,11 @@ const AcademicSettings = () => {
             </div>
         </TabsContent>
 
-        {/* TAB 4: MASTER DATA (Updated for Tipe Ekskul) */}
+        {/* TAB 4: MASTER DATA */}
         <TabsContent value="activities" className="mt-4 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* 櫨 KARTU 1: LOKASI */}
                 <Card className="border-l-4 border-l-purple-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 bg-purple-50/30">
                         <div><CardTitle className="text-lg flex items-center gap-2"><MapPin className="text-purple-600 w-5 h-5"/> Data Lokasi</CardTitle></div>
@@ -354,6 +352,35 @@ const AcademicSettings = () => {
                     </CardContent>
                 </Card>
 
+                {/* 櫨 KARTU 2: ROMBEL (BARU) */}
+                <Card className="border-l-4 border-l-blue-500">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 bg-blue-50/30">
+                        <div><CardTitle className="text-lg flex items-center gap-2"><Users className="text-blue-600 w-5 h-5"/> Data Rombel</CardTitle></div>
+                        <Button onClick={() => openAdd('rombel')} variant="outline" size="sm" className="border-blue-200 text-blue-700"><Plus className="w-4 h-4 mr-2" /> Tambah</Button>
+                    </CardHeader>
+                    <CardContent className="pt-4 max-h-[400px] overflow-y-auto">
+                        {KELAS_LIST.map((k) => {
+                             const rombelKelas = rombels.filter(r => r.kelas === k);
+                             if (rombelKelas.length === 0) return null;
+                             return (
+                                 <div key={k} className="mb-3">
+                                     <div className="text-xs font-bold text-gray-500 uppercase mb-1">Kelas {k}</div>
+                                     <div className="space-y-1">
+                                         {rombelKelas.map(r => (
+                                             <div key={r.id} className="flex justify-between items-center p-2 bg-gray-50 rounded border hover:bg-blue-50">
+                                                 <span className="text-sm font-bold">Rombel {r.nama}</span>
+                                                 <div className="flex gap-1"><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => openEdit('rombel', r)}><Pencil size={10}/></Button><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleDelete('rombels', r.id)}><Trash2 size={10} className="text-red-400"/></Button></div>
+                                             </div>
+                                         ))}
+                                     </div>
+                                 </div>
+                             )
+                        })}
+                        {rombels.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Belum ada data rombel.</p>}
+                    </CardContent>
+                </Card>
+
+                {/* 櫨 KARTU 3: KEGIATAN */}
                 <Card className="border-l-4 border-l-orange-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 bg-orange-50/30">
                         <div><CardTitle className="text-lg flex items-center gap-2"><BookOpen className="text-orange-600 w-5 h-5"/> Kegiatan & Mapel</CardTitle></div>
@@ -364,10 +391,7 @@ const AcademicSettings = () => {
                             <div key={act.id} className="flex justify-between items-center p-2 hover:bg-gray-50 border-b last:border-0">
                                 <div>
                                     <div className="text-sm font-bold">{act.name}</div>
-                                    <div className="flex gap-1 mt-1">
-                                        <span className="text-[10px] bg-gray-100 px-1 rounded uppercase">{act.category}</span>
-                                        {act.category !== 'pelajaran' && <span className={`text-[10px] px-1 rounded uppercase ${act.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{act.tipe_ekskul}</span>}
-                                    </div>
+                                    <div className="flex gap-1 mt-1"><span className="text-[10px] bg-gray-100 px-1 rounded uppercase">{act.category}</span>{act.category !== 'pelajaran' && <span className={`text-[10px] px-1 rounded uppercase ${act.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{act.tipe_ekskul}</span>}</div>
                                 </div>
                                 <div className="flex gap-1"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit('activity', act)}><Pencil size={12}/></Button><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete('activities', act.id)}><Trash2 size={12} className="text-red-400"/></Button></div>
                             </div>
@@ -378,44 +402,22 @@ const AcademicSettings = () => {
         </TabsContent>
       </Tabs>
 
-      {/* ================= DIALOG FORM (Flexible Version) ================= */}
+      {/* ================= DIALOG FORM ================= */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
-            <DialogHeader>
-                <DialogTitle>
-                    {isEditMode ? "Edit Data" : "Tambah Data Baru"}
-                </DialogTitle>
-            </DialogHeader>
-            
+            <DialogHeader><DialogTitle>{isEditMode ? "Edit Data" : "Tambah Data Baru"}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
                 {dialogType === 'activity' && (
                     <>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama Kegiatan</label><Input placeholder="Contoh: Matematika" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Kategori</label>
-                            <Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}>
-                                <SelectTrigger><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
-                                <SelectContent><SelectItem value="pelajaran">Mata Pelajaran</SelectItem><SelectItem value="ibadah">Ibadah</SelectItem><SelectItem value="ekskul">Ekskul / Seni</SelectItem><SelectItem value="umum">Umum</SelectItem></SelectContent>
-                            </Select>
-                        </div>
-                        {formData.category !== 'pelajaran' && (
-                            <div className="space-y-2 animate-in fade-in slide-in-from-top-1"><label className="text-sm font-medium">Tipe Kehadiran</label>
-                                <Select value={formData.tipe_ekskul} onValueChange={(v) => setFormData({...formData, tipe_ekskul: v})}>
-                                    <SelectTrigger><SelectValue placeholder="Pilih Tipe" /></SelectTrigger>
-                                    <SelectContent><SelectItem value="wajib">Wajib (Semua Santri)</SelectItem><SelectItem value="pilihan">Pilihan (Sesuai Minat)</SelectItem></SelectContent>
-                                </Select>
-                            </div>
-                        )}
+                        <div className="space-y-2"><label className="text-sm font-medium">Kategori</label><Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}><SelectTrigger><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="pelajaran">Mata Pelajaran</SelectItem><SelectItem value="ibadah">Ibadah</SelectItem><SelectItem value="ekskul">Ekskul / Seni</SelectItem><SelectItem value="umum">Umum</SelectItem></SelectContent></Select></div>
+                        {formData.category !== 'pelajaran' && <div className="space-y-2"><label className="text-sm font-medium">Tipe Kehadiran</label><Select value={formData.tipe_ekskul} onValueChange={(v) => setFormData({...formData, tipe_ekskul: v})}><SelectTrigger><SelectValue placeholder="Pilih Tipe" /></SelectTrigger><SelectContent><SelectItem value="wajib">Wajib (Semua Santri)</SelectItem><SelectItem value="pilihan">Pilihan (Sesuai Minat)</SelectItem></SelectContent></Select></div>}
                     </>
                 )}
                 {dialogType === 'location' && (
                     <>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama Tempat</label><Input placeholder="Contoh: Lab Komputer" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Kategori Tempat</label>
-                            <Select value={formData.type} onValueChange={(v) => setFormData({...formData, type: v})}>
-                                <SelectTrigger><SelectValue placeholder="Pilih Tipe" /></SelectTrigger>
-                                <SelectContent><SelectItem value="class">Kelas</SelectItem><SelectItem value="mosque">Masjid</SelectItem><SelectItem value="dorm">Asrama</SelectItem><SelectItem value="gate">Gerbang</SelectItem><SelectItem value="lab">Laboratorium</SelectItem><SelectItem value="general">Area Umum</SelectItem></SelectContent>
-                            </Select>
-                        </div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Kategori Tempat</label><Select value={formData.type} onValueChange={(v) => setFormData({...formData, type: v})}><SelectTrigger><SelectValue placeholder="Pilih Tipe" /></SelectTrigger><SelectContent><SelectItem value="class">Kelas</SelectItem><SelectItem value="mosque">Masjid</SelectItem><SelectItem value="dorm">Asrama</SelectItem><SelectItem value="gate">Gerbang</SelectItem><SelectItem value="lab">Laboratorium</SelectItem><SelectItem value="general">Area Umum</SelectItem></SelectContent></Select></div>
                     </>
                 )}
                 {dialogType === 'device' && (
@@ -425,49 +427,44 @@ const AcademicSettings = () => {
                         <div className="space-y-2"><label className="text-sm font-medium">Token Alat</label><Input value={formData.token || ''} readOnly className="bg-gray-100 font-mono text-gray-500" /></div>
                     </>
                 )}
+                {/* 櫨 FORM ROMBEL */}
+                {dialogType === 'rombel' && (
+                    <>
+                        <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}><SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger><SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Nama Rombel / Bagian</label><Input placeholder="Contoh: A, B, Tahfidz" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
+                    </>
+                )}
                 {dialogType === 'schedule' && (
                     <>
-                        {/* 櫨 LOGIKA BARU: Pilih Kelas (Target) + Pilih Lokasi (Tempat) */}
                         {scheduleCategory === 'school' && (
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-blue-700">Untuk Kelas Berapa?</label>
-                                <Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}>
-                                    <SelectTrigger className="bg-blue-50 border-blue-200"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
-                                    <SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
-                                </Select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-blue-700">Untuk Kelas</label>
+                                    <Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}>
+                                        <SelectTrigger className="bg-blue-50"><SelectValue placeholder="Kelas" /></SelectTrigger>
+                                        <SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-blue-700">Rombel (Opsional)</label>
+                                    <Select value={String(formData.rombel_id || '')} onValueChange={(v) => setFormData({...formData, rombel_id: v})}>
+                                        <SelectTrigger className="bg-blue-50"><SelectValue placeholder="Semua / Spesifik" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="">Semua Rombel</SelectItem>
+                                            {/* Filter Rombel Sesuai Kelas yg Dipilih */}
+                                            {rombels.filter(r => String(r.kelas) === String(formData.kelas)).map(r => (
+                                                <SelectItem key={r.id} value={String(r.id)}>Rombel {r.nama}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         )}
                         
-                        <div className="space-y-2"><label className="text-sm font-medium">Kegiatan / Mapel</label>
-                            <Select value={String(formData.activity_id || '')} onValueChange={(v) => setFormData({...formData, activity_id: v})}>
-                                <SelectTrigger><SelectValue placeholder="Cari..." /></SelectTrigger>
-                                <SelectContent className="max-h-[200px]">{activities.filter(a => scheduleCategory === 'school' ? a.category === 'pelajaran' : a.category !== 'pelajaran').map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium flex justify-between">
-                                <span>Bertempat di Ruangan:</span>
-                                <span className="text-[10px] text-gray-400 italic">Bisa diubah (Fleksibel)</span>
-                            </label>
-                            <Select value={String(formData.location_id || '')} onValueChange={(v) => setFormData({...formData, location_id: v})}>
-                                <SelectTrigger><SelectValue placeholder="Pilih Lokasi Belajar" /></SelectTrigger>
-                                <SelectContent className="max-h-[200px]">
-                                    {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2"><label className="text-sm font-medium">Hari</label>
-                            <Select value={String(formData.day_of_week)} onValueChange={(v) => setFormData({...formData, day_of_week: v})}>
-                                <SelectTrigger><SelectValue placeholder="Pilih Hari" /></SelectTrigger>
-                                <SelectContent>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2"><label className="text-sm font-medium">Jam Mulai</label><Input type="time" value={formData.start_time || ''} onChange={(e) => setFormData({...formData, start_time: e.target.value})} /></div>
-                            <div className="space-y-2"><label className="text-sm font-medium">Jam Selesai</label><Input type="time" value={formData.end_time || ''} onChange={(e) => setFormData({...formData, end_time: e.target.value})} /></div>
-                        </div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Kegiatan / Mapel</label><Select value={String(formData.activity_id || '')} onValueChange={(v) => setFormData({...formData, activity_id: v})}><SelectTrigger><SelectValue placeholder="Cari..." /></SelectTrigger><SelectContent className="max-h-[200px]">{activities.filter(a => scheduleCategory === 'school' ? a.category === 'pelajaran' : a.category !== 'pelajaran').map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Bertempat di Ruangan</label><Select value={String(formData.location_id || '')} onValueChange={(v) => setFormData({...formData, location_id: v})}><SelectTrigger><SelectValue placeholder="Pilih Lokasi Belajar" /></SelectTrigger><SelectContent className="max-h-[200px]">{locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">Hari</label><Select value={String(formData.day_of_week)} onValueChange={(v) => setFormData({...formData, day_of_week: v})}><SelectTrigger><SelectValue placeholder="Pilih Hari" /></SelectTrigger><SelectContent>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-sm font-medium">Jam Mulai</label><Input type="time" value={formData.start_time || ''} onChange={(e) => setFormData({...formData, start_time: e.target.value})} /></div><div className="space-y-2"><label className="text-sm font-medium">Jam Selesai</label><Input type="time" value={formData.end_time || ''} onChange={(e) => setFormData({...formData, end_time: e.target.value})} /></div></div>
                     </>
                 )}
             </div>
