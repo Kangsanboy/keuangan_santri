@@ -333,6 +333,7 @@ const Index = () => {
                             {[7, 8, 9, 10, 11, 12].map((kls) => {
                               const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
                               const akhwat = rekapSaldo.find((r) => r.kelas === kls && r.gender === "akhwat")?.saldo || 0;
+                              const totalSaldoReal = rekapSaldo.reduce((acc, curr) => acc + curr.saldo, 0);
                               const total = ikhwan + akhwat;
                               return (
                                 <div key={kls} onClick={() => handleOpenKelas(kls)} className="border-2 border-green-400/80 rounded-2xl bg-white shadow-sm p-4 cursor-pointer group relative overflow-hidden active:scale-95 transition-transform">
@@ -344,7 +345,37 @@ const Index = () => {
                               );
                             })}
                           </div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[{ title: "Total Saldo", value: totalMasuk - totalKeluar, color: "text-green-600" }, { title: "Masuk 7 Hari", value: masuk7Hari, color: "text-green-600" }, { title: "Keluar 7 Hari", value: keluar7Hari, color: "text-red-600" }, { title: "Keluar Hari Ini", value: keluarHariIni, color: "text-orange-600" }].map((item, idx) => (<div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]"><h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4><p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>Rp {item.value.toLocaleString("id-ID")}</p></div>))}</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {[
+                                { 
+                                  title: "Total Saldo", 
+                                  value: totalSaldoReal, // 櫨 Ganti ke variabel baru ini
+                                  color: "text-green-600" 
+                                }, 
+                                { 
+                                  title: "Masuk 7 Hari", 
+                                  value: masuk7Hari, 
+                                  color: "text-green-600" 
+                                }, 
+                                { 
+                                  title: "Keluar 7 Hari", 
+                                  value: keluar7Hari, 
+                                  color: "text-red-600" 
+                                }, 
+                                { 
+                                  title: "Keluar Hari Ini", 
+                                  value: keluarHariIni, 
+                                  color: "text-orange-600" 
+                                }
+                            ].map((item, idx) => (
+                                <div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]">
+                                    <h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4>
+                                    <p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>
+                                        Rp {item.value.toLocaleString("id-ID")}
+                                    </p>
+                                </div>
+                            ))}
+                          </div>
                           <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
