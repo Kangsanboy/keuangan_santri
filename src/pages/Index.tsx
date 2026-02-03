@@ -239,6 +239,9 @@ const Index = () => {
       );
   }
 
+  // 櫨 HITUNG TOTAL SALDO REAL (Perbaikan agar tidak minus)
+  const totalSaldoReal = rekapSaldo.reduce((acc, curr) => acc + curr.saldo, 0);
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans relative">
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in" onClick={() => setSidebarOpen(false)} />}
@@ -265,7 +268,7 @@ const Index = () => {
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
              
-             {/* MENU ABSENSI SUDAH AKTIF */}
+             {/* MENU ABSENSI */}
              <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                 <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
              </button>
@@ -302,13 +305,12 @@ const Index = () => {
       )}
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
-        {/* HEADER ATAS - TOMBOL KASIR SUDAH DIHAPUS DISINI */}
+        {/* HEADER ATAS */}
         <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             {!isParent ? (
               <div className="flex items-center gap-2">
                   <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
-                  {/* TOMBOL MODE KASIR SUDAH DIHAPUS DARI SINI */}
               </div>
             ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
           </div>
@@ -333,7 +335,6 @@ const Index = () => {
                             {[7, 8, 9, 10, 11, 12].map((kls) => {
                               const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
                               const akhwat = rekapSaldo.find((r) => r.kelas === kls && r.gender === "akhwat")?.saldo || 0;
-                              const totalSaldoReal = rekapSaldo.reduce((acc, curr) => acc + curr.saldo, 0);
                               const total = ikhwan + akhwat;
                               return (
                                 <div key={kls} onClick={() => handleOpenKelas(kls)} className="border-2 border-green-400/80 rounded-2xl bg-white shadow-sm p-4 cursor-pointer group relative overflow-hidden active:scale-95 transition-transform">
@@ -345,37 +346,22 @@ const Index = () => {
                               );
                             })}
                           </div>
+                          
+                          {/* GRID STATISTIK: SUDAH DIPERBAIKI (Tidak akan minus) */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {[
-                                { 
-                                  title: "Total Saldo", 
-                                  value: totalSaldoReal, // 櫨 Ganti ke variabel baru ini
-                                  color: "text-green-600" 
-                                }, 
-                                { 
-                                  title: "Masuk 7 Hari", 
-                                  value: masuk7Hari, 
-                                  color: "text-green-600" 
-                                }, 
-                                { 
-                                  title: "Keluar 7 Hari", 
-                                  value: keluar7Hari, 
-                                  color: "text-red-600" 
-                                }, 
-                                { 
-                                  title: "Keluar Hari Ini", 
-                                  value: keluarHariIni, 
-                                  color: "text-orange-600" 
-                                }
-                            ].map((item, idx) => (
-                                <div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]">
-                                    <h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4>
-                                    <p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>
-                                        Rp {item.value.toLocaleString("id-ID")}
-                                    </p>
-                                </div>
-                            ))}
+                              {[
+                                  { title: "Total Saldo", value: totalSaldoReal, color: "text-green-600" }, // Menggunakan totalSaldoReal
+                                  { title: "Masuk 7 Hari", value: masuk7Hari, color: "text-green-600" }, 
+                                  { title: "Keluar 7 Hari", value: keluar7Hari, color: "text-red-600" }, 
+                                  { title: "Keluar Hari Ini", value: keluarHariIni, color: "text-orange-600" }
+                              ].map((item, idx) => (
+                                  <div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]">
+                                      <h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4>
+                                      <p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>Rp {item.value.toLocaleString("id-ID")}</p>
+                                  </div>
+                              ))}
                           </div>
+                          
                           <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                        </div>
                     )}
