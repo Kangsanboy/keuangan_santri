@@ -19,7 +19,7 @@ import {
 /* ================= TYPES ================= */
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
 interface Location { id: number; name: string; type: string; }
-interface Rombel { id: number; nama: string; kelas: number; } // 櫨 Tipe Baru
+interface Rombel { id: number; nama: string; kelas: number; }
 interface Device { 
   id: number; name: string; token: string; location_id: number; is_active: boolean;
   location?: { name: string }; 
@@ -32,8 +32,8 @@ interface Schedule {
   activity_id: number;
   location_id: number;
   kelas?: number;
-  rombel_id?: number; // 櫨 Baru
-  rombel?: { nama: string }; // Join
+  rombel_id?: number;
+  rombel?: { nama: string }; 
   activity: { name: string; category: string; tipe_ekskul?: string };
   location: { name: string; id: number };
   is_active: boolean;
@@ -52,7 +52,7 @@ const AcademicSettings = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [devices, setDevices] = useState<Device[]>([]); 
-  const [rombels, setRombels] = useState<Rombel[]>([]); // 櫨 State Rombel
+  const [rombels, setRombels] = useState<Rombel[]>([]); 
 
   // FILTER STATE
   const [filterKelas, setFilterKelas] = useState<string>("all");   
@@ -61,7 +61,6 @@ const AcademicSettings = () => {
 
   // FORM STATE
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // Tambah tipe 'rombel'
   const [dialogType, setDialogType] = useState<"activity" | "schedule" | "location" | "device" | "rombel">("activity");
   const [scheduleCategory, setScheduleCategory] = useState<"school" | "pesantren">("school");
   const [formData, setFormData] = useState<any>({});
@@ -126,7 +125,7 @@ const AcademicSettings = () => {
             if (isEditMode) error = (await supabase.from('devices').update(data).eq('id', payload.id)).error;
             else error = (await supabase.from('devices').insert([data])).error;
         }
-        else if (dialogType === 'rombel') { // 櫨 SIMPAN ROMBEL
+        else if (dialogType === 'rombel') { 
              const data = { nama: payload.name, kelas: parseInt(payload.kelas) };
              if(isEditMode) error = (await supabase.from('rombels').update(data).eq('id', payload.id)).error;
              else error = (await supabase.from('rombels').insert([data])).error;
@@ -149,7 +148,8 @@ const AcademicSettings = () => {
                 start_time: payload.start_time,
                 end_time: payload.end_time,
                 kelas: payload.kelas ? parseInt(payload.kelas) : null,
-                rombel_id: payload.rombel_id ? parseInt(payload.rombel_id) : null // 櫨 Simpan Rombel ID
+                // 櫨 PERBAIKAN LOGIKA ROMBEL (Handle 'all' menjadi null)
+                rombel_id: (payload.rombel_id && payload.rombel_id !== 'all') ? parseInt(payload.rombel_id) : null 
              };
              if(isEditMode) error = (await supabase.from('schedules').update(data).eq('id', payload.id)).error;
              else error = (await supabase.from('schedules').insert([data])).error;
@@ -174,14 +174,14 @@ const AcademicSettings = () => {
             day_of_week: "1", start_time: "07:00", end_time: "08:00", 
             kelas: filterKelas !== 'all' ? filterKelas : "7", 
             location_id: "",
-            rombel_id: "" // Reset rombel
+            rombel_id: "" 
           };
       } else if (type === 'device') {
           initialData = { token: "DEV_" + Math.floor(Math.random() * 10000) }; 
       } else if (type === 'activity') {
           initialData = { category: category === 'school' ? 'pelajaran' : 'ekskul', tipe_ekskul: 'wajib' };
       } else if (type === 'rombel') {
-          initialData = { kelas: "7" }; // Default kelas 7
+          initialData = { kelas: "7" }; 
       }
       
       setFormData(initialData);
@@ -193,7 +193,7 @@ const AcademicSettings = () => {
       setIsEditMode(true);
       setFormData({
           ...data,
-          name: data.nama || data.name, // Handle beda nama kolom
+          name: data.nama || data.name, 
           activity_id: String(data.activity_id),
           location_id: String(data.location_id),
           day_of_week: String(data.day_of_week),
@@ -238,13 +238,11 @@ const AcademicSettings = () => {
                                             )}
                                         </p>
                                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            {/* Tampilkan Kelas & Rombel */}
                                             {showKelas && sch.kelas && (
                                                 <span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold flex items-center gap-1">
                                                     Kls {sch.kelas} {sch.rombel?.nama ? `- ${sch.rombel.nama}` : ''}
                                                 </span>
                                             )}
-                                            {/* Kalau filter kelas aktif, tetap tampilkan rombelnya kalau ada */}
                                             {!showKelas && sch.rombel?.nama && (
                                                 <span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold">
                                                     {sch.rombel.nama}
@@ -339,7 +337,7 @@ const AcademicSettings = () => {
         <TabsContent value="activities" className="mt-4 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                {/* 櫨 KARTU 1: LOKASI */}
+                {/* KARTU 1: LOKASI */}
                 <Card className="border-l-4 border-l-purple-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 bg-purple-50/30">
                         <div><CardTitle className="text-lg flex items-center gap-2"><MapPin className="text-purple-600 w-5 h-5"/> Data Lokasi</CardTitle></div>
@@ -352,7 +350,7 @@ const AcademicSettings = () => {
                     </CardContent>
                 </Card>
 
-                {/* 櫨 KARTU 2: ROMBEL (BARU) */}
+                {/* KARTU 2: ROMBEL */}
                 <Card className="border-l-4 border-l-blue-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 bg-blue-50/30">
                         <div><CardTitle className="text-lg flex items-center gap-2"><Users className="text-blue-600 w-5 h-5"/> Data Rombel</CardTitle></div>
@@ -380,7 +378,7 @@ const AcademicSettings = () => {
                     </CardContent>
                 </Card>
 
-                {/* 櫨 KARTU 3: KEGIATAN */}
+                {/* KARTU 3: KEGIATAN */}
                 <Card className="border-l-4 border-l-orange-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2 bg-orange-50/30">
                         <div><CardTitle className="text-lg flex items-center gap-2"><BookOpen className="text-orange-600 w-5 h-5"/> Kegiatan & Mapel</CardTitle></div>
@@ -427,7 +425,6 @@ const AcademicSettings = () => {
                         <div className="space-y-2"><label className="text-sm font-medium">Token Alat</label><Input value={formData.token || ''} readOnly className="bg-gray-100 font-mono text-gray-500" /></div>
                     </>
                 )}
-                {/* 櫨 FORM ROMBEL */}
                 {dialogType === 'rombel' && (
                     <>
                         <div className="space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}><SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger><SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
@@ -450,8 +447,8 @@ const AcademicSettings = () => {
                                     <Select value={String(formData.rombel_id || '')} onValueChange={(v) => setFormData({...formData, rombel_id: v})}>
                                         <SelectTrigger className="bg-blue-50"><SelectValue placeholder="Semua / Spesifik" /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">Semua Rombel</SelectItem>
-                                            {/* Filter Rombel Sesuai Kelas yg Dipilih */}
+                                            {/* 櫨 GANTI VALUE="" JADI "all" */}
+                                            <SelectItem value="all">Semua Rombel</SelectItem>
                                             {rombels.filter(r => String(r.kelas) === String(formData.kelas)).map(r => (
                                                 <SelectItem key={r.id} value={String(r.id)}>Rombel {r.nama}</SelectItem>
                                             ))}
