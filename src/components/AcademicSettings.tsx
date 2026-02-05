@@ -20,7 +20,7 @@ import {
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
 interface Location { id: number; name: string; type: string; }
 interface Rombel { id: number; nama: string; kelas: number; }
-interface Teacher { id: number; full_name: string; } // Tipe Data Guru
+interface Teacher { id: number; full_name: string; } 
 interface Device { 
   id: number; name: string; token: string; location_id: number; is_active: boolean;
   location?: { name: string }; 
@@ -32,13 +32,13 @@ interface Schedule {
   end_time: string;
   activity_id: number;
   location_id: number;
-  teacher_id?: number; // Tambahan ID Guru
+  teacher_id?: number; 
   kelas?: number;
   rombel_id?: number;
   rombel?: { nama: string }; 
   activity: { name: string; category: string; tipe_ekskul?: string };
   location: { name: string; id: number };
-  teacher?: { full_name: string }; // Tambahan Data Guru
+  teacher?: { full_name: string }; 
   is_active: boolean;
 }
 interface SantriSimple { id: string; nama_lengkap: string; kelas: number; }
@@ -58,7 +58,7 @@ const AcademicSettings = () => {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [devices, setDevices] = useState<Device[]>([]); 
   const [rombels, setRombels] = useState<Rombel[]>([]); 
-  const [teachers, setTeachers] = useState<Teacher[]>([]); // State Guru
+  const [teachers, setTeachers] = useState<Teacher[]>([]); 
   const [santriList, setSantriList] = useState<SantriSimple[]>([]); 
 
   // STATE EKSKUL MEMBER
@@ -92,13 +92,11 @@ const AcademicSettings = () => {
       // --- FETCH GURU ---
       const { data: tData } = await supabase.from('teachers').select('id, full_name').eq('is_active', true).order('full_name');
       if (tData) setTeachers(tData);
-      // ------------------
 
       const { data: devData } = await supabase.from('devices').select(`*, location:location_id(name)`).order('name');
       // @ts-ignore
       if (devData) setDevices(devData);
 
-      // Update query schedule biar ambil nama guru juga
       const { data: schData } = await supabase
         .from('schedules')
         .select(`
@@ -113,7 +111,6 @@ const AcademicSettings = () => {
       // @ts-ignore
       if (schData) setSchedules(schData);
 
-      // Ambil data santri ringkas
       const { data: santriData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas').eq('status', 'aktif').order('nama_lengkap');
       if (santriData) setSantriList(santriData);
 
@@ -205,7 +202,6 @@ const AcademicSettings = () => {
                 end_time: payload.end_time,
                 kelas: payload.kelas ? parseInt(payload.kelas) : null,
                 rombel_id: (payload.rombel_id && payload.rombel_id !== 'all') ? parseInt(payload.rombel_id) : null,
-                // 櫨 PERBAIKAN: Handle jika nilainya "none" maka simpan null
                 teacher_id: (payload.teacher_id && payload.teacher_id !== 'none') ? parseInt(payload.teacher_id) : null 
              };
              if(isEditMode) error = (await supabase.from('schedules').update(data).eq('id', payload.id)).error;
@@ -232,7 +228,7 @@ const AcademicSettings = () => {
           day_of_week: "1", start_time: "07:00", end_time: "08:00", 
           kelas: filterKelas !== 'all' ? filterKelas : "7", 
           location_id: "", rombel_id: "all",
-          teacher_id: "none" // 櫨 Default "none" agar tidak error
+          teacher_id: "none" 
       };
       else if (type === 'device') initialData = { token: "DEV_" + Math.floor(Math.random() * 10000) }; 
       else if (type === 'activity') initialData = { category: category === 'school' ? 'pelajaran' : 'ekskul', tipe_ekskul: 'wajib' };
@@ -256,7 +252,6 @@ const AcademicSettings = () => {
           day_of_week: String(data.day_of_week),
           kelas: data.kelas ? String(data.kelas) : undefined,
           rombel_id: data.rombel_id ? String(data.rombel_id) : undefined,
-          // 櫨 Handle load guru saat edit
           teacher_id: data.teacher_id ? String(data.teacher_id) : "none" 
       });
       setIsDialogOpen(true);
@@ -285,13 +280,7 @@ const AcademicSettings = () => {
                                     <div>
                                         <p className="font-bold text-gray-800 flex items-center gap-2">{sch.activity?.name}{sch.activity?.category !== 'pelajaran' && sch.activity?.tipe_ekskul && (<span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${sch.activity.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{sch.activity.tipe_ekskul}</span>)}</p>
                                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            {/* TAMPILAN GURU */}
-                                            {sch.teacher && (
-                                                <span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 rounded flex items-center gap-1 border border-indigo-100">
-                                                    <User size={10} /> {sch.teacher.full_name}
-                                                </span>
-                                            )}
-                                            {/* END TAMPILAN GURU */}
+                                            {sch.teacher && (<span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 rounded flex items-center gap-1 border border-indigo-100"><User size={10} /> {sch.teacher.full_name}</span>)}
                                             {showKelas && sch.kelas && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold flex items-center gap-1">Kls {sch.kelas} {sch.rombel?.nama ? `- ${sch.rombel.nama}` : ''}</span>)}
                                             {!showKelas && sch.rombel?.nama && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold">{sch.rombel.nama}</span>)}
                                             <span className="text-xs text-gray-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {sch.location?.name}</span>
@@ -339,7 +328,6 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader><CardContent><ScheduleList data={filteredPesantren} showKelas={false} /></CardContent></Card>
         </TabsContent>
         
-        {/* ===================== TAB ANGGOTA ===================== */}
         <TabsContent value="members" className="mt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
                 <Card className="col-span-1 border-pink-200 h-full flex flex-col">
@@ -362,17 +350,10 @@ const AcademicSettings = () => {
                         {!selectedEkskulId ? (<div className="flex flex-col items-center justify-center h-full text-gray-400"><Users className="w-16 h-16 opacity-20 mb-2" /><p>Silakan pilih ekskul terlebih dahulu.</p></div>) : (
                             selectedActivity?.tipe_ekskul === 'wajib' ? (
                                 <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in zoom-in">
-                                    <div className="bg-green-100 p-4 rounded-full mb-4 shadow-sm border border-green-200">
-                                        <CheckCircle2 className="w-12 h-12 text-green-600" />
-                                    </div>
+                                    <div className="bg-green-100 p-4 rounded-full mb-4 shadow-sm border border-green-200"><CheckCircle2 className="w-12 h-12 text-green-600" /></div>
                                     <h3 className="text-xl font-bold text-gray-800">Kegiatan Wajib</h3>
-                                    <p className="text-gray-500 max-w-sm mt-2 leading-relaxed">
-                                        Kegiatan <strong>{selectedActivity.name}</strong> bersifat WAJIB. Seluruh santri aktif otomatis dianggap sebagai anggota.
-                                    </p>
-                                    <div className="mt-6 bg-white border border-green-200 px-6 py-3 rounded-lg shadow-sm">
-                                        <p className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Total Peserta Otomatis</p>
-                                        <span className="text-2xl font-black text-green-700">{santriList.length} Santri</span>
-                                    </div>
+                                    <p className="text-gray-500 max-w-sm mt-2 leading-relaxed">Kegiatan <strong>{selectedActivity.name}</strong> bersifat WAJIB. Seluruh santri aktif otomatis dianggap sebagai anggota.</p>
+                                    <div className="mt-6 bg-white border border-green-200 px-6 py-3 rounded-lg shadow-sm"><p className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Total Peserta Otomatis</p><span className="text-2xl font-black text-green-700">{santriList.length} Santri</span></div>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-gray-100">
@@ -411,7 +392,6 @@ const AcademicSettings = () => {
             </div>
         </TabsContent>
 
-        {/* ================= DIALOG FORM ================= */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>{isEditMode ? "Edit Data" : "Tambah Data Baru"}</DialogTitle></DialogHeader>
@@ -459,24 +439,10 @@ const AcademicSettings = () => {
                         )}
                         <div className="space-y-2"><label className="text-sm font-medium">Kegiatan / Mapel</label><Select value={String(formData.activity_id || '')} onValueChange={(v) => setFormData({...formData, activity_id: v})}><SelectTrigger><SelectValue placeholder="Cari..." /></SelectTrigger><SelectContent className="max-h-[200px]">{activities.filter(a => scheduleCategory === 'school' ? a.category === 'pelajaran' : a.category !== 'pelajaran').map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent></Select></div>
                         
-                        {/* 櫨 FITUR BARU: PILIH GURU (SUDAH DIPERBAIKI) */}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium flex items-center gap-1 text-indigo-700">
-                                <User size={14} /> Guru Pengampu
-                            </label>
-                            <Select value={String(formData.teacher_id || 'none')} onValueChange={(v) => setFormData({...formData, teacher_id: v})}>
-                                <SelectTrigger className="bg-indigo-50 border-indigo-200">
-                                    <SelectValue placeholder="Pilih Guru..." />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[200px]">
-                                    <SelectItem value="none">Belum Ada Guru</SelectItem> {/* Value tidak kosong */}
-                                    {teachers.map(t => (
-                                        <SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <label className="text-sm font-medium flex items-center gap-1 text-indigo-700"><User size={14} /> Guru Pengampu</label>
+                            <Select value={String(formData.teacher_id || 'none')} onValueChange={(v) => setFormData({...formData, teacher_id: v})}><SelectTrigger className="bg-indigo-50 border-indigo-200"><SelectValue placeholder="Pilih Guru..." /></SelectTrigger><SelectContent className="max-h-[200px]"><SelectItem value="none">Belum Ada Guru</SelectItem>{teachers.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select>
                         </div>
-                        {/* --------------------------- */}
 
                         <div className="space-y-2"><label className="text-sm font-medium">Bertempat di Ruangan</label><Select value={String(formData.location_id || '')} onValueChange={(v) => setFormData({...formData, location_id: v})}><SelectTrigger><SelectValue placeholder="Pilih Lokasi Belajar" /></SelectTrigger><SelectContent className="max-h-[200px]">{locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Hari</label><Select value={String(formData.day_of_week)} onValueChange={(v) => setFormData({...formData, day_of_week: v})}><SelectTrigger><SelectValue placeholder="Pilih Hari" /></SelectTrigger><SelectContent>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div>
