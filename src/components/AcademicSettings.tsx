@@ -11,10 +11,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-// 櫨 PERBAIKAN: Menambahkan 'Pencil' yang tadi ketinggalan
 import { 
   School, Moon, BookOpen, MapPin, Plus, Trash2, CalendarDays, Filter, 
-  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil 
+  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil, CheckCircle2 
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -39,7 +38,6 @@ interface Schedule {
   location: { name: string; id: number };
   is_active: boolean;
 }
-// Tipe untuk Member Ekskul
 interface SantriSimple { id: string; nama_lengkap: string; kelas: number; }
 interface ActivityMember { id: number; santri_id: string; santri: { nama_lengkap: string; kelas: number; }; }
 
@@ -104,7 +102,7 @@ const AcademicSettings = () => {
       // @ts-ignore
       if (schData) setSchedules(schData);
 
-      // Ambil data santri ringkas untuk dropdown
+      // Ambil data santri ringkas
       const { data: santriData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas').eq('status', 'aktif').order('nama_lengkap');
       if (santriData) setSantriList(santriData);
 
@@ -114,6 +112,10 @@ const AcademicSettings = () => {
 
   const fetchMembers = async (actId: string) => {
       if (!actId) return;
+      // Cek dulu kegiatannya wajib atau nggak
+      const act = activities.find(a => String(a.id) === actId);
+      if (act?.tipe_ekskul === 'wajib') return; // Kalau wajib gak usah fetch member manual
+
       setLoading(true);
       try {
           const { data, error } = await supabase
@@ -133,6 +135,9 @@ const AcademicSettings = () => {
       if (selectedEkskulId) fetchMembers(selectedEkskulId); 
       else setMembers([]);
   }, [selectedEkskulId]);
+
+  // Helper untuk mendapatkan objek activity yang sedang dipilih
+  const selectedActivity = activities.find(a => String(a.id) === selectedEkskulId);
 
   /* ================= ACTIONS ================= */
   const handleDelete = async (table: string, id: number) => {
@@ -305,7 +310,7 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader className="pb-2"><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader><CardContent><ScheduleList data={filteredPesantren} showKelas={false} /></CardContent></Card>
         </TabsContent>
         
-        {/* ===================== TAB ANGGOTA (SUDAH DIPERBAIKI) ===================== */}
+        {/* ===================== TAB ANGGOTA (LOGIKA BARU) ===================== */}
         <TabsContent value="members" className="mt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
                 <Card className="col-span-1 border-pink-200 h-full flex flex-col">
@@ -321,20 +326,39 @@ const AcademicSettings = () => {
                 </Card>
                 <Card className="col-span-1 md:col-span-2 border-pink-200 h-full flex flex-col">
                     <CardHeader className="bg-white border-b pb-3 flex flex-row justify-between items-center">
-                        <div><CardTitle className="text-lg text-gray-800">Daftar Anggota</CardTitle><p className="text-xs text-gray-500 mt-1">{selectedEkskulId ? `Santri yang mengikuti ${activities.find(a => String(a.id) === selectedEkskulId)?.name || '...'}` : "Pilih ekskul di sebelah kiri untuk melihat anggota."}</p></div>
-                        {selectedEkskulId && (<Button onClick={() => openAdd('member')} className="bg-pink-600 hover:bg-pink-700 text-white"><UserPlus className="w-4 h-4 mr-2"/> Tambah Anggota</Button>)}
+                        <div><CardTitle className="text-lg text-gray-800">Daftar Anggota</CardTitle><p className="text-xs text-gray-500 mt-1">{selectedEkskulId ? `Santri yang mengikuti ${selectedActivity?.name || '...'}` : "Pilih ekskul di sebelah kiri untuk melihat anggota."}</p></div>
+                        {/* 櫨 TOMBOL HANYA MUNCUL JIKA EKSKUL PILIHAN */}
+                        {selectedEkskulId && selectedActivity?.tipe_ekskul !== 'wajib' && (<Button onClick={() => openAdd('member')} className="bg-pink-600 hover:bg-pink-700 text-white"><UserPlus className="w-4 h-4 mr-2"/> Tambah Anggota</Button>)}
                     </CardHeader>
                     <CardContent className="pt-0 flex-1 overflow-y-auto bg-gray-50/30 p-0">
                         {!selectedEkskulId ? (<div className="flex flex-col items-center justify-center h-full text-gray-400"><Users className="w-16 h-16 opacity-20 mb-2" /><p>Silakan pilih ekskul terlebih dahulu.</p></div>) : (
-                            <div className="divide-y divide-gray-100">
-                                {members.length === 0 && (<div className="text-center py-10 text-gray-400"><p>Belum ada anggota di ekskul ini.</p></div>)}
-                                {members.map((m, idx) => (
-                                    <div key={m.id} className="flex items-center justify-between p-4 hover:bg-white bg-white/50">
-                                        <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-gray-800">{m.santri?.nama_lengkap || "Nama Tidak Ditemukan"}</p><p className="text-xs text-gray-500">Kelas {m.santri?.kelas || "-"}</p></div></div>
-                                        <Button variant="ghost" size="sm" onClick={() => handleDelete('activity_members', m.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                            // 櫨 LOGIKA TAMPILAN BERDASARKAN TIPE EKSKUL
+                            selectedActivity?.tipe_ekskul === 'wajib' ? (
+                                <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in zoom-in">
+                                    <div className="bg-green-100 p-4 rounded-full mb-4 shadow-sm border border-green-200">
+                                        <CheckCircle2 className="w-12 h-12 text-green-600" />
                                     </div>
-                                ))}
-                            </div>
+                                    <h3 className="text-xl font-bold text-gray-800">Kegiatan Wajib</h3>
+                                    <p className="text-gray-500 max-w-sm mt-2 leading-relaxed">
+                                        Kegiatan <strong>{selectedActivity.name}</strong> bersifat WAJIB. Seluruh santri aktif otomatis dianggap sebagai anggota.
+                                    </p>
+                                    <div className="mt-6 bg-white border border-green-200 px-6 py-3 rounded-lg shadow-sm">
+                                        <p className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Total Peserta Otomatis</p>
+                                        <span className="text-2xl font-black text-green-700">{santriList.length} Santri</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                // TAMPILAN LIST MANUAL UNTUK EKSKUL PILIHAN
+                                <div className="divide-y divide-gray-100">
+                                    {members.length === 0 && (<div className="text-center py-10 text-gray-400"><p>Belum ada anggota yang mendaftar.</p></div>)}
+                                    {members.map((m, idx) => (
+                                        <div key={m.id} className="flex items-center justify-between p-4 hover:bg-white bg-white/50">
+                                            <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-gray-800">{m.santri?.nama_lengkap || "Nama Tidak Ditemukan"}</p><p className="text-xs text-gray-500">Kelas {m.santri?.kelas || "-"}</p></div></div>
+                                            <Button variant="ghost" size="sm" onClick={() => handleDelete('activity_members', m.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
                         )}
                     </CardContent>
                 </Card>
@@ -362,7 +386,6 @@ const AcademicSettings = () => {
         </TabsContent>
       </Tabs>
 
-      {/* ================= DIALOG FORM ================= */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>{isEditMode ? "Edit Data" : "Tambah Data Baru"}</DialogTitle></DialogHeader>
@@ -404,8 +427,8 @@ const AcademicSettings = () => {
                     <>
                         {scheduleCategory === 'school' && (
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2"><label className="text-sm font-medium text-blue-700">Untuk Kelas</label><Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}><SelectTrigger className="bg-blue-50"><SelectValue placeholder="Kelas" /></SelectTrigger><SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                                <div className="space-y-2"><label className="text-sm font-medium text-blue-700">Rombel (Opsional)</label><Select value={String(formData.rombel_id || '')} onValueChange={(v) => setFormData({...formData, rombel_id: v})}><SelectTrigger className="bg-blue-50"><SelectValue placeholder="Semua / Spesifik" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Rombel</SelectItem>{rombels.filter(r => String(r.kelas) === String(formData.kelas)).map(r => (<SelectItem key={r.id} value={String(r.id)}>Rombel {r.nama}</SelectItem>))}</SelectContent></Select></div>
+                                <div className="space-y-2"><label className="text-sm font-medium text-blue-700">Untuk Kelas</label><Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}><SelectTrigger><SelectValue placeholder="Kelas" /></SelectTrigger><SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                                <div className="space-y-2"><label className="text-sm font-medium text-blue-700">Rombel (Opsional)</label><Select value={String(formData.rombel_id || '')} onValueChange={(v) => setFormData({...formData, rombel_id: v})}><SelectTrigger><SelectValue placeholder="Semua / Spesifik" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Rombel</SelectItem>{rombels.filter(r => String(r.kelas) === String(formData.kelas)).map(r => (<SelectItem key={r.id} value={String(r.id)}>Rombel {r.nama}</SelectItem>))}</SelectContent></Select></div>
                             </div>
                         )}
                         <div className="space-y-2"><label className="text-sm font-medium">Kegiatan / Mapel</label><Select value={String(formData.activity_id || '')} onValueChange={(v) => setFormData({...formData, activity_id: v})}><SelectTrigger><SelectValue placeholder="Cari..." /></SelectTrigger><SelectContent className="max-h-[200px]">{activities.filter(a => scheduleCategory === 'school' ? a.category === 'pelajaran' : a.category !== 'pelajaran').map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent></Select></div>
