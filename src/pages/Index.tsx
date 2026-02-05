@@ -17,11 +17,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast"; 
 import * as XLSX from "xlsx";
 import { 
-  LayoutDashboard, Wallet, Users, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
+  LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock 
-} from "lucide-react"; 
-
+} from "lucide-react";
 /* ================= TYPES ================= */
 interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
 interface TransaksiItem {
