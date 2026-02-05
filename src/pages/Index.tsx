@@ -5,6 +5,7 @@ import AuthPage from "@/components/AuthPage";
 import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
 import SantriDetail from "@/components/SantriDetail"; 
+import TeacherManagement from "@/components/TeacherManagement";
 import UserManagement from "@/components/UserManagement";
 import WarungMonitoring from "@/components/WarungMonitoring"; 
 import AcademicSettings from "@/components/AcademicSettings"; 
@@ -35,7 +36,7 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi">("dashboard");
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
@@ -268,6 +269,10 @@ const Index = () => {
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
              
+             {/* --- TAMBAHKAN INI (TOMBOL DATA GURU) --- */}
+             <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru
+             </button>
+             
              {/* MENU ABSENSI */}
              <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                 <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
@@ -409,6 +414,12 @@ const Index = () => {
                       </div>
                     )}
                     
+                    {activeMenu === "guru" && (
+                     <div className="animate-in fade-in zoom-in duration-300">
+                       <TeacherManagement />
+                     </div>
+                    )}
+                  
                     {/* LAIN-LAIN */}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                     {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
