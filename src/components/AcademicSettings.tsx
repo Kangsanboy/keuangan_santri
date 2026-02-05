@@ -202,6 +202,7 @@ const AcademicSettings = () => {
                 end_time: payload.end_time,
                 kelas: payload.kelas ? parseInt(payload.kelas) : null,
                 rombel_id: (payload.rombel_id && payload.rombel_id !== 'all') ? parseInt(payload.rombel_id) : null,
+                // 櫨 Handle jika nilainya "none" maka simpan null
                 teacher_id: (payload.teacher_id && payload.teacher_id !== 'none') ? parseInt(payload.teacher_id) : null 
              };
              if(isEditMode) error = (await supabase.from('schedules').update(data).eq('id', payload.id)).error;
@@ -252,6 +253,7 @@ const AcademicSettings = () => {
           day_of_week: String(data.day_of_week),
           kelas: data.kelas ? String(data.kelas) : undefined,
           rombel_id: data.rombel_id ? String(data.rombel_id) : undefined,
+          // Handle load guru saat edit
           teacher_id: data.teacher_id ? String(data.teacher_id) : "none" 
       });
       setIsDialogOpen(true);
@@ -280,7 +282,13 @@ const AcademicSettings = () => {
                                     <div>
                                         <p className="font-bold text-gray-800 flex items-center gap-2">{sch.activity?.name}{sch.activity?.category !== 'pelajaran' && sch.activity?.tipe_ekskul && (<span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${sch.activity.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{sch.activity.tipe_ekskul}</span>)}</p>
                                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            {sch.teacher && (<span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 rounded flex items-center gap-1 border border-indigo-100"><User size={10} /> {sch.teacher.full_name}</span>)}
+                                            {/* TAMPILAN GURU */}
+                                            {sch.teacher && (
+                                                <span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 rounded flex items-center gap-1 border border-indigo-100">
+                                                    <User size={10} /> {sch.teacher.full_name}
+                                                </span>
+                                            )}
+                                            {/* END TAMPILAN GURU */}
                                             {showKelas && sch.kelas && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold flex items-center gap-1">Kls {sch.kelas} {sch.rombel?.nama ? `- ${sch.rombel.nama}` : ''}</span>)}
                                             {!showKelas && sch.rombel?.nama && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold">{sch.rombel.nama}</span>)}
                                             <span className="text-xs text-gray-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {sch.location?.name}</span>
@@ -328,6 +336,7 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader><CardContent><ScheduleList data={filteredPesantren} showKelas={false} /></CardContent></Card>
         </TabsContent>
         
+        {/* TAB ANGGOTA */}
         <TabsContent value="members" className="mt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
                 <Card className="col-span-1 border-pink-200 h-full flex flex-col">
@@ -391,8 +400,9 @@ const AcademicSettings = () => {
                 <Card className="border-l-4 border-l-orange-500"><CardHeader className="flex flex-row items-center justify-between pb-2 bg-orange-50/30"><div><CardTitle className="text-lg flex items-center gap-2"><BookOpen className="text-orange-600 w-5 h-5"/> Kegiatan & Mapel</CardTitle></div><Button onClick={() => openAdd('activity')} variant="outline" size="sm" className="border-orange-200 text-orange-700"><Plus className="w-4 h-4 mr-2" /> Tambah</Button></CardHeader><CardContent className="pt-4 max-h-[400px] overflow-y-auto">{activities.map((act) => (<div key={act.id} className="flex justify-between items-center p-2 hover:bg-gray-50 border-b last:border-0"><div><div className="text-sm font-bold">{act.name}</div><div className="flex gap-1 mt-1"><span className="text-[10px] bg-gray-100 px-1 rounded uppercase">{act.category}</span>{act.category !== 'pelajaran' && <span className={`text-[10px] px-1 rounded uppercase ${act.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{act.tipe_ekskul}</span>}</div></div><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit('activity', act)}><Pencil size={12}/></Button><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete('activities', act.id)}><Trash2 size={12} className="text-red-400"/></Button></div></div>))}</CardContent></Card>
             </div>
         </TabsContent>
+      </Tabs> {/* 櫨 TAG INI YANG TADI KETINGGALAN, SUDAH DITAMBAHKAN */}
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>{isEditMode ? "Edit Data" : "Tambah Data Baru"}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
