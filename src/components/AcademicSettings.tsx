@@ -11,9 +11,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+// 櫨 PERBAIKAN: Menambahkan 'Pencil' yang tadi ketinggalan
 import { 
   School, Moon, BookOpen, MapPin, Plus, Trash2, CalendarDays, Filter, 
-  Database, Cpu, Wifi, Users, UserPlus, Medal
+  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil 
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -304,7 +305,7 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader className="pb-2"><CardTitle>Jadwal Ekstrakulikuler & Kegiatan</CardTitle></CardHeader><CardContent><ScheduleList data={filteredPesantren} showKelas={false} /></CardContent></Card>
         </TabsContent>
         
-        {/* ===================== TAB ANGGOTA (YANG TADI HILANG) ===================== */}
+        {/* ===================== TAB ANGGOTA (SUDAH DIPERBAIKI) ===================== */}
         <TabsContent value="members" className="mt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
                 <Card className="col-span-1 border-pink-200 h-full flex flex-col">
