@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
-  User, Plus, Save, Trash2, Search, IdCard, CheckCircle, XCircle 
+  User, Plus, Save, Trash2, Search, IdCard, CheckCircle, XCircle, ScanBarcode 
 } from "lucide-react";
 
 interface Teacher {
