@@ -6,6 +6,7 @@ import TransactionForm from "@/components/TransactionForm";
 import SantriManagement from "@/components/SantriManagement";
 import SantriDetail from "@/components/SantriDetail"; 
 import TeacherManagement from "@/components/TeacherManagement";
+import SickLeaveManagement from "@/components/SickLeaveManagement";
 import UserManagement from "@/components/UserManagement";
 import WarungMonitoring from "@/components/WarungMonitoring"; 
 import AcademicSettings from "@/components/AcademicSettings"; 
@@ -424,6 +425,7 @@ const Index = () => {
                     {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
                     {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
                     {activeMenu === "absensi" && <AttendanceMonitoring />}
+                    {activeMenu === "kesehatan" && <SickLeaveManagement />}
                 </>
             )}
           </div>
