@@ -36,7 +36,7 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru">("dashboard");
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
