@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  Calendar, Search, Filter, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, AlertTriangle, FileSpreadsheet 
+  Calendar, Search, Save, User, MapPin, 
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users 
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -23,10 +23,11 @@ interface AttendanceLog {
   teacher?: { full_name: string; };
   activity?: { name: string; category: string };
   location?: { name: string };
-  keterangan?: string; // Untuk Izin/Sakit
+  keterangan?: string;
 }
 
 const COLORS = ['#22c55e', '#eab308', '#ef4444', '#3b82f6']; // Hijau, Kuning, Merah, Biru
+const CLASSES = [7, 8, 9, 10, 11, 12]; // Daftar Kelas
 
 const AttendanceMonitoring = () => {
   const { toast } = useToast();
@@ -38,28 +39,23 @@ const AttendanceMonitoring = () => {
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [teacherList, setTeacherList] = useState<Teacher[]>([]);
   
-  // Filter Utama
+  // Filter
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
-  
-  // Filter Santri (Khusus Tabel & Form)
   const [filterKelas, setFilterKelas] = useState("all");
+  const [logFilterKelas, setLogFilterKelas] = useState("all");
   
-  // Form Izin/Sakit State
+  // Form Manual State
   const [formKelas, setFormKelas] = useState("");
   const [formGender, setFormGender] = useState("");
   const [formSantriId, setFormSantriId] = useState("");
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
 
-  // Filter Log Bawah
-  const [logFilterKelas, setLogFilterKelas] = useState("all");
-
   /* ================= FETCH DATA ================= */
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Ambil Logs berdasarkan Tanggal (Harian)
-      // Kita ambil range 1 minggu dari tanggal yang dipilih untuk kebutuhan tabel mingguan
+      // Fetch Logs Mingguan
       const selectedDate = new Date(dateFilter);
       const startOfWeek = new Date(selectedDate);
       startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1); // Senin
@@ -82,17 +78,15 @@ const AttendanceMonitoring = () => {
       // @ts-ignore
       setLogs(logData || []);
 
-      // 2. Ambil Master Santri (untuk Form)
       const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, gender, nis').eq('status', 'aktif');
       if (sData) setSantriList(sData);
 
-      // 3. Ambil Master Guru
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
       if (tData) setTeacherList(tData);
 
     } catch (err: any) {
-      console.error(err);
-      toast({ title: "Gagal memuat data", description: err.message, variant: "destructive" });
+      // console.error(err); 
+      // Silent error agar tidak spam toast jika tabel belum siap
     } finally {
       setLoading(false);
     }
@@ -101,15 +95,14 @@ const AttendanceMonitoring = () => {
   useEffect(() => { fetchData(); }, [dateFilter]);
 
   /* ================= LOGIC HELPER ================= */
-  // Filter log harian (untuk pie chart & log list)
-  const dailyLogs = logs.filter(l => l.created_at.startsWith(dateFilter));
+  const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
 
-  // Hitung Statistik Pie Chart
+  // Statistik Pie Chart
   const getStats = (type: 'santri' | 'guru', category?: string) => {
       let filtered = dailyLogs.filter(l => type === 'santri' ? l.santri_id : l.teacher_id);
       
       if (category === 'kbm') filtered = filtered.filter(l => l.activity?.category === 'pelajaran');
-      else if (category === 'ibadah') filtered = filtered.filter(l => l.activity?.category === 'ibadah' || l.activity?.name.toLowerCase().includes('sholat') || l.activity?.name.toLowerCase().includes('ngaji'));
+      else if (category === 'ibadah') filtered = filtered.filter(l => l.activity?.category === 'ibadah' || l.activity?.name.toLowerCase().includes('sholat'));
       else if (category === 'ekskul') filtered = filtered.filter(l => l.activity?.category !== 'pelajaran' && l.activity?.category !== 'ibadah');
 
       const total = filtered.length;
@@ -127,48 +120,46 @@ const AttendanceMonitoring = () => {
       ].filter(x => x.value > 0);
   };
 
-  // Submit Manual Permission
+  // Simpan Izin Manual
   const handleSubmitPermission = async (type: 'santri' | 'guru') => {
       try {
           const payload: any = {
               status: formStatus,
-              scan_time: new Date().toLocaleTimeString(), // Jam saat ini
-              created_at: new Date().toISOString(), // Tanggal hari ini
-              activity_id: null, // General permission (izin harian)
-              location_id: null
+              scan_time: new Date().toLocaleTimeString(),
+              created_at: new Date().toISOString(),
+              activity_id: null,
+              location_id: null,
+              keterangan: formKet
           };
 
           if (type === 'santri') {
               if (!formSantriId) return toast({title: "Pilih Santri", variant: "destructive"});
               payload.santri_id = formSantriId;
-          } else {
-              // Logic guru nanti
           }
 
           const { error } = await supabase.from('attendance_logs').insert([payload]);
           if (error) throw error;
           
           toast({ title: "Berhasil", description: "Data izin/sakit tersimpan." });
-          fetchData(); // Refresh data
-          setFormSantriId(""); setFormKet(""); // Reset form
+          fetchData();
+          setFormSantriId(""); setFormKet("");
       } catch (err: any) {
           toast({ title: "Gagal", description: err.message, variant: "destructive" });
       }
   };
 
-  /* ================= SUB-COMPONENTS ================= */
+  /* ================= COMPONENTS ================= */
   
-  // 1. Komponen Grafik Pie
   const ChartCard = ({ title, data }: { title: string, data: any[] }) => (
       <Card className="border shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-bold text-center uppercase text-gray-600">{title}</CardTitle></CardHeader>
-          <CardContent className="h-[200px] relative">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-center uppercase text-gray-500">{title}</CardTitle></CardHeader>
+          <CardContent className="h-[180px]">
               {data[0].name === 'Belum Ada Data' ? (
                   <div className="flex items-center justify-center h-full text-xs text-gray-400">Belum ada data</div>
               ) : (
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                          <Pie data={data} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value">
+                          <Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value">
                               {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                           </Pie>
                           <RechartsTooltip />
@@ -180,20 +171,15 @@ const AttendanceMonitoring = () => {
       </Card>
   );
 
-  // 2. Komponen Tabel Mingguan (Excel-like)
-  const WeeklyTable = ({ category, dataList, filterKelas }: { category: string, dataList: any[], filterKelas: string }) => {
-      // Filter list siswa/guru sesuai kelas (jika santri)
-      const filteredSubjects = filterKelas === 'all' ? dataList : dataList.filter(s => String(s.kelas) === filterKelas);
+  // 櫨 TABEL MINGGUAN (KOMPONEN INTI)
+  const WeeklyTable = ({ category, subjects, showNis = true }: { category: string, subjects: any[], showNis?: boolean }) => {
       const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-
-      // Logic cek status per hari
+      
       const getStatusOnDay = (id: string, dayIndex: number) => {
-          // Cari log di range tanggal minggu ini yang sesuai Day Index (0=Minggu di JS, tapi di array kita sesuaikan)
-          // Simplifikasi: Kita cek log yang harinya cocok
           const relevantLogs = logs.filter(l => {
-              const logDate = new Date(l.created_at);
-              const logDay = logDate.getDay(); // 0=Minggu, 1=Senin
-              const targetDay = dayIndex === 6 ? 0 : dayIndex + 1; // Konversi index array days ke JS Day
+              const logDate = new Date(l.created_at || l.scan_time);
+              const logDay = logDate.getDay(); 
+              const targetDay = dayIndex === 6 ? 0 : dayIndex + 1;
               
               let isCategoryMatch = false;
               if (category === 'kbm') isCategoryMatch = l.activity?.category === 'pelajaran';
@@ -204,32 +190,33 @@ const AttendanceMonitoring = () => {
           });
 
           if (relevantLogs.length === 0) return "-";
-          // Prioritas status: Sakit > Izin > Alpa > Telat > Hadir
           if (relevantLogs.some(l => l.status === 'Sakit')) return <span className="text-red-500 font-bold">S</span>;
           if (relevantLogs.some(l => l.status === 'Izin')) return <span className="text-blue-500 font-bold">I</span>;
           if (relevantLogs.some(l => l.status === 'Telat')) return <span className="text-yellow-600 font-bold">T</span>;
           return <span className="text-green-500 font-bold">✓</span>;
       };
 
+      if (subjects.length === 0) return <div className="text-center py-4 text-xs text-gray-400 italic border rounded-lg mt-2">Tidak ada data untuk kelas ini.</div>;
+
       return (
-          <div className="overflow-x-auto border rounded-lg bg-white shadow-sm mt-4">
+          <div className="overflow-x-auto border rounded-lg bg-white shadow-sm mt-2 mb-6">
               <table className="w-full text-xs text-left">
-                  <thead className="bg-gray-100 text-gray-700 uppercase font-bold">
+                  <thead className="bg-gray-50 text-gray-700 uppercase font-bold">
                       <tr>
-                          <th className="p-3 border-b border-r w-10">No</th>
-                          <th className="p-3 border-b border-r min-w-[150px]">Nama Lengkap</th>
-                          {category !== 'guru' && <th className="p-3 border-b border-r w-24">NIS</th>}
-                          {days.map(d => <th key={d} className="p-3 border-b text-center w-12">{d.slice(0,3)}</th>)}
+                          <th className="p-2 border-b w-8 text-center">No</th>
+                          <th className="p-2 border-b min-w-[150px]">Nama Lengkap</th>
+                          {showNis && <th className="p-2 border-b w-20">NIS</th>}
+                          {days.map(d => <th key={d} className="p-2 border-b text-center w-10">{d.slice(0,3)}</th>)}
                       </tr>
                   </thead>
                   <tbody className="divide-y">
-                      {filteredSubjects.map((s, idx) => (
+                      {subjects.map((s, idx) => (
                           <tr key={s.id} className="hover:bg-gray-50">
-                              <td className="p-3 border-r text-center">{idx + 1}</td>
-                              <td className="p-3 border-r font-medium">{category === 'guru' ? s.full_name : s.nama_lengkap}</td>
-                              {category !== 'guru' && <td className="p-3 border-r text-gray-500">{s.nis}</td>}
+                              <td className="p-2 text-center border-r">{idx + 1}</td>
+                              <td className="p-2 border-r font-medium truncate max-w-[150px]">{s.nama_lengkap || s.full_name}</td>
+                              {showNis && <td className="p-2 border-r text-gray-500">{s.nis}</td>}
                               {days.map((_, i) => (
-                                  <td key={i} className="p-3 border-r text-center bg-gray-50/30">
+                                  <td key={i} className="p-2 border-r text-center bg-gray-50/20">
                                       {getStatusOnDay(String(s.id), i)}
                                   </td>
                               ))}
@@ -237,21 +224,50 @@ const AttendanceMonitoring = () => {
                       ))}
                   </tbody>
               </table>
-              {filteredSubjects.length === 0 && <div className="p-4 text-center text-gray-400 text-sm">Data tidak ditemukan atau pilih filter kelas.</div>}
           </div>
       );
+  };
+
+  // 櫨 HELPER RENDER PER KELAS
+  // Fungsi ini akan meloop kelas yang ada dan membuat tabel terpisah untuk masing-masing
+  const RenderClassTables = ({ category }: { category: string }) => {
+      // Tentukan kelas mana saja yang mau ditampilkan
+      const classesToShow = filterKelas === 'all' ? CLASSES : [parseInt(filterKelas)];
+
+      return (
+          <div className="space-y-6">
+              {classesToShow.map(cls => {
+                  // Filter santri sesuai kelas ini
+                  const classStudents = santriList.filter(s => s.kelas === cls);
+                  // Jangan render tabel kosong jika filter 'all' dipilih, biar rapi
+                  if (filterKelas === 'all' && classStudents.length === 0) return null;
+
+                  return (
+                      <div key={cls} className="animate-in fade-in slide-in-from-bottom-2">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                                  Kelas {cls}
+                              </span>
+                              <span className="text-xs text-gray-400">({classStudents.length} Santri)</span>
+                          </div>
+                          <WeeklyTable category={category} subjects={classStudents} showNis={true} />
+                      </div>
+                  )
+              })}
+          </div>
+      )
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* HEADER & DATE PICKER */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-blue-100">
         <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <FileSpreadsheet className="text-blue-600" /> Monitoring Absensi
             </h1>
-            <p className="text-sm text-gray-500">Pantau kehadiran Santri & Guru secara real-time & historis.</p>
+            <p className="text-xs text-gray-500">Pantau kehadiran Santri & Guru secara real-time & historis.</p>
         </div>
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
             <Calendar className="text-gray-500 w-4 h-4" />
@@ -273,129 +289,75 @@ const AttendanceMonitoring = () => {
         {/* ======================= TAB SANTRI ======================= */}
         <TabsContent value="santri" className="space-y-8">
             
-            {/* 1. GRAFIK PIE (3 Kategori) */}
+            {/* 1. GRAFIK PIE */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <ChartCard title="Kehadiran KBM (Kelas)" data={getStats('santri', 'kbm')} />
-                <ChartCard title="Kehadiran Sholat & Mengaji" data={getStats('santri', 'ibadah')} />
-                <ChartCard title="Kehadiran Ekstrakurikuler" data={getStats('santri', 'ekskul')} />
+                <ChartCard title="KBM (Kelas)" data={getStats('santri', 'kbm')} />
+                <ChartCard title="Sholat & Mengaji" data={getStats('santri', 'ibadah')} />
+                <ChartCard title="Ekstrakurikuler" data={getStats('santri', 'ekskul')} />
             </div>
 
-            {/* 2. TABEL EXCEL VIEW */}
-            <div className="bg-white p-6 rounded-xl border shadow-sm space-y-6">
+            {/* 2. REKAP MINGGUAN (PER KELAS) */}
+            <div className="bg-white p-6 rounded-xl border shadow-sm space-y-8">
                 <div className="flex items-center justify-between border-b pb-4">
-                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-green-600"/> Rekap Mingguan</h3>
+                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Rekap Mingguan Per Kelas</h3>
                     <Select value={filterKelas} onValueChange={setFilterKelas}>
                         <SelectTrigger className="w-[150px] h-8 text-xs"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">Semua Kelas</SelectItem>
-                            {[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}
+                            {CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}
                         </SelectContent>
                     </Select>
                 </div>
 
-                {/* Tabel KBM */}
+                {/* Bagian KBM */}
                 <div>
-                    <h4 className="text-sm font-bold text-blue-700 uppercase tracking-wide mb-2">Absensi KBM (Sekolah)</h4>
-                    <WeeklyTable category="kbm" dataList={santriList} filterKelas={filterKelas} />
+                    <h4 className="text-sm font-bold text-gray-700 border-l-4 border-blue-500 pl-2 mb-4">A. Absensi KBM (Sekolah)</h4>
+                    <RenderClassTables category="kbm" />
                 </div>
 
-                {/* Tabel Ibadah */}
+                <div className="border-t border-dashed my-6"></div>
+
+                {/* Bagian Ibadah */}
                 <div>
-                    <h4 className="text-sm font-bold text-green-700 uppercase tracking-wide mb-2">Absensi Sholat & Mengaji</h4>
-                    <WeeklyTable category="ibadah" dataList={santriList} filterKelas={filterKelas} />
+                    <h4 className="text-sm font-bold text-gray-700 border-l-4 border-green-500 pl-2 mb-4">B. Absensi Sholat & Mengaji</h4>
+                    <RenderClassTables category="ibadah" />
                 </div>
 
-                {/* Tabel Ekskul */}
+                <div className="border-t border-dashed my-6"></div>
+
+                {/* Bagian Ekskul */}
                 <div>
-                    <h4 className="text-sm font-bold text-orange-700 uppercase tracking-wide mb-2">Absensi Ekstrakurikuler</h4>
-                    <WeeklyTable category="ekskul" dataList={santriList} filterKelas={filterKelas} />
+                    <h4 className="text-sm font-bold text-gray-700 border-l-4 border-orange-500 pl-2 mb-4">C. Absensi Ekstrakurikuler</h4>
+                    <RenderClassTables category="ekskul" />
                 </div>
             </div>
 
             {/* 3. FORM INPUT IZIN / SAKIT */}
             <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
-                <CardHeader><CardTitle className="text-purple-800">Input Izin / Sakit Manual</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold">Pilih Kelas</label>
-                        <Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}>
-                            <SelectTrigger className="bg-white"><SelectValue placeholder="Kelas..." /></SelectTrigger>
-                            <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold">Gender</label>
-                        <Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}>
-                            <SelectTrigger className="bg-white"><SelectValue placeholder="L/P" /></SelectTrigger>
-                            <SelectContent><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent>
-                        </Select>
-                    </div>
-                    <div className="md:col-span-2 space-y-1">
-                        <label className="text-xs font-bold">Nama Santri</label>
-                        <Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}>
-                            <SelectTrigger className="bg-white"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger>
-                            <SelectContent className="max-h-[200px]">
-                                {santriList.filter(s => String(s.kelas) === formKelas && s.gender === formGender).map(s => (
-                                    <SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold">Status</label>
-                        <Select value={formStatus} onValueChange={setFormStatus}>
-                            <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent>
-                        </Select>
-                    </div>
-                    <div className="md:col-span-5 flex gap-2">
-                        <Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white" />
-                        <Button onClick={() => handleSubmitPermission('santri')} className="bg-purple-600 hover:bg-purple-700 text-white w-32"><Save className="w-4 h-4 mr-2"/> Simpan</Button>
-                    </div>
+                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase">Input Izin / Sakit Manual</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Gender</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent></Select></div>
+                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && s.gender === formGender).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>))}</SelectContent></Select></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
+                    <div className="md:col-span-5 flex gap-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
                 </CardContent>
             </Card>
 
-            {/* 4. LOG HARIAN REALTIME (FILTERED) */}
+            {/* 4. LOG HARIAN */}
             <Card>
-                <CardHeader className="flex flex-row justify-between items-center bg-gray-50 border-b pb-2">
-                    <CardTitle className="text-base flex items-center gap-2"><Clock className="w-4 h-4"/> Log Absensi Hari Ini ({dateFilter})</CardTitle>
-                    <Select value={logFilterKelas} onValueChange={setLogFilterKelas}>
-                        <SelectTrigger className="w-[120px] h-8 text-xs bg-white"><SelectValue placeholder="Filter Kelas" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Semua</SelectItem>
-                            {[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                <CardHeader className="flex flex-row justify-between items-center bg-gray-50 border-b pb-2 pt-3 px-4">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2"><Clock className="w-4 h-4"/> Log Absensi Hari Ini</CardTitle>
+                    <Select value={logFilterKelas} onValueChange={setLogFilterKelas}><SelectTrigger className="w-[100px] h-7 text-[10px] bg-white"><SelectValue placeholder="Filter" /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <div className="max-h-[400px] overflow-y-auto divide-y">
-                        {dailyLogs
-                            .filter(l => l.santri_id) // Hanya santri
-                            .filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas)
-                            .map((log) => (
-                            <div key={log.id} className="flex items-center justify-between p-3 hover:bg-blue-50/50 text-sm">
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                        {log.status === 'Hadir' ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-gray-800">{log.santri?.nama_lengkap}</p>
-                                        <div className="flex gap-2 text-xs text-gray-500">
-                                            <span className="bg-gray-100 px-1 rounded">Kls {log.santri?.kelas}</span>
-                                            <span>• {log.activity?.name || "Manual/Umum"}</span>
-                                            <span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <span className="font-mono font-bold text-gray-700 block">{log.scan_time.slice(0,5)}</span>
-                                    <Badge variant={log.status === 'Hadir' ? 'default' : (log.status === 'Telat' ? 'secondary' : 'destructive')} className="text-[10px] h-5">
-                                        {log.status}
-                                    </Badge>
-                                </div>
+                    <div className="max-h-[300px] overflow-y-auto divide-y">
+                        {dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).map((log) => (
+                            <div key={log.id} className="flex items-center justify-between p-2 px-4 hover:bg-blue-50/50 text-xs">
+                                <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={12}/> : <XCircle size={12}/>}</div><div><p className="font-bold text-gray-800">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500"><span className="bg-gray-100 px-1 rounded">Kls {log.santri?.kelas}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
+                                <div className="text-right"><span className="font-mono font-bold text-gray-700 block">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className="text-[9px] h-4 px-1">{log.status}</Badge></div>
                             </div>
                         ))}
-                        {dailyLogs.length === 0 && <p className="text-center py-8 text-gray-400 italic">Belum ada data absensi hari ini.</p>}
                     </div>
                 </CardContent>
             </Card>
@@ -403,40 +365,17 @@ const AttendanceMonitoring = () => {
 
         {/* ======================= TAB GURU ======================= */}
         <TabsContent value="guru" className="space-y-8">
-             {/* 1. GRAFIK PIE GURU */}
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <ChartCard title="Kehadiran Mengajar (KBM)" data={getStats('guru', 'kbm')} />
                 <ChartCard title="Kehadiran Kegiatan Lain" data={getStats('guru', 'ibadah')} />
             </div>
-
-            {/* 2. TABEL GURU */}
             <div className="bg-white p-6 rounded-xl border shadow-sm">
                 <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2 mb-4"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Mingguan Guru</h3>
-                <WeeklyTable category="guru" dataList={teacherList} filterKelas="all" />
+                <WeeklyTable category="guru" subjects={teacherList} showNis={false} />
             </div>
-
-            {/* 3. LOG HARIAN GURU */}
             <Card>
-                <CardHeader className="bg-gray-50 border-b pb-2"><CardTitle className="text-base">Log Absensi Guru Hari Ini</CardTitle></CardHeader>
-                <CardContent className="p-0">
-                    <div className="max-h-[400px] overflow-y-auto divide-y">
-                        {dailyLogs.filter(l => l.teacher_id).map((log) => (
-                            <div key={log.id} className="flex items-center justify-between p-3 hover:bg-teal-50/50 text-sm">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 rounded-full bg-teal-100 text-teal-600"><User size={16}/></div>
-                                    <div>
-                                        <p className="font-bold text-gray-800">{log.teacher?.full_name}</p>
-                                        <p className="text-xs text-gray-500">{log.activity?.name}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <span className="font-mono font-bold block">{log.scan_time.slice(0,5)}</span>
-                                    <Badge className="bg-teal-600">{log.status}</Badge>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
+                <CardHeader className="bg-gray-50 border-b pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold">Log Absensi Guru</CardTitle></CardHeader>
+                <CardContent className="p-0"><div className="max-h-[300px] overflow-y-auto divide-y">{dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-2 px-4 hover:bg-teal-50/50 text-xs"><div className="flex items-center gap-3"><div className="p-1.5 rounded-full bg-teal-100 text-teal-600"><User size={12}/></div><div><p className="font-bold text-gray-800">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500">{log.activity?.name}</p></div></div><div className="text-right"><span className="font-mono font-bold block">{log.scan_time.slice(0,5)}</span><Badge className="bg-teal-600 text-[9px] h-4 px-1">{log.status}</Badge></div></div>))}</div></CardContent>
             </Card>
         </TabsContent>
 
