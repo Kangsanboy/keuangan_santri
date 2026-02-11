@@ -284,7 +284,19 @@ const Index = () => {
                     <CalendarClock className="mr-3 h-5 w-5 flex-shrink-0" />Atur Jadwal & Kegiatan
                 </button>
              )}
-
+             
+            {/* --- TOMBOL MENU KESEHATAN (BARU) --- */}
+                <button onClick={() => handleMenuClick("kesehatan")}
+                   className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${
+                activeMenu === "kesehatan"
+                  ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3"
+                  : "text-green-100 hover:bg-green-800"
+              }`}
+            >
+              <Activity className="mr-3 h-5 w-5 flex-shrink-0" />
+              Catatan Kesehatan
+            </button>
+             
              {/* GROUP 3: KEUANGAN */}
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Keuangan Digital</p>
