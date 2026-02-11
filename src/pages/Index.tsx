@@ -20,7 +20,7 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock 
+  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, activity 
 } from "lucide-react";
 /* ================= TYPES ================= */
 interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
