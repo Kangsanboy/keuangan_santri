@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Calendar, Search, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users 
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, BookOpen, Moon 
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -19,7 +19,7 @@ interface Teacher { id: number; full_name: string; nip: string; gender: string; 
 interface AttendanceLog {
   id: string; scan_time: string; status: string; created_at: string;
   santri_id?: string; teacher_id?: number; activity_id?: number; location_id?: number;
-  santri?: { nama_lengkap: string; kelas: number; nis: string };
+  santri?: { nama_lengkap: string; kelas: number; nis: string; gender: string };
   teacher?: { full_name: string; };
   activity?: { name: string; category: string };
   location?: { name: string };
@@ -33,6 +33,7 @@ const AttendanceMonitoring = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("santri");
+  const [santriTab, setSantriTab] = useState("kbm"); // Sub-tab untuk santri
   
   // Data Master
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
@@ -66,7 +67,7 @@ const AttendanceMonitoring = () => {
         .from('attendance_logs')
         .select(`
             id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id,
-            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis),
+            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender),
             teacher:teachers(full_name),
             activity:activity_id(name, category),
             location:location_id(name)
@@ -85,8 +86,7 @@ const AttendanceMonitoring = () => {
       if (tData) setTeacherList(tData);
 
     } catch (err: any) {
-      // console.error(err); 
-      // Silent error agar tidak spam toast jika tabel belum siap
+      // Silent error
     } finally {
       setLoading(false);
     }
@@ -97,13 +97,35 @@ const AttendanceMonitoring = () => {
   /* ================= LOGIC HELPER ================= */
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
 
-  // Statistik Pie Chart
-  const getStats = (type: 'santri' | 'guru', category?: string) => {
+  // MESIN FILTER: Menentukan Jenis Kegiatan (KBM / Sholat / Mengaji / Ekskul)
+  const getActivityType = (log: AttendanceLog) => {
+      const cat = log.activity?.category?.toLowerCase() || '';
+      const name = log.activity?.name?.toLowerCase() || '';
+
+      if (cat === 'pelajaran') return 'kbm';
+      
+      // Deteksi Sholat vs Mengaji
+      if (cat === 'ibadah' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) {
+          // Kalau namanya mengandung unsur mengaji, masuk mengaji
+          if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab')) {
+              return 'mengaji';
+          }
+          return 'sholat';
+      }
+      
+      // Deteksi Mengaji eksplisit
+      if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz')) return 'mengaji';
+
+      return 'ekskul'; // Sisanya ekskul
+  };
+
+  // Statistik Pie Chart (Tetap Global)
+  const getStats = (type: 'santri' | 'guru', group?: string) => {
       let filtered = dailyLogs.filter(l => type === 'santri' ? l.santri_id : l.teacher_id);
       
-      if (category === 'kbm') filtered = filtered.filter(l => l.activity?.category === 'pelajaran');
-      else if (category === 'ibadah') filtered = filtered.filter(l => l.activity?.category === 'ibadah' || l.activity?.name.toLowerCase().includes('sholat'));
-      else if (category === 'ekskul') filtered = filtered.filter(l => l.activity?.category !== 'pelajaran' && l.activity?.category !== 'ibadah');
+      if (group === 'kbm') filtered = filtered.filter(l => getActivityType(l) === 'kbm');
+      else if (group === 'ibadah') filtered = filtered.filter(l => getActivityType(l) === 'sholat' || getActivityType(l) === 'mengaji');
+      else if (group === 'ekskul') filtered = filtered.filter(l => getActivityType(l) === 'ekskul');
 
       const total = filtered.length;
       if (total === 0) return [{ name: 'Belum Ada Data', value: 1 }];
@@ -171,7 +193,7 @@ const AttendanceMonitoring = () => {
       </Card>
   );
 
-  // 櫨 TABEL MINGGUAN (KOMPONEN INTI)
+  // TABEL MINGGUAN
   const WeeklyTable = ({ category, subjects, showNis = true }: { category: string, subjects: any[], showNis?: boolean }) => {
       const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
       
@@ -181,12 +203,9 @@ const AttendanceMonitoring = () => {
               const logDay = logDate.getDay(); 
               const targetDay = dayIndex === 6 ? 0 : dayIndex + 1;
               
-              let isCategoryMatch = false;
-              if (category === 'kbm') isCategoryMatch = l.activity?.category === 'pelajaran';
-              else if (category === 'ibadah') isCategoryMatch = l.activity?.category === 'ibadah' || l.activity?.name.includes('Sholat');
-              else if (category === 'ekskul') isCategoryMatch = l.activity?.category !== 'pelajaran' && l.activity?.category !== 'ibadah';
+              const logType = category === 'guru' ? 'guru' : getActivityType(l);
               
-              return (l.santri_id === id || String(l.teacher_id) === id) && logDay === targetDay && isCategoryMatch;
+              return (l.santri_id === id || String(l.teacher_id) === id) && logDay === targetDay && (category === 'guru' ? true : logType === category);
           });
 
           if (relevantLogs.length === 0) return "-";
@@ -196,17 +215,17 @@ const AttendanceMonitoring = () => {
           return <span className="text-green-500 font-bold">✓</span>;
       };
 
-      if (subjects.length === 0) return <div className="text-center py-4 text-xs text-gray-400 italic border rounded-lg mt-2">Tidak ada data untuk kelas ini.</div>;
+      if (subjects.length === 0) return <div className="text-center py-2 text-xs text-gray-400 italic">Data kosong.</div>;
 
       return (
-          <div className="overflow-x-auto border rounded-lg bg-white shadow-sm mt-2 mb-6">
+          <div className="overflow-x-auto border rounded-lg bg-white shadow-sm mt-1 mb-4">
               <table className="w-full text-xs text-left">
                   <thead className="bg-gray-50 text-gray-700 uppercase font-bold">
                       <tr>
                           <th className="p-2 border-b w-8 text-center">No</th>
                           <th className="p-2 border-b min-w-[150px]">Nama Lengkap</th>
                           {showNis && <th className="p-2 border-b w-20">NIS</th>}
-                          {days.map(d => <th key={d} className="p-2 border-b text-center w-10">{d.slice(0,3)}</th>)}
+                          {days.map(d => <th key={d} className="p-2 border-b text-center w-8">{d.slice(0,3)}</th>)}
                       </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -228,29 +247,44 @@ const AttendanceMonitoring = () => {
       );
   };
 
-  // 櫨 HELPER RENDER PER KELAS
-  // Fungsi ini akan meloop kelas yang ada dan membuat tabel terpisah untuk masing-masing
+  // RENDER TABEL PER KELAS & PER GENDER
   const RenderClassTables = ({ category }: { category: string }) => {
-      // Tentukan kelas mana saja yang mau ditampilkan
       const classesToShow = filterKelas === 'all' ? CLASSES : [parseInt(filterKelas)];
 
       return (
-          <div className="space-y-6">
+          <div className="space-y-8">
               {classesToShow.map(cls => {
-                  // Filter santri sesuai kelas ini
                   const classStudents = santriList.filter(s => s.kelas === cls);
-                  // Jangan render tabel kosong jika filter 'all' dipilih, biar rapi
+                  // Split Ikhwan & Akhwat
+                  const ikhwan = classStudents.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
+                  const akhwat = classStudents.filter(s => s.gender === 'akhwat' || s.gender === 'P');
+
                   if (filterKelas === 'all' && classStudents.length === 0) return null;
 
                   return (
-                      <div key={cls} className="animate-in fade-in slide-in-from-bottom-2">
-                          <div className="flex items-center gap-2 mb-1">
-                              <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                                  Kelas {cls}
-                              </span>
-                              <span className="text-xs text-gray-400">({classStudents.length} Santri)</span>
+                      <div key={cls} className="animate-in fade-in slide-in-from-bottom-2 border p-4 rounded-xl bg-gray-50/50">
+                          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200">
+                              <Badge className="bg-blue-700 text-base px-3 py-1">Kelas {cls}</Badge>
+                              <span className="text-sm text-gray-500 font-medium">{classStudents.length} Santri</span>
                           </div>
-                          <WeeklyTable category={category} subjects={classStudents} showNis={true} />
+                          
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                              {/* Tabel Ikhwan */}
+                              <div>
+                                  <h5 className="text-xs font-bold text-green-700 uppercase mb-2 flex items-center gap-2 bg-green-50 p-2 rounded">
+                                      <User className="w-3 h-3"/> Ikhwan ({ikhwan.length})
+                                  </h5>
+                                  <WeeklyTable category={category} subjects={ikhwan} showNis={true} />
+                              </div>
+
+                              {/* Tabel Akhwat */}
+                              <div>
+                                  <h5 className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-2 bg-pink-50 p-2 rounded">
+                                      <User className="w-3 h-3"/> Akhwat ({akhwat.length})
+                                  </h5>
+                                  <WeeklyTable category={category} subjects={akhwat} showNis={true} />
+                              </div>
+                          </div>
                       </div>
                   )
               })}
@@ -265,9 +299,9 @@ const AttendanceMonitoring = () => {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-blue-100">
         <div>
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <FileSpreadsheet className="text-blue-600" /> Monitoring Absensi
+                <FileSpreadsheet className="text-blue-600" /> Monitoring Absensi V2
             </h1>
-            <p className="text-xs text-gray-500">Pantau kehadiran Santri & Guru secara real-time & historis.</p>
+            <p className="text-xs text-gray-500">Pantau kehadiran secara real-time & historis mingguan.</p>
         </div>
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
             <Calendar className="text-gray-500 w-4 h-4" />
@@ -287,57 +321,46 @@ const AttendanceMonitoring = () => {
         </TabsList>
 
         {/* ======================= TAB SANTRI ======================= */}
-        <TabsContent value="santri" className="space-y-8">
+        <TabsContent value="santri" className="space-y-6">
             
-            {/* 1. GRAFIK PIE */}
+            {/* 1. GRAFIK PIE GLOBAL */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <ChartCard title="KBM (Kelas)" data={getStats('santri', 'kbm')} />
-                <ChartCard title="Sholat & Mengaji" data={getStats('santri', 'ibadah')} />
-                <ChartCard title="Ekstrakurikuler" data={getStats('santri', 'ekskul')} />
+                <ChartCard title="Grafik KBM" data={getStats('santri', 'kbm')} />
+                <ChartCard title="Grafik Ibadah" data={getStats('santri', 'ibadah')} />
+                <ChartCard title="Grafik Ekskul" data={getStats('santri', 'ekskul')} />
             </div>
 
-            {/* 2. REKAP MINGGUAN (PER KELAS) */}
-            <div className="bg-white p-6 rounded-xl border shadow-sm space-y-8">
-                <div className="flex items-center justify-between border-b pb-4">
-                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Rekap Mingguan Per Kelas</h3>
+            {/* 2. TABEL MONITORING (NESTED TABS) */}
+            <div className="bg-white p-6 rounded-xl border shadow-sm">
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Rekap Absensi Mingguan</h3>
                     <Select value={filterKelas} onValueChange={setFilterKelas}>
                         <SelectTrigger className="w-[150px] h-8 text-xs"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Semua Kelas</SelectItem>
-                            {CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}
-                        </SelectContent>
+                        <SelectContent><SelectItem value="all">Semua Kelas</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
                     </Select>
                 </div>
 
-                {/* Bagian KBM */}
-                <div>
-                    <h4 className="text-sm font-bold text-gray-700 border-l-4 border-blue-500 pl-2 mb-4">A. Absensi KBM (Sekolah)</h4>
-                    <RenderClassTables category="kbm" />
-                </div>
+                <Tabs defaultValue="kbm" value={santriTab} onValueChange={setSantriTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg mb-6">
+                        <TabsTrigger value="kbm" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">KBM Sekolah</TabsTrigger>
+                        <TabsTrigger value="sholat" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">Sholat</TabsTrigger>
+                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">Mengaji</TabsTrigger>
+                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">Ekstrakulikuler</TabsTrigger>
+                    </TabsList>
 
-                <div className="border-t border-dashed my-6"></div>
-
-                {/* Bagian Ibadah */}
-                <div>
-                    <h4 className="text-sm font-bold text-gray-700 border-l-4 border-green-500 pl-2 mb-4">B. Absensi Sholat & Mengaji</h4>
-                    <RenderClassTables category="ibadah" />
-                </div>
-
-                <div className="border-t border-dashed my-6"></div>
-
-                {/* Bagian Ekskul */}
-                <div>
-                    <h4 className="text-sm font-bold text-gray-700 border-l-4 border-orange-500 pl-2 mb-4">C. Absensi Ekstrakurikuler</h4>
-                    <RenderClassTables category="ekskul" />
-                </div>
+                    <TabsContent value="kbm"><RenderClassTables category="kbm" /></TabsContent>
+                    <TabsContent value="sholat"><RenderClassTables category="sholat" /></TabsContent>
+                    <TabsContent value="mengaji"><RenderClassTables category="mengaji" /></TabsContent>
+                    <TabsContent value="ekskul"><RenderClassTables category="ekskul" /></TabsContent>
+                </Tabs>
             </div>
 
-            {/* 3. FORM INPUT IZIN / SAKIT */}
+            {/* 3. FORM INPUT IZIN / SAKIT (IKHWAN/AKHWAT) */}
             <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
                 <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase">Input Izin / Sakit Manual</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Gender</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="L">Laki-laki</SelectItem><SelectItem value="P">Perempuan</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && s.gender === formGender).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>))}</SelectContent></Select></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
                     <div className="md:col-span-5 flex gap-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
