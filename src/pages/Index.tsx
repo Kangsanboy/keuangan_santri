@@ -20,8 +20,10 @@ import * as XLSX from "xlsx";
 import { 
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
-  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, activity 
+  Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
+  Activity // <--- PERBAIKAN 1: Huruf Besar (Activity)
 } from "lucide-react";
+
 /* ================= TYPES ================= */
 interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
 interface TransaksiItem {
@@ -36,6 +38,7 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
+  // PERBAIKAN: Menambahkan 'kesehatan' ke dalam tipe state activeMenu
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
@@ -240,7 +243,6 @@ const Index = () => {
       );
   }
 
-  // 櫨 HITUNG TOTAL SALDO REAL (Perbaikan agar tidak minus)
   const totalSaldoReal = rekapSaldo.reduce((acc, curr) => acc + curr.saldo, 0);
 
   return (
@@ -269,13 +271,17 @@ const Index = () => {
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
              
-             {/* --- TAMBAHKAN INI (TOMBOL DATA GURU) --- */}
              <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru
              </button>
              
              {/* MENU ABSENSI */}
              <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                 <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
+             </button>
+
+             {/* PERBAIKAN 2: TOMBOL KESEHATAN DITAMBAHKAN */}
+             <button onClick={() => handleMenuClick("kesehatan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "kesehatan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+                <Activity className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Kesehatan
              </button>
              
              {/* MENU JADWAL */}
@@ -284,18 +290,6 @@ const Index = () => {
                     <CalendarClock className="mr-3 h-5 w-5 flex-shrink-0" />Atur Jadwal & Kegiatan
                 </button>
              )}
-             
-            {/* --- TOMBOL MENU KESEHATAN (BARU) --- */}
-                <button onClick={() => handleMenuClick("kesehatan")}
-                   className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${
-                activeMenu === "kesehatan"
-                  ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3"
-                  : "text-green-100 hover:bg-green-800"
-              }`}
-            >
-              <Activity className="mr-3 h-5 w-5 flex-shrink-0" />
-              Catatan Kesehatan
-            </button>
              
              {/* GROUP 3: KEUANGAN */}
              <div className="border-t border-green-800 my-4"></div>
@@ -364,10 +358,9 @@ const Index = () => {
                             })}
                           </div>
                           
-                          {/* GRID STATISTIK: SUDAH DIPERBAIKI (Tidak akan minus) */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                               {[
-                                  { title: "Total Saldo", value: totalSaldoReal, color: "text-green-600" }, // Menggunakan totalSaldoReal
+                                  { title: "Total Saldo", value: totalSaldoReal, color: "text-green-600" }, 
                                   { title: "Masuk 7 Hari", value: masuk7Hari, color: "text-green-600" }, 
                                   { title: "Keluar 7 Hari", value: keluar7Hari, color: "text-red-600" }, 
                                   { title: "Keluar Hari Ini", value: keluarHariIni, color: "text-orange-600" }
