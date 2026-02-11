@@ -14,14 +14,27 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
 /* ================= TYPES ================= */
-interface Santri { id: string; nama_lengkap: string; kelas: number; gender: string; nis: string; }
+interface Santri { 
+  id: string; 
+  nama_lengkap: string; 
+  kelas: number; 
+  gender: string; 
+  nis: string;
+  rombel?: { nama: string }; // Tambahan Rombel
+}
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
 interface Activity { id: number; name: string; category: string; }
 interface ActivityMember { activity_id: number; santri_id: string; }
 interface AttendanceLog {
   id: string; scan_time: string; status: string; created_at: string;
   santri_id?: string; teacher_id?: number; activity_id?: number; location_id?: number;
-  santri?: { nama_lengkap: string; kelas: number; nis: string; gender: string };
+  santri?: { 
+      nama_lengkap: string; 
+      kelas: number; 
+      nis: string; 
+      gender: string;
+      rombel?: { nama: string }; // Tambahan Rombel di Log
+  };
   teacher?: { full_name: string; };
   activity?: { name: string; category: string };
   location?: { name: string };
@@ -62,22 +75,22 @@ const AttendanceMonitoring = () => {
     try {
       const selectedDate = new Date(dateFilter);
       
-      // Hitung Range Mingguan (Untuk KBM)
+      // Range Mingguan
       const startOfWeek = new Date(selectedDate);
       startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1); 
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-      // Hitung Range Bulanan (Untuk Ekskul)
+      // Range Bulanan
       const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
-      // Fetch Logs (Ambil cakupan bulanan biar aman untuk semua tab)
+      // Fetch Logs (Join Rombel juga)
       const { data: logData, error } = await supabase
         .from('attendance_logs')
         .select(`
             id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id,
-            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender),
+            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel:rombels(nama)),
             teacher:teachers(full_name),
             activity:activity_id(name, category),
             location:location_id(name)
@@ -89,8 +102,12 @@ const AttendanceMonitoring = () => {
       // @ts-ignore
       setLogs(logData || []);
 
-      // Fetch Master Data
-      const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('*').eq('status', 'aktif');
+      // Fetch Santri + Rombel
+      const { data: sData } = await supabase
+        .from('santri_2025_12_01_21_34')
+        .select('*, rombel:rombels(nama)')
+        .eq('status', 'aktif');
+      // @ts-ignore
       if (sData) setSantriList(sData);
 
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
@@ -198,7 +215,6 @@ const AttendanceMonitoring = () => {
       const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
       const selectedDate = new Date(dateFilter);
       
-      // Cari tanggal Senin minggu ini
       const startOfWeek = new Date(selectedDate);
       startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1);
 
@@ -230,7 +246,7 @@ const AttendanceMonitoring = () => {
                           <th className="p-2 border-b w-8 text-center">No</th>
                           <th className="p-2 border-b min-w-[150px]">Nama Lengkap</th>
                           {category !== 'guru' && <th className="p-2 border-b w-20">NIS</th>}
-                          {category !== 'guru' && <th className="p-2 border-b w-10 text-center">Kls</th>}
+                          {category !== 'guru' && <th className="p-2 border-b w-16 text-center">Kls</th>}
                           {days.map(d => <th key={d} className="p-2 border-b text-center w-8">{d.slice(0,3)}</th>)}
                       </tr>
                   </thead>
@@ -240,7 +256,11 @@ const AttendanceMonitoring = () => {
                               <td className="p-2 text-center border-r">{idx + 1}</td>
                               <td className="p-2 border-r font-medium truncate max-w-[150px]">{s.nama_lengkap || s.full_name}</td>
                               {category !== 'guru' && <td className="p-2 border-r text-gray-500">{s.nis}</td>}
-                              {category !== 'guru' && <td className="p-2 border-r text-center">{s.kelas}</td>}
+                              {category !== 'guru' && (
+                                  <td className="p-2 border-r text-center font-bold text-gray-700">
+                                      {s.kelas}{s.rombel ? `-${s.rombel.nama}` : ''}
+                                  </td>
+                              )}
                               {days.map((_, i) => (
                                   <td key={i} className="p-2 border-r text-center bg-gray-50/20">
                                       {getStatusOnDay(String(s.id), i)}
@@ -256,24 +276,22 @@ const AttendanceMonitoring = () => {
 
   // --- TABEL BULANAN (KHUSUS EKSKUL) ---
   const MonthlyEkskulTable = ({ activityId }: { activityId: number }) => {
-      // Ambil anggota ekskul ini
       const memberIds = members.filter(m => m.activity_id === activityId).map(m => m.santri_id);
       const subjectList = santriList.filter(s => memberIds.includes(s.id));
       const weeks = [1, 2, 3, 4];
 
       const getStatusOnWeek = (santriId: string, weekNum: number) => {
-          // Logika sederhana: Cek log di rentang tanggal minggu ke-X bulan ini
           const selectedDate = new Date(dateFilter);
-          const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-          
-          // Asumsi 1 minggu = 7 hari
           const startDay = (weekNum - 1) * 7 + 1;
           const endDay = startDay + 6;
           
           const relevantLogs = logs.filter(l => {
               const logDate = new Date(l.created_at);
               const day = logDate.getDate();
-              return l.santri_id === santriId && l.activity_id === activityId && day >= startDay && day <= endDay;
+              const logMonth = logDate.getMonth();
+              const filterMonth = selectedDate.getMonth();
+              
+              return l.santri_id === santriId && l.activity_id === activityId && logMonth === filterMonth && day >= startDay && day <= endDay;
           });
 
           if (relevantLogs.length === 0) return "-";
@@ -292,7 +310,7 @@ const AttendanceMonitoring = () => {
                           <th className="p-2 border-b w-8 text-center">No</th>
                           <th className="p-2 border-b min-w-[150px]">Nama Anggota</th>
                           <th className="p-2 border-b w-20">NIS</th>
-                          <th className="p-2 border-b w-10 text-center">Kls</th>
+                          <th className="p-2 border-b w-16 text-center">Kls</th>
                           {weeks.map(w => <th key={w} className="p-2 border-b text-center w-12">Min {w}</th>)}
                       </tr>
                   </thead>
@@ -302,7 +320,9 @@ const AttendanceMonitoring = () => {
                               <td className="p-2 text-center border-r">{idx + 1}</td>
                               <td className="p-2 border-r font-medium">{s.nama_lengkap}</td>
                               <td className="p-2 border-r text-gray-500">{s.nis}</td>
-                              <td className="p-2 border-r text-center">{s.kelas}</td>
+                              <td className="p-2 border-r text-center font-bold">
+                                  {s.kelas}{s.rombel ? `-${s.rombel.nama}` : ''}
+                              </td>
                               {weeks.map(w => (
                                   <td key={w} className="p-2 border-r text-center bg-gray-50/20">
                                       {getStatusOnWeek(s.id, w)}
@@ -318,10 +338,9 @@ const AttendanceMonitoring = () => {
 
   // RENDER TABEL UTAMA
   const RenderClassTables = ({ category }: { category: string }) => {
-      // Jika kategori Ekskul, render per Kegiatan
+      // Jika Ekskul, Render Per Kegiatan
       if (category === 'ekskul') {
           const ekskulActivities = activities.filter(a => a.category !== 'pelajaran' && a.category !== 'ibadah' && !a.name.toLowerCase().includes('sholat') && !a.name.toLowerCase().includes('ngaji'));
-          
           return (
               <div className="space-y-8">
                   {ekskulActivities.map(act => (
@@ -336,7 +355,7 @@ const AttendanceMonitoring = () => {
           );
       }
 
-      // Jika KBM/Sholat/Mengaji, render per Kelas & Gender
+      // Jika KBM/Sholat/Mengaji, Render Per Kelas & Gender
       const classesToShow = filterKelas === 'all' ? CLASSES : [parseInt(filterKelas)];
       return (
           <div className="space-y-8">
@@ -447,7 +466,7 @@ const AttendanceMonitoring = () => {
                     <div className="max-h-[300px] overflow-y-auto divide-y">
                         {dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).map((log) => (
                             <div key={log.id} className="flex items-center justify-between p-2 px-4 hover:bg-blue-50/50 text-xs">
-                                <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={12}/> : <XCircle size={12}/>}</div><div><p className="font-bold text-gray-800">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500"><span className="bg-gray-100 px-1 rounded">Kls {log.santri?.kelas}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
+                                <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={12}/> : <XCircle size={12}/>}</div><div><p className="font-bold text-gray-800">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500"><span className="bg-gray-100 px-1 rounded">Kls {log.santri?.kelas}{log.santri?.rombel ? `-${log.santri.rombel.nama}` : ''}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
                                 <div className="text-right"><span className="font-mono font-bold text-gray-700 block">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className="text-[9px] h-4 px-1">{log.status}</Badge></div>
                             </div>
                         ))}
