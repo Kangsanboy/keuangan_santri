@@ -10,7 +10,7 @@ import SickLeaveManagement from "@/components/SickLeaveManagement";
 import UserManagement from "@/components/UserManagement";
 import WarungMonitoring from "@/components/WarungMonitoring"; 
 import AcademicSettings from "@/components/AcademicSettings"; 
-import AttendanceMonitoring from "@/components/AttendanceMonitoring"; // Import Absensi
+import AttendanceMonitoring from "@/components/AttendanceMonitoring"; 
 import FinanceChart from "@/components/FinanceChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
-  Activity // <--- PERBAIKAN 1: Huruf Besar (Activity)
+  Activity, Shield
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -38,7 +38,6 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  // PERBAIKAN: Menambahkan 'kesehatan' ke dalam tipe state activeMenu
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
@@ -59,6 +58,14 @@ const Index = () => {
   
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
   const yearsList = [2024, 2025, 2026, 2027, 2028];
+
+  /* ================= HELPER ================= */
+  const getInitials = (name: string) => {
+    if (!name) return "P"; 
+    const words = name.trim().split(" ");
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
 
   /* ================= LOGIC: TOMBOL BACK HP ================= */
   useEffect(() => { window.history.replaceState({ menu: 'dashboard', detailId: null }, ''); }, []);
@@ -250,12 +257,19 @@ const Index = () => {
       {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden animate-in fade-in" onClick={() => setSidebarOpen(false)} />}
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
-           {/* HEADER SIDEBAR */}
-           <div className="h-24 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0">
+           
+           {/* 🔥 PERBAIKAN: HEADER SIDEBAR DENGAN LOGO SIMATREN */}
+           <div className="py-8 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0 min-h-[130px]">
                <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
-               <div className={`text-center transition-opacity duration-300 ${!isSidebarOpen && "md:opacity-0"}`}>
-                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif">SIMATREN</h1>
-                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-1">Sistem Informasi Pesantren</p>
+               <div className={`text-center flex flex-col items-center transition-opacity duration-300 relative z-10 ${!isSidebarOpen && "md:opacity-0"}`}>
+                   <img 
+                      src="/mylogo.png" 
+                      alt="Logo" 
+                      className="h-12 w-auto object-contain mb-2 drop-shadow-md" 
+                      onError={(e) => e.currentTarget.style.display = 'none'} 
+                   />
+                   <h1 className="text-xl font-bold tracking-widest text-yellow-400 font-serif leading-tight">SIMATREN</h1>
+                   <p className="text-[10px] text-green-200 tracking-widest uppercase mt-0.5">Sistem Informasi Pesantren</p>
                </div>
                <button onClick={() => setSidebarOpen(false)} className="absolute top-3 right-3 md:hidden text-green-200 hover:text-white p-1"><PanelLeftClose size={24} /></button>
            </div>
@@ -279,7 +293,7 @@ const Index = () => {
                 <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
              </button>
 
-             {/* PERBAIKAN 2: TOMBOL KESEHATAN DITAMBAHKAN */}
+             {/* MENU KESEHATAN */}
              <button onClick={() => handleMenuClick("kesehatan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "kesehatan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                 <Activity className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Kesehatan
              </button>
@@ -316,19 +330,62 @@ const Index = () => {
       )}
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
-        {/* HEADER ATAS */}
-        <header className="bg-white h-16 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b flex-shrink-0">
+        
+        {/* 🔥 PERBAIKAN: HEADER ATAS GLASSMORPHISM & PROFIL KOTAK MEWAH */}
+        <header className="bg-gradient-to-r from-white via-green-50/50 to-green-100/60 backdrop-blur-md h-20 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b border-green-200 flex-shrink-0">
           <div className="flex items-center gap-3">
             {!isParent ? (
               <div className="flex items-center gap-2">
-                  <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-gray-600 p-2 hover:bg-green-50 hover:text-green-700 rounded-md transition-colors">{isSidebarOpen ? <PanelLeftClose size={24} className="hidden md:block" /> : <PanelLeftOpen size={24} className="hidden md:block" />}<Menu size={24} className="md:hidden" /></button>
+                  <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-green-800 p-2.5 bg-white border border-green-100 shadow-sm hover:bg-green-50 rounded-xl transition-all">{isSidebarOpen ? <PanelLeftClose size={20} className="hidden md:block" /> : <PanelLeftOpen size={20} className="hidden md:block" />}<Menu size={20} className="md:hidden" /></button>
               </div>
-            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR (Wali Santri)</div>)}
+            ) : (<div className="flex items-center gap-2 text-green-800 font-bold"><Banknote className="h-6 w-6" /> PPS AL-JAWAHIR</div>)}
           </div>
-          <div className="flex items-center gap-3 max-w-[60%]">
-                <div className="text-right hidden sm:block truncate"><p className="text-sm font-bold text-gray-800 truncate">{userName}</p><p className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full inline-block border border-green-200">{isParent ? "Orang Tua" : (isSuperAdmin ? "🚀 Super Admin" : (isAdmin ? "Admin" : "Viewer"))}</p></div>
-                {isParent && <button onClick={signOut} className="ml-2 text-red-500 hover:bg-red-50 p-2 rounded-full" title="Keluar"><LogOut size={18} /></button>}
-                {!isParent && <div className="h-9 w-9 rounded-full border-2 border-green-100 shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">{avatarUrl ? <img src={avatarUrl} alt="User" className="h-full w-full object-cover" /> : <span className="text-green-700 font-bold text-lg">{user?.email?.charAt(0).toUpperCase()}</span>}</div>}
+          
+          <div className="flex items-center gap-3 max-w-[70%]">
+                {isParent ? (
+                     <button onClick={signOut} className="ml-2 text-red-500 hover:bg-red-50 p-2 rounded-full" title="Keluar"><LogOut size={18} /></button>
+                ) : (
+                    <div 
+                        className="flex items-center gap-3 bg-white/90 backdrop-blur-sm p-1.5 pr-4 rounded-full shadow-sm border border-green-100 hover:shadow-md transition-all cursor-pointer group" 
+                        onClick={signOut} 
+                        title="Klik untuk Keluar"
+                    >
+                        {/* Lingkaran Avatar */}
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center text-white font-bold text-sm shadow-inner shrink-0 overflow-hidden">
+                            {avatarUrl ? <img src={avatarUrl} alt="User" className="h-full w-full object-cover" /> : getInitials(userName)}
+                        </div>
+                        
+                        {/* Nama & Email */}
+                        <div className="hidden sm:flex flex-col justify-center text-left">
+                            <span className="text-sm font-bold text-gray-800 leading-none capitalize truncate max-w-[120px] lg:max-w-[200px] group-hover:text-red-600 transition-colors">
+                                {userName}
+                            </span>
+                            <span className="text-[10px] text-gray-500 mt-1 font-medium truncate max-w-[120px] lg:max-w-[200px]">
+                                {user?.email || "email@pesantren.com"}
+                            </span>
+                        </div>
+
+                        {/* Garis Pemisah */}
+                        <div className="hidden sm:block h-6 w-px bg-gray-200 mx-1"></div>
+
+                        {/* Badge Role */}
+                        <div className="hidden sm:block">
+                            {isSuperAdmin ? (
+                                <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-yellow-200 shadow-sm">
+                                    🚀 Super Admin
+                                </span>
+                            ) : isAdmin ? (
+                                <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-green-200 shadow-sm">
+                                    <ShieldAlert className="w-3 h-3" /> Admin
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-blue-200 shadow-sm">
+                                    Viewer
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
           </div>
         </header>
 
