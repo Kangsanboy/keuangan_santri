@@ -78,7 +78,9 @@ const CashierPage = () => {
   useEffect(() => {
     if (isWalletOpen && user) {
         const fetchStats = async () => {
-            const today = new Date().toISOString().split('T')[0];
+            // 🔥 JALUR NINJA 1: Ambil tanggal 'Hari Ini' pakai WIB
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+
             const { data: todayTrx } = await supabase.from('transactions_2025_12_01_21_34').select('amount').eq('merchant_id', user.id).eq('transaction_date', today);
             const income = todayTrx?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
             const count = todayTrx?.length || 0;
@@ -129,8 +131,8 @@ const CashierPage = () => {
 
     setLoading(true);
     try {
-      const now = new Date();
-      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      // 🔥 JALUR NINJA 2: Tanggal transaksi dipaksa pakai zona waktu WIB
+      const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
 
       const trxData = {
         santri_id: santri.id, 
@@ -138,14 +140,18 @@ const CashierPage = () => {
         type: 'expense',
         description: 'Jajan Kantin', 
         merchant_id: user.id, 
-        transaction_date: localDate // 🔥 Gunakan tanggal lokal ini
+        transaction_date: localDate 
       };
 
       const { error } = await supabase.from('transactions_2025_12_01_21_34').insert([trxData]);
       if (error) throw error;
 
       const merchantName = user.user_metadata?.full_name || "Kantin PPS";
-      setLastTrx({ ...trxData, santri_nama: santri.nama_lengkap, sisa_saldo: santri.saldo - nominal, merchant: merchantName, time: new Date().toLocaleString('id-ID') });
+      
+      // 🔥 JALUR NINJA 3: Jam di struk dipaksa WIB
+      const printTime = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+      
+      setLastTrx({ ...trxData, santri_nama: santri.nama_lengkap, sisa_saldo: santri.saldo - nominal, merchant: merchantName, time: printTime });
 
       toast({ title: "✅ Berhasil", description: `Sisa Limit: Rp ${(sisaJatah - nominal).toLocaleString()}`, className: "bg-green-600 text-white border-none" });
 
