@@ -11,14 +11,13 @@ import { Database, ArrowRight, Loader2, UserPlus, LogIn, GraduationCap } from "l
 const AuthPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState(""); // 🔥 Tambahan state untuk Nama Lengkap
+  const [fullName, setFullName] = useState(""); 
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
   // --- LOGIC ---
-  
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -51,7 +50,6 @@ const AuthPage = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validasi ekstra biar nama nggak boleh kosong
     if (!fullName.trim()) {
       toast({
         variant: "destructive",
@@ -69,7 +67,7 @@ const AuthPage = () => {
         password,
         options: {
           data: {
-            full_name: fullName, // 🔥 Menyimpan input nama ke kolom full_name di Supabase
+            full_name: fullName, 
           },
         },
       });
@@ -88,7 +86,6 @@ const AuthPage = () => {
           description: "Akun Anda telah dibuat. Silakan login.",
           className: "bg-green-50 border-green-200 text-green-800",
         });
-        // Reset form setelah sukses daftar
         setIsLogin(true); 
         setFullName("");
       }
@@ -106,16 +103,17 @@ const AuthPage = () => {
   // --- TAMPILAN ---
 
   return (
-    <div className="min-h-screen flex w-full bg-gray-50">
+    // 🔥 PERBAIKAN: Background utama jadi hijau di mobile, abu-abu di desktop
+    <div className="min-h-screen flex w-full bg-green-900 lg:bg-gray-50 relative overflow-hidden">
+      
+      {/* Background Blur Effects - Dipindah ke luar biar mobile juga dapet efek mewahnya */}
+      <div className="absolute top-0 left-0 w-full h-full opacity-30 lg:opacity-10 pointer-events-none z-0">
+        <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl"></div>
+        <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-yellow-400 blur-3xl"></div>
+      </div>
+      
       {/* Bagian Kiri - Branding & Info (Hanya Desktop) */}
-      <div className="hidden lg:flex w-1/2 bg-green-900 relative overflow-hidden flex-col justify-between p-12 text-white">
-        {/* Background Blur Effects */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-          <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl"></div>
-          <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-yellow-400 blur-3xl"></div>
-        </div>
-        
-        {/* Header Kiri dengan LOGO MA'HAD */}
+      <div className="hidden lg:flex w-1/2 bg-green-900 relative flex-col justify-between p-12 text-white z-10">
         <div className="relative z-10 flex items-center gap-4">
           <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/20">
             <img 
@@ -134,7 +132,6 @@ const AuthPage = () => {
           </div>
         </div>
 
-        {/* Konten Utama Kiri */}
         <div className="relative z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-bold leading-tight">
             Transformasi Digital <span className="text-yellow-400">SIMATREN</span> Terpadu
@@ -160,28 +157,29 @@ const AuthPage = () => {
       </div>
 
       {/* Bagian Kanan - Form Login/Register */}
-      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-6 sm:p-8 lg:p-12 relative overflow-y-auto">
+      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-4 sm:p-8 lg:p-12 relative z-10 overflow-y-auto">
         
-        {/* 🔥 PERBAIKAN MOBILE: Logo & Judul di tengah, tidak menabrak form */}
-        <div className="flex lg:hidden flex-col items-center justify-center gap-3 mb-8 w-full text-center mt-4">
-           <div className="bg-green-900 p-3 rounded-2xl shadow-lg border border-green-800">
-            <img src="/logo mahad.png" alt="Logo" className="h-10 w-auto object-contain filter brightness-0 invert" 
+        {/* 🔥 PERBAIKAN MOBILE: Logo & Judul dengan Teks Putih & Elegan */}
+        <div className="flex lg:hidden flex-col items-center justify-center gap-3 mb-6 w-full text-center mt-4">
+           <div className="bg-white/10 p-3 rounded-2xl shadow-lg border border-white/20 backdrop-blur-md">
+            <img src="/logo mahad.png" alt="Logo" className="h-12 w-auto object-contain drop-shadow-lg" 
               onError={(e) => e.currentTarget.style.display = 'none'}
             />
           </div>
           <div>
-            <h1 className="font-bold text-green-900 text-2xl font-serif tracking-wider">SIMATREN</h1>
-            <p className="text-xs text-green-700 font-bold tracking-widest uppercase">Al-Jawahir</p>
+            <h1 className="font-bold text-white text-3xl font-serif tracking-wider drop-shadow-md">SIMATREN</h1>
+            <p className="text-xs text-yellow-400 font-bold tracking-widest uppercase drop-shadow-md">Al-Jawahir</p>
           </div>
         </div>
 
-        <Card className="w-full max-w-md border-none shadow-none bg-transparent">
-          <CardContent className="p-0 space-y-8">
-            <div className="space-y-2 text-center lg:text-left">
-              <h2 className="text-3xl font-bold text-gray-900">
+        {/* 🔥 PERBAIKAN MOBILE: Form dibungkus kotak putih melayang (Floating Card) */}
+        <Card className="w-full max-w-md border-none shadow-2xl lg:shadow-none bg-white/95 lg:bg-transparent backdrop-blur-md rounded-3xl lg:rounded-none">
+          <CardContent className="p-8 lg:p-0 space-y-8">
+            <div className="space-y-2 text-center lg:text-left pt-2 lg:pt-0">
+              <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">
                 {isLogin ? "PORTAL SIMATREN" : "Buat Akun Pengurus"}
               </h2>
-              <p className="text-gray-500">
+              <p className="text-gray-500 text-sm lg:text-base">
                 {isLogin 
                   ? "Masukan kredensial Anda untuk mengakses sistem pesantren." 
                   : "Daftarkan akun baru untuk staf atau pengurus pondok."}
@@ -190,7 +188,6 @@ const AuthPage = () => {
 
             <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-5">
               
-              {/* 🔥 INPUT NAMA: Hanya muncul saat mode "Daftar" */}
               {!isLogin && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                   <Label htmlFor="fullName">Nama Lengkap</Label>
@@ -234,7 +231,7 @@ const AuthPage = () => {
 
               <Button 
                 type="submit" 
-                className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2"
+                className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2 rounded-xl"
                 disabled={loading}
               >
                 {loading ? (
@@ -253,11 +250,11 @@ const AuthPage = () => {
                 <span className="w-full border-t border-gray-200" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-gray-50 px-2 text-gray-500">Atau</span>
+                <span className="bg-white lg:bg-gray-50 px-2 text-gray-500">Atau</span>
               </div>
             </div>
 
-            <div className="text-center">
+            <div className="text-center pb-2 lg:pb-0">
               <p className="text-sm text-gray-600">
                 {isLogin ? "Belum memiliki akun staff? " : "Sudah memiliki akun? "}
                 <button 
