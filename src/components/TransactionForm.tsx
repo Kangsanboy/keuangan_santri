@@ -38,7 +38,7 @@ const TransactionForm = () => {
   const [loading, setLoading] = useState(false);
   
   // State untuk Tanggal & Saldo
-  const [trxDate, setTrxDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [trxDate, setTrxDate] = useState<string>(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()));
   const [currentSaldo, setCurrentSaldo] = useState<number>(0);
 
   /* Reset saat kelas berubah */
