@@ -6,17 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, ArrowRight, Loader2, UserPlus, LogIn, ShieldCheck, GraduationCap } from "lucide-react";
+import { Database, ArrowRight, Loader2, UserPlus, LogIn, GraduationCap } from "lucide-react";
 
 const AuthPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState(""); // 🔥 Tambahan state untuk Nama Lengkap
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // --- LOGIC (TIDAK DIUBAH, SUDAH AMAN) ---
+  // --- LOGIC ---
   
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +50,17 @@ const AuthPage = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validasi ekstra biar nama nggak boleh kosong
+    if (!fullName.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Data Belum Lengkap",
+        description: "Nama lengkap wajib diisi.",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -57,7 +69,7 @@ const AuthPage = () => {
         password,
         options: {
           data: {
-            full_name: email.split('@')[0],
+            full_name: fullName, // 🔥 Menyimpan input nama ke kolom full_name di Supabase
           },
         },
       });
@@ -76,7 +88,9 @@ const AuthPage = () => {
           description: "Akun Anda telah dibuat. Silakan login.",
           className: "bg-green-50 border-green-200 text-green-800",
         });
-        navigate("/");
+        // Reset form setelah sukses daftar
+        setIsLogin(true); 
+        setFullName("");
       }
     } catch (error: any) {
       toast({
@@ -89,11 +103,11 @@ const AuthPage = () => {
     }
   };
 
-  // --- TAMPILAN BARU (REBRANDING SIMATREN + LOGO) ---
+  // --- TAMPILAN ---
 
   return (
     <div className="min-h-screen flex w-full bg-gray-50">
-      {/* Bagian Kiri - Branding & Info */}
+      {/* Bagian Kiri - Branding & Info (Hanya Desktop) */}
       <div className="hidden lg:flex w-1/2 bg-green-900 relative overflow-hidden flex-col justify-between p-12 text-white">
         {/* Background Blur Effects */}
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -103,14 +117,12 @@ const AuthPage = () => {
         
         {/* Header Kiri dengan LOGO MA'HAD */}
         <div className="relative z-10 flex items-center gap-4">
-          {/* Tempat Logo - Menggunakan file dari folder public */}
           <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/20">
             <img 
               src="/logo mahad.png" 
               alt="Logo Al-Jawahir" 
               className="h-12 w-auto object-contain"
               onError={(e) => {
-                // Fallback kalau gambar gak ketemu, balik jadi icon database
                 e.currentTarget.style.display = 'none';
                 e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>';
               }}
@@ -122,7 +134,7 @@ const AuthPage = () => {
           </div>
         </div>
 
-        {/* Konten Utama Kiri - Rebranding SIMATREN */}
+        {/* Konten Utama Kiri */}
         <div className="relative z-10 space-y-6 max-w-lg">
           <h2 className="text-4xl font-bold leading-tight">
             Transformasi Digital <span className="text-yellow-400">SIMATREN</span> Terpadu
@@ -130,7 +142,6 @@ const AuthPage = () => {
           <p className="text-green-100 text-lg leading-relaxed opacity-90">
             Platform digital terintegrasi untuk pengelolaan akademik, kesantrian, dan administrasi pondok pesantren secara efisien dan real-time.
           </p>
-          {/* Fitur Badges - Diupdate icon & teksnya */}
           <div className="flex gap-4 pt-4">
             <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
               <Database className="h-5 w-5 text-green-400" />
@@ -149,20 +160,24 @@ const AuthPage = () => {
       </div>
 
       {/* Bagian Kanan - Form Login/Register */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-12 relative">
-        {/* Mobile Branding (Hanya muncul di layar kecil) */}
-        <div className="absolute top-6 left-6 flex lg:hidden items-center gap-2 mb-8">
-           <div className="bg-green-900/10 p-2 rounded-lg">
-            {/* Logo kecil untuk mobile */}
-            <img src="/logo mahad.png" alt="Logo" className="h-8 w-auto object-contain" />
+      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-6 sm:p-8 lg:p-12 relative overflow-y-auto">
+        
+        {/* 🔥 PERBAIKAN MOBILE: Logo & Judul di tengah, tidak menabrak form */}
+        <div className="flex lg:hidden flex-col items-center justify-center gap-3 mb-8 w-full text-center mt-4">
+           <div className="bg-green-900 p-3 rounded-2xl shadow-lg border border-green-800">
+            <img src="/logo mahad.png" alt="Logo" className="h-10 w-auto object-contain filter brightness-0 invert" 
+              onError={(e) => e.currentTarget.style.display = 'none'}
+            />
           </div>
-          <span className="font-bold text-green-900 font-serif tracking-wider">SIMATREN AL-JAWAHIR</span>
+          <div>
+            <h1 className="font-bold text-green-900 text-2xl font-serif tracking-wider">SIMATREN</h1>
+            <p className="text-xs text-green-700 font-bold tracking-widest uppercase">Al-Jawahir</p>
+          </div>
         </div>
 
         <Card className="w-full max-w-md border-none shadow-none bg-transparent">
           <CardContent className="p-0 space-y-8">
             <div className="space-y-2 text-center lg:text-left">
-              {/* Judul Form Diupdate */}
               <h2 className="text-3xl font-bold text-gray-900">
                 {isLogin ? "PORTAL SIMATREN" : "Buat Akun Pengurus"}
               </h2>
@@ -173,39 +188,53 @@ const AuthPage = () => {
               </p>
             </div>
 
-            <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
+            <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-5">
+              
+              {/* 🔥 INPUT NAMA: Hanya muncul saat mode "Daftar" */}
+              {!isLogin && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <Label htmlFor="fullName">Nama Lengkap</Label>
                   <Input 
-                    id="email" 
-                    type="email" 
-                    placeholder="nama@aljawahir.com" 
+                    id="fullName" 
+                    type="text" 
+                    placeholder="Contoh: Ahmad Fulan" 
                     className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required={!isLogin}
                   />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                  </div>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="••••••••" 
-                    className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="nama@aljawahir.com" 
+                  className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input 
+                  id="password" 
+                  type="password" 
+                  placeholder="••••••••" 
+                  className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
 
               <Button 
                 type="submit" 
-                className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2"
                 disabled={loading}
               >
                 {loading ? (
@@ -232,6 +261,7 @@ const AuthPage = () => {
               <p className="text-sm text-gray-600">
                 {isLogin ? "Belum memiliki akun staff? " : "Sudah memiliki akun? "}
                 <button 
+                  type="button"
                   onClick={() => setIsLogin(!isLogin)}
                   className="ml-2 font-bold text-green-700 hover:text-green-800 hover:underline transition-colors inline-flex items-center"
                 >
