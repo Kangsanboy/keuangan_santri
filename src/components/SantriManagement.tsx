@@ -29,6 +29,8 @@ interface TransactionHistory {
 interface SantriSaldo {
   id: string; nama_lengkap: string; nis: string; kelas: number;
   rombel: string; 
+  kelas_mengaji?: number;
+  rombel_mengaji?: string;
   gender: "ikhwan" | "akhwat"; saldo: number; status: string;
   nama_wali: string; 
   rfid_card_id: string | null;
@@ -282,16 +284,24 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     </div>
                     
                     <div className="grid grid-cols-3 gap-4">
-                        <div className="col-span-2 space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="col-span-1 space-y-2"><label className="text-sm font-medium">Rombel</label>
-                            <Select value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                      <div className="col-span-2 space-y-2">
+                        <label className="text-sm font-medium">Kelas Sekolah</label>
+                        <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
+                          <SelectTrigger className={isEditMode ? "bg-gray-100" : ""}><SelectValue /></SelectTrigger>
+                          <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-1 space-y-2">
+                        <label className="text-sm font-medium">Rombel</label>
+                        <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+                          <SelectTrigger className={isEditMode ? "bg-gray-100" : ""}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+                  {isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
 
                     <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
@@ -377,11 +387,12 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           <table className="w-full text-sm text-left">
             <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
               <tr>
-                <th className="p-4 w-[100px]">NIS</th>
-                <th className="p-4 w-[250px]">Nama Lengkap</th>
-                <th className="p-4 w-[100px] text-center">Kelas</th>
+                <th className="p-4 w-[80px]">NIS</th>
+                <th className="p-4 min-w-[200px]">Nama Lengkap</th>
+                <th className="p-4 text-center w-[120px]">Kls Sekolah</th>
+                <th className="p-4 text-center w-[120px]">Kls Mengaji</th>
                 <th className="p-4 text-right">Saldo</th>
-                <th className="p-4 text-center w-[100px]">Aksi</th>
+                <th className="p-4 text-center w-[80px]">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -398,9 +409,16 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                           </div>
                       </td>
                       <td className="p-4 text-center">
-                          <span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-600 border">
-                              {santri.kelas} - {santri.rombel || 'A'}
-                          </span>
+                        <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">
+                          {santri.kelas}-{santri.rombel || 'A'}
+                        </span>
+                      </td>
+
+{/* KELAS MENGAJI */}
+                      <td className="p-4 text-center">
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">
+                          {santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}
+                        </span>
                       </td>
                       <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
                       <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
