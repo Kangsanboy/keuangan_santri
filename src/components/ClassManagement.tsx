@@ -171,6 +171,49 @@ const ClassManagement = () => {
                          activeTab === 'sekolah' ? s.kelas === parseInt(filterKelas) : s.kelas_mengaji === parseInt(filterKelas);
       return matchName && matchKelas;
   });
+  const renderTabelGender = (dataList: SantriClass[], label: string, color: string) => {
+    if (dataList.length === 0) return <div className="p-4 text-center text-xs text-gray-400 border rounded-lg border-dashed">Tidak ada data</div>;
+    
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+        <div className={`p-2 font-bold text-xs ${color} flex justify-between items-center`}>
+          <span className="flex items-center gap-1">{label}</span>
+          <span className="bg-white/50 px-2 py-0.5 rounded-full">{dataList.length} Santri</span>
+        </div>
+        <table className="w-full text-xs text-left bg-white">
+          <thead className="bg-gray-50 border-b">
+             <tr>
+               <th className="p-2 w-8 text-center">No</th>
+               <th className="p-2">Nama & NIS</th>
+               <th className="p-2 text-center">Rombel</th>
+               <th className="p-2 text-center w-12">Aksi</th>
+             </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+             {dataList.map((s, idx) => (
+               <tr key={s.id} className="hover:bg-gray-50 group">
+                  <td className="p-2 text-center text-gray-400">{idx + 1}</td>
+                  <td className="p-2">
+                    <p className="font-bold text-gray-800">{s.nama_lengkap}</p>
+                    <p className="text-[10px] text-gray-500 font-mono">{s.nis || '-'}</p>
+                  </td>
+                  <td className="p-2 text-center">
+                      <span className="bg-gray-100 px-2 py-1 rounded border font-bold text-gray-700">
+                          {activeTab === 'sekolah' ? s.rombel || 'A' : s.rombel_mengaji || 'A'}
+                      </span>
+                  </td>
+                  <td className="p-2 text-center">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-500 opacity-50 group-hover:opacity-100 bg-orange-50" onClick={() => { setEditData(s); setIsEditOpen(true); }}>
+                          <Pencil size={12} />
+                      </Button>
+                  </td>
+               </tr>
+             ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
@@ -217,50 +260,43 @@ const ClassManagement = () => {
                  </div>
               </div>
           </CardHeader>
-          <CardContent className="p-0">
-             <div className="overflow-x-auto">
-                 <table className="w-full text-sm text-left">
-                     <thead className={`font-semibold border-b ${activeTab === 'sekolah' ? 'bg-green-50 text-green-800' : 'bg-blue-50 text-blue-800'}`}>
-                         <tr>
-                             <th className="p-4 w-12 text-center">No</th>
-                             <th className="p-4 w-24">NIS</th>
-                             <th className="p-4 min-w-[200px]">Nama Lengkap</th>
-                             <th className="p-4 text-center">Kelas {activeTab === 'sekolah' ? 'Sekolah' : 'Mengaji'}</th>
-                             <th className="p-4 text-center">Rombel</th>
-                             <th className="p-4 text-center w-20">Aksi</th>
-                         </tr>
-                     </thead>
-                     <tbody className="divide-y divide-gray-100">
-                         {loading ? (
-                             <tr><td colSpan={6} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
-                         ) : filteredSantris.length === 0 ? (
-                             <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">Tidak ada santri ditemukan.</td></tr>
-                         ) : (
-                             filteredSantris.map((s, idx) => (
-                                 <tr key={s.id} className="hover:bg-gray-50 transition-colors group">
-                                     <td className="p-4 text-center text-gray-500">{idx + 1}</td>
-                                     <td className="p-4 font-mono text-gray-500 text-xs">{s.nis || '-'}</td>
-                                     <td className="p-4 font-bold text-gray-800">{s.nama_lengkap}</td>
-                                     <td className="p-4 text-center">
-                                         <span className="bg-gray-100 px-3 py-1 rounded text-xs font-bold border">
-                                             {activeTab === 'sekolah' ? s.kelas : (s.kelas_mengaji || s.kelas)}
-                                         </span>
-                                     </td>
-                                     <td className="p-4 text-center">
-                                         <span className={`px-3 py-1 rounded text-xs font-bold border ${activeTab === 'sekolah' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                                             {activeTab === 'sekolah' ? (s.rombel || 'A') : (s.rombel_mengaji || 'A')}
-                                         </span>
-                                     </td>
-                                     <td className="p-4 text-center">
-                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500 hover:bg-orange-50 opacity-50 group-hover:opacity-100" onClick={() => { setEditData(s); setIsEditOpen(true); }}>
-                                             <Pencil size={14} />
-                                         </Button>
-                                     </td>
-                                 </tr>
-                             ))
-                         )}
-                     </tbody>
-                 </table>
+          <CardContent className="p-4 bg-gray-50/50 border-t border-gray-100 mt-2">
+             <div className="space-y-6">
+                {[7, 8, 9, 10, 11, 12].map(kelas => {
+                    // Kalau lagi filter 1 kelas doang, lewati kelas yang lain
+                    if (filterKelas !== 'all' && parseInt(filterKelas) !== kelas) return null;
+
+                    // Ambil santri khusus di kelas ini sesuai tab yang aktif
+                    const muridKelasIni = filteredSantris.filter(s => activeTab === 'sekolah' ? s.kelas === kelas : s.kelas_mengaji === kelas);
+                    
+                    if (muridKelasIni.length === 0) return null;
+
+                    // Pisahkan Ikhwan dan Akhwat
+                    const ikhwan = muridKelasIni.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
+                    const akhwat = muridKelasIni.filter(s => s.gender === 'akhwat' || s.gender === 'P');
+
+                    return (
+                       <div key={kelas} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+                          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                              <span className="bg-blue-600 text-white font-bold px-3 py-1 rounded-md text-sm">Kelas {kelas}</span>
+                              <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded border">{muridKelasIni.length} Total Santri</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                              {/* Panggil pabrik tabel mini yang kita buat di atas */}
+                              {renderTabelGender(ikhwan, "👳‍♂️ IKHWAN", "bg-green-100 text-green-800")}
+                              {renderTabelGender(akhwat, "🧕 AKHWAT", "bg-pink-100 text-pink-800")}
+                          </div>
+                       </div>
+                    )
+                })}
+                
+                {filteredSantris.length === 0 && !loading && (
+                   <div className="p-8 text-center text-gray-400 italic bg-white rounded-xl border">Tidak ada santri ditemukan.</div>
+                )}
+                {loading && (
+                   <div className="p-8 text-center text-gray-500 bg-white rounded-xl border animate-pulse">Memuat data...</div>
+                )}
              </div>
           </CardContent>
       </Card>
