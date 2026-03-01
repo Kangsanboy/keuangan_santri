@@ -12,6 +12,7 @@ import WarungMonitoring from "@/components/WarungMonitoring";
 import AcademicSettings from "@/components/AcademicSettings"; 
 import AttendanceMonitoring from "@/components/AttendanceMonitoring"; 
 import FinanceChart from "@/components/FinanceChart";
+import ClassManagement from "@/components/ClassManagement";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +22,7 @@ import {
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
-  Activity, Shield
+  Activity, Shield, Library
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -38,7 +39,7 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan">("dashboard");
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
@@ -284,6 +285,11 @@ const Index = () => {
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
              <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
+
+             {/* MENU MANAJEMEN KELAS */}
+             <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+               <Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas
+             </button>
              
              <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru
              </button>
@@ -483,6 +489,7 @@ const Index = () => {
                     )}
                   
                     {/* LAIN-LAIN */}
+                    {activeMenu === "manajemen_kelas" && <ClassManagement />}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                     {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
                     {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
