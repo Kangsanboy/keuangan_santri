@@ -21,6 +21,8 @@ interface Santri {
   gender: string; 
   nis: string;
   rombel?: any; // 🔥 Diubah jadi any biar fleksibel (bisa string "A" atau object)
+  kelas_mengaji?: number;
+  rombel_mengaji?: any;
 }
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
 interface Activity { id: number; name: string; category: string; }
@@ -33,7 +35,9 @@ interface AttendanceLog {
       kelas: number; 
       nis: string; 
       gender: string;
-      rombel?: any; 
+      rombel?: any;
+      kelas_mengaji?: number;
+      rombel_mengaji?: any;
   };
   teacher?: { full_name: string; };
   activity?: { name: string; category: string };
@@ -92,7 +96,7 @@ const AttendanceMonitoring = () => {
         .from('attendance_logs')
         .select(`
             id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id,
-            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel),
+            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel, kelas_mengaji, rombel_mengaji),
             teacher:teachers(full_name),
             activity:activity_id(name, category),
             location:location_id(name)
@@ -259,7 +263,7 @@ const AttendanceMonitoring = () => {
                               {category !== 'guru' && <td className="p-2 border-r text-gray-500">{s.nis}</td>}
                               {category !== 'guru' && (
                                   <td className="p-2 border-r text-center font-bold text-gray-700">
-                                      {s.kelas}-{getRombel(s.rombel)}
+                                      {category === 'mengaji' ? s.kelas_mengaji : s.kelas}-{getRombel(category === 'mengaji' ? s.rombel_mengaji : s.rombel)}
                                   </td>
                               )}
                               {days.map((_, i) => (
@@ -362,11 +366,12 @@ const AttendanceMonitoring = () => {
       return (
           <div className="space-y-8">
               {classesToShow.map(cls => {
-                  const classStudents = santriList.filter(s => s.kelas === cls);
+                  const isMengaji = category === 'mengaji';
+                  const classStudents = santriList.filter(s => isMengaji ? s.kelas_mengaji === cls : s.kelas === cls);
                   if (filterKelas === 'all' && classStudents.length === 0) return null;
 
                   // 1. Dapatkan daftar rombel unik di kelas ini (contoh: 'A', 'B') dan urutkan
-                  const uniqueRombels = Array.from(new Set(classStudents.map(s => getRombel(s.rombel)))).sort();
+                  const uniqueRombels = Array.from(new Set(classStudents.map(s => getRombel(isMengaji ? s.rombel_mengaji : s.rombel)))).sort();
 
                   return (
                       <div key={cls} className="animate-in fade-in slide-in-from-bottom-2 border p-4 rounded-xl bg-gray-50/50 shadow-sm">
@@ -382,7 +387,7 @@ const AttendanceMonitoring = () => {
                           <div className="space-y-6">
                               {uniqueRombels.map(rombelName => {
                                   // Ambil santri yang cuma ada di rombel ini
-                                  const rombelStudents = classStudents.filter(s => getRombel(s.rombel) === rombelName);
+                                  const rombelStudents = classStudents.filter(s => getRombel(isMengaji ? s.rombel_mengaji : s.rombel) === rombelName);
                                   
                                   // Pisahkan Ikhwan dan Akhwat
                                   const ikhwan = rombelStudents.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
