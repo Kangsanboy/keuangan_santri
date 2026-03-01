@@ -20,7 +20,7 @@ interface Santri {
   kelas: number; 
   gender: string; 
   nis: string;
-  rombel?: { nama: string }; // Tambahan Rombel
+  rombel?: any; // 🔥 Diubah jadi any biar fleksibel (bisa string "A" atau object)
 }
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
 interface Activity { id: number; name: string; category: string; }
@@ -33,7 +33,7 @@ interface AttendanceLog {
       kelas: number; 
       nis: string; 
       gender: string;
-      rombel?: { nama: string }; // Tambahan Rombel di Log
+      rombel?: any; 
   };
   teacher?: { full_name: string; };
   activity?: { name: string; category: string };
@@ -69,28 +69,30 @@ const AttendanceMonitoring = () => {
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
 
+  /* ================= HELPER ROMBEL ================= */
+  // Fungsi aman buat ngambil nama rombel (jaga-jaga kalau datanya string atau object)
+  const getRombel = (rombelData: any) => {
+      if (!rombelData) return 'A'; // Default kalau kosong
+      if (typeof rombelData === 'string') return rombelData;
+      if (typeof rombelData === 'object' && rombelData.nama) return rombelData.nama;
+      return 'A';
+  };
+
   /* ================= FETCH DATA ================= */
   const fetchData = async () => {
     setLoading(true);
     try {
       const selectedDate = new Date(dateFilter);
       
-      // Range Mingguan
-      const startOfWeek = new Date(selectedDate);
-      startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1); 
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-      // Range Bulanan
       const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
-      // Fetch Logs (Join Rombel juga)
+      // 🔥 PERBAIKAN QUERY: Ambil rombel langsung sebagai kolom, bukan relasi tabel
       const { data: logData, error } = await supabase
         .from('attendance_logs')
         .select(`
             id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id,
-            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel:rombels(nama)),
+            santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel),
             teacher:teachers(full_name),
             activity:activity_id(name, category),
             location:location_id(name)
@@ -99,16 +101,15 @@ const AttendanceMonitoring = () => {
         .lte('created_at', endOfMonth.toISOString() + 'T23:59:59');
 
       if (error) throw error;
-      // @ts-ignore
-      setLogs(logData || []);
+      setLogs(logData as any || []);
 
-      // Fetch Santri + Rombel
+      // 🔥 PERBAIKAN QUERY SANTRI
       const { data: sData } = await supabase
         .from('santri_2025_12_01_21_34')
-        .select('*, rombel:rombels(nama)')
+        .select('*')
         .eq('status', 'aktif');
-      // @ts-ignore
-      if (sData) setSantriList(sData);
+      
+      if (sData) setSantriList(sData as any);
 
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
       if (tData) setTeacherList(tData);
@@ -258,7 +259,7 @@ const AttendanceMonitoring = () => {
                               {category !== 'guru' && <td className="p-2 border-r text-gray-500">{s.nis}</td>}
                               {category !== 'guru' && (
                                   <td className="p-2 border-r text-center font-bold text-gray-700">
-                                      {s.kelas}{s.rombel ? `-${s.rombel.nama}` : ''}
+                                      {s.kelas}-{getRombel(s.rombel)}
                                   </td>
                               )}
                               {days.map((_, i) => (
@@ -321,7 +322,7 @@ const AttendanceMonitoring = () => {
                               <td className="p-2 border-r font-medium">{s.nama_lengkap}</td>
                               <td className="p-2 border-r text-gray-500">{s.nis}</td>
                               <td className="p-2 border-r text-center font-bold">
-                                  {s.kelas}{s.rombel ? `-${s.rombel.nama}` : ''}
+                                  {s.kelas}-{getRombel(s.rombel)}
                               </td>
                               {weeks.map(w => (
                                   <td key={w} className="p-2 border-r text-center bg-gray-50/20">
@@ -336,7 +337,7 @@ const AttendanceMonitoring = () => {
       );
   };
 
-  // RENDER TABEL UTAMA
+  // 🔥 RENDER TABEL UTAMA (KELOMPOK KELAS -> ROMBEL -> GENDER)
   const RenderClassTables = ({ category }: { category: string }) => {
       // Jika Ekskul, Render Per Kegiatan
       if (category === 'ekskul') {
@@ -355,33 +356,64 @@ const AttendanceMonitoring = () => {
           );
       }
 
-      // Jika KBM/Sholat/Mengaji, Render Per Kelas & Gender
+      // Jika KBM/Sholat/Mengaji, Render Kelas -> Rombel -> Gender
       const classesToShow = filterKelas === 'all' ? CLASSES : [parseInt(filterKelas)];
+      
       return (
           <div className="space-y-8">
               {classesToShow.map(cls => {
                   const classStudents = santriList.filter(s => s.kelas === cls);
-                  const ikhwan = classStudents.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
-                  const akhwat = classStudents.filter(s => s.gender === 'akhwat' || s.gender === 'P');
-
                   if (filterKelas === 'all' && classStudents.length === 0) return null;
 
+                  // 1. Dapatkan daftar rombel unik di kelas ini (contoh: 'A', 'B') dan urutkan
+                  const uniqueRombels = Array.from(new Set(classStudents.map(s => getRombel(s.rombel)))).sort();
+
                   return (
-                      <div key={cls} className="animate-in fade-in slide-in-from-bottom-2 border p-4 rounded-xl bg-gray-50/50">
+                      <div key={cls} className="animate-in fade-in slide-in-from-bottom-2 border p-4 rounded-xl bg-gray-50/50 shadow-sm">
+                          {/* HEADER KELAS */}
                           <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200">
-                              <Badge className="bg-blue-700 text-base px-3 py-1">Kelas {cls}</Badge>
-                              <span className="text-sm text-gray-500 font-medium">{classStudents.length} Santri</span>
+                              <Badge className="bg-blue-700 text-base px-4 py-1.5 shadow-sm">Kelas {cls}</Badge>
+                              <span className="text-sm text-gray-500 font-bold bg-white px-2 py-1 rounded border">
+                                  {classStudents.length} Total Santri
+                              </span>
                           </div>
                           
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                              <div>
-                                  <h5 className="text-xs font-bold text-green-700 uppercase mb-2 flex items-center gap-2 bg-green-50 p-2 rounded"><User className="w-3 h-3"/> Ikhwan ({ikhwan.length})</h5>
-                                  <WeeklyTable category={category} subjects={ikhwan} />
-                              </div>
-                              <div>
-                                  <h5 className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-2 bg-pink-50 p-2 rounded"><User className="w-3 h-3"/> Akhwat ({akhwat.length})</h5>
-                                  <WeeklyTable category={category} subjects={akhwat} />
-                              </div>
+                          {/* 2. Looping berdasarkan Rombel */}
+                          <div className="space-y-6">
+                              {uniqueRombels.map(rombelName => {
+                                  // Ambil santri yang cuma ada di rombel ini
+                                  const rombelStudents = classStudents.filter(s => getRombel(s.rombel) === rombelName);
+                                  
+                                  // Pisahkan Ikhwan dan Akhwat
+                                  const ikhwan = rombelStudents.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
+                                  const akhwat = rombelStudents.filter(s => s.gender === 'akhwat' || s.gender === 'P');
+
+                                  if (rombelStudents.length === 0) return null;
+
+                                  return (
+                                      <div key={rombelName} className="border border-blue-100 p-4 rounded-xl bg-white shadow-sm">
+                                          {/* HEADER ROMBEL */}
+                                          <h4 className="font-bold text-blue-900 mb-3 flex items-center gap-2 border-b border-blue-50 pb-2">
+                                              <Badge variant="outline" className="border-blue-400 text-blue-800 bg-blue-50/50">
+                                                  Rombel {rombelName}
+                                              </Badge>
+                                              <span className="text-xs text-gray-400 font-medium">({rombelStudents.length} Santri)</span>
+                                          </h4>
+                                          
+                                          {/* TABEL IKHWAN & AKHWAT */}
+                                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                              <div>
+                                                  <h5 className="text-xs font-bold text-green-700 uppercase mb-2 flex items-center gap-2 bg-green-50 p-2 rounded"><User className="w-3 h-3"/> Ikhwan ({ikhwan.length})</h5>
+                                                  <WeeklyTable category={category} subjects={ikhwan} />
+                                              </div>
+                                              <div>
+                                                  <h5 className="text-xs font-bold text-pink-700 uppercase mb-2 flex items-center gap-2 bg-pink-50 p-2 rounded"><User className="w-3 h-3"/> Akhwat ({akhwat.length})</h5>
+                                                  <WeeklyTable category={category} subjects={akhwat} />
+                                              </div>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
                           </div>
                       </div>
                   )
@@ -397,7 +429,7 @@ const AttendanceMonitoring = () => {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-blue-100">
         <div>
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <FileSpreadsheet className="text-blue-600" /> Monitoring Absensi V2
+                <FileSpreadsheet className="text-blue-600" /> Monitoring Absensi
             </h1>
             <p className="text-xs text-gray-500">Pantau kehadiran secara real-time & historis mingguan/bulanan.</p>
         </div>
@@ -409,8 +441,8 @@ const AttendanceMonitoring = () => {
 
       <Tabs defaultValue="santri" value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="santri" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Santri</TabsTrigger>
-            <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white">Guru & Staf</TabsTrigger>
+            <TabsTrigger value="santri" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white shadow-sm">Santri</TabsTrigger>
+            <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white shadow-sm">Guru & Staf</TabsTrigger>
         </TabsList>
 
         <TabsContent value="santri" className="space-y-6">
@@ -425,18 +457,18 @@ const AttendanceMonitoring = () => {
                     <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Rekap Absensi</h3>
                     {santriTab !== 'ekskul' && (
                         <Select value={filterKelas} onValueChange={setFilterKelas}>
-                            <SelectTrigger className="w-[150px] h-8 text-xs"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
+                            <SelectTrigger className="w-[150px] h-8 text-xs font-bold"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
                             <SelectContent><SelectItem value="all">Semua Kelas</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
                         </Select>
                     )}
                 </div>
 
                 <Tabs defaultValue="kbm" value={santriTab} onValueChange={setSantriTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg mb-6">
-                        <TabsTrigger value="kbm" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">KBM Sekolah</TabsTrigger>
-                        <TabsTrigger value="sholat" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">Sholat</TabsTrigger>
-                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">Mengaji</TabsTrigger>
-                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs md:text-sm">Ekstrakulikuler</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg mb-6 shadow-inner">
+                        <TabsTrigger value="kbm" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">KBM Sekolah</TabsTrigger>
+                        <TabsTrigger value="sholat" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Sholat</TabsTrigger>
+                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Mengaji</TabsTrigger>
+                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Ekskul</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="kbm"><RenderClassTables category="kbm" /></TabsContent>
@@ -446,30 +478,34 @@ const AttendanceMonitoring = () => {
                 </Tabs>
             </div>
 
-            <Card className="border-l-4 border-l-purple-500 bg-purple-50/30">
-                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase">Input Izin / Sakit Manual</CardTitle></CardHeader>
+            <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
+                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Manual</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>))}</SelectContent></Select></div>
+                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} ({s.kelas}-{getRombel(s.rombel)})</SelectItem>))}</SelectContent></Select></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-5 flex gap-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                    <div className="md:col-span-5 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
                 </CardContent>
             </Card>
 
-            <Card>
+            <Card className="shadow-sm">
                 <CardHeader className="flex flex-row justify-between items-center bg-gray-50 border-b pb-2 pt-3 px-4">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2"><Clock className="w-4 h-4"/> Log Absensi Hari Ini</CardTitle>
-                    <Select value={logFilterKelas} onValueChange={setLogFilterKelas}><SelectTrigger className="w-[100px] h-7 text-[10px] bg-white"><SelectValue placeholder="Filter" /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2 text-gray-700"><Clock className="w-4 h-4 text-blue-500"/> Riwayat Absensi Hari Ini</CardTitle>
+                    <Select value={logFilterKelas} onValueChange={setLogFilterKelas}><SelectTrigger className="w-[100px] h-7 text-[10px] bg-white font-bold"><SelectValue placeholder="Filter" /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="max-h-[300px] overflow-y-auto divide-y">
-                        {dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).map((log) => (
-                            <div key={log.id} className="flex items-center justify-between p-2 px-4 hover:bg-blue-50/50 text-xs">
-                                <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={12}/> : <XCircle size={12}/>}</div><div><p className="font-bold text-gray-800">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500"><span className="bg-gray-100 px-1 rounded">Kls {log.santri?.kelas}{log.santri?.rombel ? `-${log.santri.rombel.nama}` : ''}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
-                                <div className="text-right"><span className="font-mono font-bold text-gray-700 block">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className="text-[9px] h-4 px-1">{log.status}</Badge></div>
-                            </div>
-                        ))}
+                        {dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).length === 0 ? (
+                             <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada aktivitas absensi di hari ini.</div>
+                        ) : (
+                            dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).map((log) => (
+                                <div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-blue-50/50 transition-colors">
+                                    <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}</div><div><p className="font-bold text-gray-800 text-sm">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500 mt-0.5"><span className="bg-gray-100 px-1.5 rounded font-bold">Kls {log.santri?.kelas}-{getRombel(log.santri?.rombel)}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
+                                    <div className="text-right"><span className="font-mono font-bold text-gray-700 block text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className={`text-[9px] h-4 px-1 ${log.status === 'Hadir' ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`}>{log.status}</Badge></div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </CardContent>
             </Card>
@@ -484,9 +520,17 @@ const AttendanceMonitoring = () => {
                 <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2 mb-4"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Mingguan Guru</h3>
                 <WeeklyTable category="guru" subjects={teacherList} />
             </div>
-            <Card>
-                <CardHeader className="bg-gray-50 border-b pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold">Log Absensi Guru</CardTitle></CardHeader>
-                <CardContent className="p-0"><div className="max-h-[300px] overflow-y-auto divide-y">{dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-2 px-4 hover:bg-teal-50/50 text-xs"><div className="flex items-center gap-3"><div className="p-1.5 rounded-full bg-teal-100 text-teal-600"><User size={12}/></div><div><p className="font-bold text-gray-800">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500">{log.activity?.name}</p></div></div><div className="text-right"><span className="font-mono font-bold block">{log.scan_time.slice(0,5)}</span><Badge className="bg-teal-600 text-[9px] h-4 px-1">{log.status}</Badge></div></div>))}</div></CardContent>
+            <Card className="shadow-sm">
+                <CardHeader className="bg-gray-50 border-b pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-gray-700">Log Absensi Guru</CardTitle></CardHeader>
+                <CardContent className="p-0">
+                    <div className="max-h-[300px] overflow-y-auto divide-y">
+                        {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
+                            <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru hari ini.</div>
+                        ) : (
+                            dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className="bg-teal-600 text-[9px] h-4 px-1">{log.status}</Badge></div></div>))
+                        )}
+                    </div>
+                </CardContent>
             </Card>
         </TabsContent>
 
