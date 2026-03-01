@@ -93,15 +93,36 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     if (activeKelas === null) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('view_santri_saldo')
+      // 1. Tarik data utama santri yang udah ada kelas_mengaji nya
+      const { data: baseData, error } = await supabase.from('santri_2025_12_01_21_34')
         .select('*')
         .eq('kelas', activeKelas)
         .order('rombel', { ascending: true }) 
         .order('nama_lengkap', { ascending: true });
+        
       if (error) throw error;
+
+      // 2. Tarik data saldo dari view
+      const { data: saldoData } = await supabase.from('view_santri_saldo')
+        .select('id, saldo')
+        .eq('kelas', activeKelas);
+
+      // 3. Gabungkan datanya (Merge)
+      const mergedData = baseData?.map(santri => {
+          const matchSaldo = saldoData?.find(s => s.id === santri.id);
+          return {
+              ...santri,
+              saldo: matchSaldo?.saldo || 0
+          };
+      });
+
       // @ts-ignore
-      setSantris(data || []);
-    } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); } finally { setLoading(false); }
+      setSantris(mergedData || []);
+    } catch (error: any) { 
+      toast({ title: "Error", description: error.message, variant: "destructive" }); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   useEffect(() => { activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); }, [activeKelas]);
@@ -284,24 +305,26 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     </div>
                     
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="col-span-2 space-y-2">
-                        <label className="text-sm font-medium">Kelas Sekolah</label>
-                        <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
-                          <SelectTrigger className={isEditMode ? "bg-gray-100" : ""}><SelectValue /></SelectTrigger>
-                          <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-1 space-y-2">
-                        <label className="text-sm font-medium">Rombel</label>
-                        <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
-                          <SelectTrigger className={isEditMode ? "bg-gray-100" : ""}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  {isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
+    <div className="col-span-2 space-y-2">
+        <label className="text-sm font-medium">Kelas Sekolah</label>
+        <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
+            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
+            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+            <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+        </Select>
+    </div>
+    <div className="col-span-1 space-y-2">
+        <label className="text-sm font-medium">Rombel</label>
+        <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
+            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+            <SelectContent>
+                {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+        </Select>
+    </div>
+</div>
+{isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
 
                     <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
@@ -447,16 +470,26 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     </div>
                     
                     <div className="grid grid-cols-3 gap-4">
-                        <div className="col-span-2 space-y-2"><label className="text-sm font-medium">Kelas</label><Select value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="col-span-1 space-y-2"><label className="text-sm font-medium">Rombel</label>
-                            <Select value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
+    <div className="col-span-2 space-y-2">
+        <label className="text-sm font-medium">Kelas Sekolah</label>
+        <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
+            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
+            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+            <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+        </Select>
+    </div>
+    <div className="col-span-1 space-y-2">
+        <label className="text-sm font-medium">Rombel</label>
+        <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
+            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+            <SelectContent>
+                {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+        </Select>
+    </div>
+</div>
+{isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
 
                     <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
