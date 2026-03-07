@@ -111,6 +111,83 @@ const AttendanceMonitoring = () => {
   }, [santriTab]);
 
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
+  /* ================= LOGIC HELPER & CHART ================= */
+  const getActivityType = (log: AttendanceLog) => {
+      const cat = log.activity?.category?.toLowerCase() || '';
+      const name = log.activity?.name?.toLowerCase() || '';
+      if (cat === 'pelajaran') return 'kbm';
+      if (cat === 'ibadah' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) {
+          if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab')) return 'mengaji';
+          return 'sholat';
+      }
+      if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz')) return 'mengaji';
+      return 'ekskul'; 
+  };
+
+  const getStats = (type: 'santri' | 'guru', group?: string) => {
+      let filtered = dailyLogs.filter(l => type === 'santri' ? l.santri_id : l.teacher_id);
+      if (group === 'kbm') filtered = filtered.filter(l => getActivityType(l) === 'kbm');
+      else if (group === 'ibadah') filtered = filtered.filter(l => getActivityType(l) === 'sholat' || getActivityType(l) === 'mengaji');
+      else if (group === 'ekskul') filtered = filtered.filter(l => getActivityType(l) === 'ekskul');
+
+      const total = filtered.length;
+      if (total === 0) return [{ name: 'Belum Ada Data', value: 1 }];
+      const hadir = filtered.filter(l => l.status === 'Hadir').length;
+      const telat = filtered.filter(l => l.status === 'Telat').length;
+      const izin = filtered.filter(l => l.status === 'Izin').length;
+      const sakit = filtered.filter(l => l.status === 'Sakit').length;
+
+      return [
+          { name: 'Hadir', value: hadir },
+          { name: 'Telat', value: telat },
+          { name: 'Sakit/Izin', value: izin + sakit },
+      ].filter(x => x.value > 0);
+  };
+
+  const handleSubmitPermission = async (type: 'santri' | 'guru') => {
+      try {
+          const payload: any = {
+              status: formStatus,
+              scan_time: new Date().toLocaleTimeString(),
+              created_at: new Date().toISOString(),
+              activity_id: null,
+              location_id: null,
+              keterangan: formKet
+          };
+          if (type === 'santri') {
+              if (!formSantriId) return toast({title: "Pilih Santri", variant: "destructive"});
+              payload.santri_id = formSantriId;
+          }
+          const { error } = await supabase.from('attendance_logs').insert([payload]);
+          if (error) throw error;
+          toast({ title: "Berhasil", description: "Data izin/sakit tersimpan." });
+          fetchData();
+          setFormSantriId(""); setFormKet("");
+      } catch (err: any) {
+          toast({ title: "Gagal", description: err.message, variant: "destructive" });
+      }
+  };
+
+  const ChartCard = ({ title, data }: { title: string, data: any[] }) => (
+      <Card className="border shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-center uppercase text-gray-500">{title}</CardTitle></CardHeader>
+          <CardContent className="h-[180px]">
+              {data[0].name === 'Belum Ada Data' ? (
+                  <div className="flex items-center justify-center h-full text-xs text-gray-400">Belum ada data</div>
+              ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                          <Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value">
+                              {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                          </Pie>
+                          <RechartsTooltip />
+                          <Legend verticalAlign="bottom" height={36} iconSize={8} wrapperStyle={{ fontSize: '10px' }}/>
+                      </PieChart>
+                  </ResponsiveContainer>
+              )}
+          </CardContent>
+      </Card>
+  );
   
   // Fungsi Super Tabel untuk Ikhwan/Akhwat
   const renderStudentTable = (students: Santri[], title: string, colorClass: string, cols: any[], getStatus: (id: string, key: string) => any) => {
