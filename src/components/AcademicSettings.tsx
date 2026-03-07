@@ -13,9 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   School, Moon, BookOpen, MapPin, Plus, Trash2, CalendarDays, Filter, 
-  Database, Cpu, Users, UserPlus, Medal, Pencil, CheckCircle2, User, RefreshCw
+  Database, Cpu, Users, UserPlus, Medal, Pencil, CheckCircle2, User, RefreshCw, Wifi
 } from "lucide-react";
-
 /* ================= TYPES ================= */
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
 interface Location { id: number; name: string; type: string; }
