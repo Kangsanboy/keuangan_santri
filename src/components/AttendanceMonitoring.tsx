@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Calendar, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -225,7 +225,7 @@ const AttendanceMonitoring = () => {
 
   // --- ALUR BARU: RENDER KHUSUS TAB KBM SEKOLAH ---
   const renderKbmFlow = () => {
-      // 1. TAHAP PILIH KELAS & ROMBEL
+      // 1. TAHAP PILIH KELAS & ROMBEL (LIST BAR MODE)
       if (!selectedKbmClass) {
           const classMap = new Map();
           santriList.forEach(s => {
@@ -239,63 +239,78 @@ const AttendanceMonitoring = () => {
 
           return (
               <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
-                  <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-4 border-b pb-2"><Users className="text-blue-500"/> Pilih Kelas & Rombel</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <h3 className="font-bold text-green-800 flex items-center gap-2 mb-4 border-b border-green-200 pb-2">
+                      <Users className="text-green-600"/> Pilih Kelas & Rombel
+                  </h3>
+                  <div className="flex flex-col gap-3">
                       {uniqueClasses.map(c => (
-                          <Card key={`${c.kelas}-${c.rombel}`} onClick={() => setSelectedKbmClass(c)} className="cursor-pointer hover:border-blue-500 hover:shadow-md transition-all group overflow-hidden border-2">
-                              <CardContent className="p-0 flex flex-col h-full">
-                                  <div className="bg-gray-50 flex-1 p-6 flex flex-col items-center justify-center text-center group-hover:bg-blue-50 transition-colors">
-                                      <div className="w-14 h-14 bg-white shadow-sm text-blue-600 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                          <GraduationCap size={28} />
-                                      </div>
-                                      <h4 className="font-extrabold text-xl text-gray-800">Kelas {c.kelas} - {c.rombel}</h4>
+                          <div key={`${c.kelas}-${c.rombel}`} 
+                               onClick={() => setSelectedKbmClass(c)} 
+                               className="flex items-center justify-between p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 hover:shadow-md transition-all group"
+                          >
+                              <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-green-100 text-green-700 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors shadow-sm">
+                                      <GraduationCap size={24} />
                                   </div>
-                                  <div className="bg-white p-2 text-center border-t">
-                                      <p className="text-xs font-bold text-gray-500">{c.count} Santri</p>
+                                  <div>
+                                      <h4 className="font-extrabold text-lg text-gray-800">Kelas {c.kelas} - {c.rombel}</h4>
+                                      <p className="text-xs font-medium text-gray-500">{c.count} Santri Terdaftar</p>
                                   </div>
-                              </CardContent>
-                          </Card>
+                              </div>
+                              <div className="text-green-500 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
+                                  <ArrowRight />
+                              </div>
+                          </div>
                       ))}
                   </div>
               </div>
           )
       }
 
-      // 2. TAHAP PILIH PELAJARAN
+      // 2. TAHAP PILIH PELAJARAN (SCROLLABLE LIST BAR MODE)
       if (!selectedKbmSubject) {
           const subjects = activities.filter(a => a.category === 'pelajaran');
           return (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-                  <div className="flex items-center gap-3 mb-4 border-b pb-2">
-                      <Button variant="outline" size="sm" onClick={() => setSelectedKbmClass(null)} className="hover:bg-gray-100"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                      <h3 className="font-bold text-gray-700 flex items-center gap-2">Pilih Mata Pelajaran <Badge className="bg-blue-600 ml-2">Kelas {selectedKbmClass.kelas}-{selectedKbmClass.rombel}</Badge></h3>
+                  <div className="flex items-center justify-between mb-4 border-b border-green-200 pb-3">
+                      <div className="flex items-center gap-3">
+                          <Button variant="outline" size="sm" onClick={() => setSelectedKbmClass(null)} className="hover:bg-green-50 border-green-200 text-green-700">
+                              <ArrowLeft className="w-4 h-4 mr-2"/> Kembali
+                          </Button>
+                          <h3 className="font-bold text-green-800 flex items-center gap-2">
+                              Pilih Pelajaran <Badge className="bg-green-600 ml-2 shadow-sm">Kls {selectedKbmClass.kelas}-{selectedKbmClass.rombel}</Badge>
+                          </h3>
+                      </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  
+                  <div className="flex flex-col gap-3 max-h-[450px] overflow-y-auto pr-2 pb-2">
                       {subjects.length === 0 ? (
-                           <div className="col-span-full text-center p-8 text-gray-400 border border-dashed rounded-xl bg-gray-50">Belum ada data mata pelajaran di menu Jadwal.</div>
+                           <div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50/50">Belum ada data mata pelajaran di menu Jadwal.</div>
                       ) : subjects.map(s => (
-                          <Card key={s.id} onClick={() => setSelectedKbmSubject(s)} className="cursor-pointer hover:border-green-500 hover:shadow-md transition-all group border-b-4 border-b-transparent hover:border-b-green-500">
-                              <CardContent className="p-4 flex flex-col items-center justify-center text-center">
-                                  <div className="w-10 h-10 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-2 group-hover:bg-green-600 group-hover:text-white transition-colors">
-                                      <BookOpen size={20} />
-                                  </div>
-                                  <h4 className="font-bold text-sm text-gray-800 line-clamp-2">{s.name}</h4>
-                              </CardContent>
-                          </Card>
+                          <div key={s.id} 
+                               onClick={() => setSelectedKbmSubject(s)} 
+                               className="flex items-center p-3 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all group shadow-sm"
+                          >
+                              <div className="w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mr-4 group-hover:bg-green-600 group-hover:text-white transition-colors shadow-sm border border-green-200 group-hover:border-green-600">
+                                  <BookOpen size={20} />
+                              </div>
+                              <h4 className="font-bold text-sm text-gray-800 flex-1">{s.name}</h4>
+                              <Badge variant="outline" className="border-green-300 text-green-700 bg-green-50 mr-2">{s.category}</Badge>
+                              <div className="text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <ArrowRight size={18}/>
+                              </div>
+                          </div>
                       ))}
                   </div>
               </div>
           )
       }
 
-      // 3. TAHAP TABEL ABSENSI PERTEMUAN
+      // 3. TAHAP TABEL ABSENSI PERTEMUAN (DIPISAH IKHWAN & AKHWAT)
       const classStudents = santriList.filter(s => s.kelas === selectedKbmClass.kelas && getRombel(s.rombel) === selectedKbmClass.rombel);
       const subjectLogs = logs.filter(l => l.activity_id === selectedKbmSubject.id && l.santri?.kelas === selectedKbmClass.kelas && getRombel(l.santri?.rombel) === selectedKbmClass.rombel);
       
-      // Ambil tanggal unik dari log untuk dijadikan "Pertemuan"
       const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
-      
-      // Kita buat template 8 pertemuan ke samping (bisa memanjang otomatis kalau data lebih dari 8)
       const meetingCount = Math.max(uniqueDates.length, 8);
       const meetings = Array.from({length: meetingCount}, (_, i) => ({
           label: `Per-${i+1}`,
@@ -312,44 +327,40 @@ const AttendanceMonitoring = () => {
           return <span className="text-green-500 font-bold">✓</span>;
       };
 
-      return (
-          <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 bg-green-50 p-4 rounded-xl border border-green-100">
-                  <div className="flex items-center gap-4">
-                      <Button variant="outline" size="sm" onClick={() => setSelectedKbmSubject(null)} className="bg-white"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                      <div>
-                          <h3 className="font-extrabold text-green-900 text-lg flex items-center gap-2"><BookOpen size={18}/> {selectedKbmSubject.name}</h3>
-                          <p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedKbmClass.kelas}-{selectedKbmClass.rombel} • {classStudents.length} Santri</p>
-                      </div>
-                  </div>
-              </div>
+      const ikhwan = classStudents.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
+      const akhwat = classStudents.filter(s => s.gender === 'akhwat' || s.gender === 'P');
 
-              <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm">
+      const renderPertemuanTable = (students: Santri[], title: string, hoverColor: string, headerClass: string) => (
+          <div className="mb-6 animate-in slide-in-from-bottom-4 duration-500">
+              <h4 className={`text-sm font-bold uppercase mb-3 flex items-center gap-2 p-2 rounded-lg ${headerClass}`}>
+                  <User size={16}/> {title} ({students.length})
+              </h4>
+              <div className="overflow-x-auto border-2 border-gray-200 rounded-xl bg-white shadow-sm">
                   <table className="w-full text-sm text-left whitespace-nowrap">
-                      <thead className="bg-gray-100 text-gray-700 uppercase font-bold border-b border-gray-200">
+                      <thead className="bg-gray-50 text-gray-700 uppercase font-bold border-b-2 border-gray-200">
                           <tr>
-                              <th className="p-3 text-center w-10 border-r">No</th>
-                              <th className="p-3 min-w-[200px] border-r">Nama Lengkap</th>
-                              <th className="p-3 w-20 border-r text-center">NIS</th>
+                              <th className="p-3 text-center w-10 border-r border-gray-200">No</th>
+                              <th className="p-3 min-w-[200px] border-r border-gray-200">Nama Lengkap</th>
+                              <th className="p-3 w-20 border-r border-gray-200 text-center">NIS</th>
                               {meetings.map((m, idx) => (
-                                  <th key={idx} className="p-3 text-center w-16 border-r text-xs bg-white/50" title={m.date || "Belum ada data"}>
+                                  <th key={idx} className="p-3 text-center w-16 border-r border-gray-200 text-xs bg-white" title={m.date || "Belum ada data"}>
                                       {m.label}
-                                      {m.date && <span className="block text-[8px] font-normal text-gray-400 mt-1">{m.date.slice(5)}</span>}
+                                      {m.date && <span className="block text-[9px] font-normal text-gray-400 mt-1">{m.date.slice(5)}</span>}
                                   </th>
                               ))}
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                          {classStudents.length === 0 ? (
-                              <tr><td colSpan={3 + meetings.length} className="p-8 text-center text-gray-400 italic">Tidak ada santri di rombel ini.</td></tr>
+                          {students.length === 0 ? (
+                              <tr><td colSpan={3 + meetings.length} className="p-8 text-center text-gray-400 italic">Tidak ada santri.</td></tr>
                           ) : (
-                              classStudents.map((s, idx) => (
-                                  <tr key={s.id} className="hover:bg-blue-50/50 transition-colors">
-                                      <td className="p-3 text-center border-r text-gray-500 font-medium">{idx + 1}</td>
-                                      <td className="p-3 border-r font-bold text-gray-800">{s.nama_lengkap}</td>
-                                      <td className="p-3 border-r text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
+                              students.map((s, idx) => (
+                                  <tr key={s.id} className={`${hoverColor} transition-colors`}>
+                                      <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx + 1}</td>
+                                      <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{s.nama_lengkap}</td>
+                                      <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
                                       {meetings.map((m, mIdx) => (
-                                          <td key={mIdx} className="p-3 border-r text-center bg-gray-50/30">
+                                          <td key={mIdx} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">
                                               {getStatus(s.id, m.date)}
                                           </td>
                                       ))}
@@ -359,6 +370,25 @@ const AttendanceMonitoring = () => {
                       </tbody>
                   </table>
               </div>
+          </div>
+      );
+
+      return (
+          <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 bg-green-50 p-4 rounded-xl border-2 border-green-200 shadow-sm">
+                  <div className="flex items-center gap-4">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedKbmSubject(null)} className="bg-white border-green-200 hover:bg-green-100 text-green-700">
+                          <ArrowLeft className="w-4 h-4 mr-2"/> Kembali
+                      </Button>
+                      <div>
+                          <h3 className="font-extrabold text-green-900 text-lg flex items-center gap-2"><BookOpen size={18}/> {selectedKbmSubject.name}</h3>
+                          <p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedKbmClass.kelas}-{selectedKbmClass.rombel} • {classStudents.length} Total Santri</p>
+                      </div>
+                  </div>
+              </div>
+
+              {renderPertemuanTable(ikhwan, "Ikhwan", "hover:bg-green-50/50", "bg-green-100 text-green-800 border-l-4 border-green-600")}
+              {renderPertemuanTable(akhwat, "Akhwat", "hover:bg-pink-50/50", "bg-pink-100 text-pink-800 border-l-4 border-pink-500")}
           </div>
       )
   };
@@ -393,30 +423,30 @@ const AttendanceMonitoring = () => {
       if (subjects.length === 0) return <div className="text-center py-2 text-xs text-gray-400 italic">Data kosong.</div>;
 
       return (
-          <div className="overflow-x-auto border rounded-lg bg-white shadow-sm mt-1 mb-4">
+          <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white shadow-sm mt-1 mb-4">
               <table className="w-full text-xs text-left">
-                  <thead className="bg-gray-50 text-gray-700 uppercase font-bold">
+                  <thead className="bg-gray-50 text-gray-700 uppercase font-bold border-b-2 border-gray-200">
                       <tr>
-                          <th className="p-2 border-b w-8 text-center">No</th>
-                          <th className="p-2 border-b min-w-[150px]">Nama Lengkap</th>
-                          {category !== 'guru' && <th className="p-2 border-b w-20">NIS</th>}
-                          {category !== 'guru' && <th className="p-2 border-b w-16 text-center">Kls</th>}
-                          {days.map(d => <th key={d} className="p-2 border-b text-center w-8">{d.slice(0,3)}</th>)}
+                          <th className="p-2 border-r border-gray-200 w-8 text-center">No</th>
+                          <th className="p-2 border-r border-gray-200 min-w-[150px]">Nama Lengkap</th>
+                          {category !== 'guru' && <th className="p-2 border-r border-gray-200 w-20">NIS</th>}
+                          {category !== 'guru' && <th className="p-2 border-r border-gray-200 w-16 text-center">Kls</th>}
+                          {days.map(d => <th key={d} className="p-2 border-r border-gray-200 text-center w-8">{d.slice(0,3)}</th>)}
                       </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className="divide-y divide-gray-100">
                       {subjects.map((s, idx) => (
                           <tr key={s.id} className="hover:bg-gray-50">
-                              <td className="p-2 text-center border-r">{idx + 1}</td>
-                              <td className="p-2 border-r font-medium truncate max-w-[150px]">{s.nama_lengkap || s.full_name}</td>
-                              {category !== 'guru' && <td className="p-2 border-r text-gray-500">{s.nis}</td>}
+                              <td className="p-2 text-center border-r border-gray-100">{idx + 1}</td>
+                              <td className="p-2 border-r border-gray-100 font-medium truncate max-w-[150px]">{s.nama_lengkap || s.full_name}</td>
+                              {category !== 'guru' && <td className="p-2 border-r border-gray-100 text-gray-500">{s.nis}</td>}
                               {category !== 'guru' && (
-                                  <td className="p-2 border-r text-center font-bold text-gray-700">
+                                  <td className="p-2 border-r border-gray-100 text-center font-bold text-gray-700 bg-gray-50/50">
                                       {isMengaji ? s.kelas_mengaji : s.kelas}-{getRombel(isMengaji ? s.rombel_mengaji : s.rombel)}
                                   </td>
                               )}
                               {days.map((_, i) => (
-                                  <td key={i} className="p-2 border-r text-center bg-gray-50/20">
+                                  <td key={i} className="p-2 border-r border-gray-100 text-center bg-white">
                                       {getStatusOnDay(String(s.id), i)}
                                   </td>
                               ))}
@@ -456,28 +486,28 @@ const AttendanceMonitoring = () => {
       if (subjectList.length === 0) return <div className="text-center py-2 text-xs text-gray-400 italic">Belum ada anggota.</div>;
 
       return (
-          <div className="overflow-x-auto border rounded-lg bg-white shadow-sm mt-2 mb-4">
+          <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white shadow-sm mt-2 mb-4">
               <table className="w-full text-xs text-left">
-                  <thead className="bg-orange-50 text-orange-800 uppercase font-bold">
+                  <thead className="bg-orange-50 text-orange-800 uppercase font-bold border-b-2 border-orange-200">
                       <tr>
-                          <th className="p-2 border-b w-8 text-center">No</th>
-                          <th className="p-2 border-b min-w-[150px]">Nama Anggota</th>
-                          <th className="p-2 border-b w-20">NIS</th>
-                          <th className="p-2 border-b w-16 text-center">Kls</th>
-                          {weeks.map(w => <th key={w} className="p-2 border-b text-center w-12">Min {w}</th>)}
+                          <th className="p-2 border-r border-orange-100 w-8 text-center">No</th>
+                          <th className="p-2 border-r border-orange-100 min-w-[150px]">Nama Anggota</th>
+                          <th className="p-2 border-r border-orange-100 w-20">NIS</th>
+                          <th className="p-2 border-r border-orange-100 w-16 text-center">Kls</th>
+                          {weeks.map(w => <th key={w} className="p-2 border-r border-orange-100 text-center w-12">Min {w}</th>)}
                       </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className="divide-y divide-gray-100">
                       {subjectList.map((s, idx) => (
-                          <tr key={s.id} className="hover:bg-gray-50">
-                              <td className="p-2 text-center border-r">{idx + 1}</td>
-                              <td className="p-2 border-r font-medium">{s.nama_lengkap}</td>
-                              <td className="p-2 border-r text-gray-500">{s.nis}</td>
-                              <td className="p-2 border-r text-center font-bold">
+                          <tr key={s.id} className="hover:bg-orange-50/30">
+                              <td className="p-2 text-center border-r border-gray-100">{idx + 1}</td>
+                              <td className="p-2 border-r border-gray-100 font-medium">{s.nama_lengkap}</td>
+                              <td className="p-2 border-r border-gray-100 text-gray-500">{s.nis}</td>
+                              <td className="p-2 border-r border-gray-100 text-center font-bold bg-gray-50/50">
                                   {s.kelas}-{getRombel(s.rombel)}
                               </td>
                               {weeks.map(w => (
-                                  <td key={w} className="p-2 border-r text-center bg-gray-50/20">
+                                  <td key={w} className="p-2 border-r border-gray-100 text-center bg-white">
                                       {getStatusOnWeek(s.id, w)}
                                   </td>
                               ))}
@@ -520,7 +550,7 @@ const AttendanceMonitoring = () => {
                   return (
                       <div key={cls} className="animate-in fade-in slide-in-from-bottom-2 border p-4 rounded-xl bg-gray-50/50 shadow-sm">
                           <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200">
-                              <Badge className="bg-blue-700 text-base px-4 py-1.5 shadow-sm">Kelas {cls}</Badge>
+                              <Badge className="bg-green-700 text-base px-4 py-1.5 shadow-sm">Kelas {cls}</Badge>
                               <span className="text-sm text-gray-500 font-bold bg-white px-2 py-1 rounded border">
                                   {classStudents.length} Total Santri
                               </span>
@@ -535,9 +565,9 @@ const AttendanceMonitoring = () => {
                                   if (rombelStudents.length === 0) return null;
 
                                   return (
-                                      <div key={rombelName} className="border border-blue-100 p-4 rounded-xl bg-white shadow-sm">
-                                          <h4 className="font-bold text-blue-900 mb-3 flex items-center gap-2 border-b border-blue-50 pb-2">
-                                              <Badge variant="outline" className="border-blue-400 text-blue-800 bg-blue-50/50">
+                                      <div key={rombelName} className="border-2 border-green-100 p-4 rounded-xl bg-white shadow-sm">
+                                          <h4 className="font-bold text-green-900 mb-3 flex items-center gap-2 border-b border-green-50 pb-2">
+                                              <Badge variant="outline" className="border-green-400 text-green-800 bg-green-50/50">
                                                   Rombel {rombelName}
                                               </Badge>
                                               <span className="text-xs text-gray-400 font-medium">({rombelStudents.length} Santri)</span>
@@ -567,23 +597,23 @@ const AttendanceMonitoring = () => {
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-blue-100">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
         <div>
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <FileSpreadsheet className="text-blue-600" /> Monitoring Absensi
+                <FileSpreadsheet className="text-green-600" /> Monitoring Absensi
             </h1>
-            <p className="text-xs text-gray-500">Pantau kehadiran secara real-time & historis mingguan/bulanan.</p>
+            <p className="text-xs text-gray-500">Pantau kehadiran KBM secara detail per pertemuan, atau historis mingguan/bulanan.</p>
         </div>
-        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border">
+        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
             <Calendar className="text-gray-500 w-4 h-4" />
             <input type="date" className="bg-transparent text-sm font-bold text-gray-700 outline-none" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
         </div>
       </div>
 
       <Tabs defaultValue="santri" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="santri" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white shadow-sm">Santri</TabsTrigger>
-            <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white shadow-sm">Guru & Staf</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 mb-6 bg-gray-100 p-1">
+            <TabsTrigger value="santri" className="data-[state=active]:bg-green-600 data-[state=active]:text-white shadow-sm font-bold">Santri</TabsTrigger>
+            <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white shadow-sm font-bold">Guru & Staf</TabsTrigger>
         </TabsList>
 
         <TabsContent value="santri" className="space-y-6">
@@ -593,9 +623,9 @@ const AttendanceMonitoring = () => {
                 <ChartCard title="Grafik Ekskul" data={getStats('santri', 'ekskul')} />
             </div>
 
-            <div className="bg-white p-6 rounded-xl border shadow-sm">
+            <div className="bg-white p-6 rounded-xl border border-green-100 shadow-sm">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Rekap Absensi</h3>
+                    <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-green-600"/> Rekap Absensi</h3>
                     {santriTab !== 'ekskul' && santriTab !== 'kbm' && (
                         <Select value={filterKelas} onValueChange={setFilterKelas}>
                             <SelectTrigger className="w-[150px] h-8 text-xs font-bold"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
@@ -605,15 +635,13 @@ const AttendanceMonitoring = () => {
                 </div>
 
                 <Tabs defaultValue="kbm" value={santriTab} onValueChange={setSantriTab} className="w-full">
-                    {/* 🔥 URUTAN TAB DIUBAH */}
-                    <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg mb-6 shadow-inner">
-                        <TabsTrigger value="kbm" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">KBM Sekolah</TabsTrigger>
-                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Mengaji</TabsTrigger>
-                        <TabsTrigger value="sholat" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Sholat</TabsTrigger>
-                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Ekskul</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-4 bg-green-50 p-1 rounded-lg mb-6 border border-green-100">
+                        <TabsTrigger value="kbm" className="data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">KBM Sekolah</TabsTrigger>
+                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Mengaji</TabsTrigger>
+                        <TabsTrigger value="sholat" className="data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Sholat</TabsTrigger>
+                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Ekskul</TabsTrigger>
                     </TabsList>
 
-                    {/* 🔥 ALUR KBM BARU DIPANGGIL DI SINI */}
                     <TabsContent value="kbm">{renderKbmFlow()}</TabsContent>
                     <TabsContent value="mengaji"><RenderClassTables category="mengaji" /></TabsContent>
                     <TabsContent value="sholat"><RenderClassTables category="sholat" /></TabsContent>
@@ -624,28 +652,28 @@ const AttendanceMonitoring = () => {
             <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
                 <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Manual</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} ({s.kelas}-{getRombel(s.rombel)})</SelectItem>))}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-5 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
+                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} ({s.kelas}-{getRombel(s.rombel)})</SelectItem>))}</SelectContent></Select></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
+                    <div className="md:col-span-5 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
-                <CardHeader className="flex flex-row justify-between items-center bg-gray-50 border-b pb-2 pt-3 px-4">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2 text-gray-700"><Clock className="w-4 h-4 text-blue-500"/> Riwayat Absensi Hari Ini</CardTitle>
-                    <Select value={logFilterKelas} onValueChange={setLogFilterKelas}><SelectTrigger className="w-[100px] h-7 text-[10px] bg-white font-bold"><SelectValue placeholder="Filter" /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select>
+            <Card className="shadow-sm border-green-200">
+                <CardHeader className="flex flex-row justify-between items-center bg-green-50/50 border-b border-green-100 pb-2 pt-3 px-4">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2 text-green-800"><Clock className="w-4 h-4 text-green-600"/> Riwayat Absensi Hari Ini</CardTitle>
+                    <Select value={logFilterKelas} onValueChange={setLogFilterKelas}><SelectTrigger className="w-[100px] h-7 text-[10px] bg-white font-bold border-green-200"><SelectValue placeholder="Filter" /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <div className="max-h-[300px] overflow-y-auto divide-y">
+                    <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
                         {dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).length === 0 ? (
                              <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada aktivitas absensi di hari ini.</div>
                         ) : (
                             dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).map((log) => (
-                                <div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-blue-50/50 transition-colors">
-                                    <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full ${log.status === 'Hadir' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}</div><div><p className="font-bold text-gray-800 text-sm">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500 mt-0.5"><span className="bg-gray-100 px-1.5 rounded font-bold">Kls {log.santri?.kelas}-{getRombel(log.santri?.rombel)}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
-                                    <div className="text-right"><span className="font-mono font-bold text-gray-700 block text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className={`text-[9px] h-4 px-1 ${log.status === 'Hadir' ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`}>{log.status}</Badge></div>
+                                <div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-green-50/50 transition-colors">
+                                    <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full shadow-sm border ${log.status === 'Hadir' ? 'bg-green-100 text-green-600 border-green-200' : 'bg-red-100 text-red-600 border-red-200'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}</div><div><p className="font-bold text-gray-800 text-sm">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500 mt-0.5"><span className="bg-gray-100 px-1.5 rounded font-bold border">Kls {log.santri?.kelas}-{getRombel(log.santri?.rombel)}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
+                                    <div className="text-right"><span className="font-mono font-bold text-gray-700 block text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className={`text-[9px] h-4 px-1 ${log.status === 'Hadir' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{log.status}</Badge></div>
                                 </div>
                             ))
                         )}
@@ -659,18 +687,18 @@ const AttendanceMonitoring = () => {
                 <ChartCard title="Kehadiran Mengajar (KBM)" data={getStats('guru', 'kbm')} />
                 <ChartCard title="Kehadiran Kegiatan Lain" data={getStats('guru', 'ibadah')} />
             </div>
-            <div className="bg-white p-6 rounded-xl border shadow-sm">
-                <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2 mb-4"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Mingguan Guru</h3>
+            <div className="bg-white p-6 rounded-xl border border-teal-100 shadow-sm">
+                <h3 className="font-bold text-lg text-teal-800 flex items-center gap-2 mb-4"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Mingguan Guru</h3>
                 <WeeklyTable category="guru" subjects={teacherList} />
             </div>
-            <Card className="shadow-sm">
-                <CardHeader className="bg-gray-50 border-b pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-gray-700">Log Absensi Guru</CardTitle></CardHeader>
+            <Card className="shadow-sm border-teal-200">
+                <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800">Log Absensi Guru</CardTitle></CardHeader>
                 <CardContent className="p-0">
-                    <div className="max-h-[300px] overflow-y-auto divide-y">
+                    <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
                         {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
                             <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru hari ini.</div>
                         ) : (
-                            dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className="bg-teal-600 text-[9px] h-4 px-1">{log.status}</Badge></div></div>))
+                            dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className="bg-teal-600 text-[9px] h-4 px-1 shadow-sm">{log.status}</Badge></div></div>))
                         )}
                     </div>
                 </CardContent>
