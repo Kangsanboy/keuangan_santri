@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Calendar, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -20,7 +20,7 @@ interface Santri {
   kelas: number; 
   gender: string; 
   nis: string;
-  rombel?: any; // 🔥 Diubah jadi any biar fleksibel (bisa string "A" atau object)
+  rombel?: any; 
   kelas_mengaji?: number;
   rombel_mengaji?: any;
 }
@@ -35,7 +35,7 @@ interface AttendanceLog {
       kelas: number; 
       nis: string; 
       gender: string;
-      rombel?: any;
+      rombel?: any; 
       kelas_mengaji?: number;
       rombel_mengaji?: any;
   };
@@ -54,6 +54,10 @@ const AttendanceMonitoring = () => {
   const [activeTab, setActiveTab] = useState("santri");
   const [santriTab, setSantriTab] = useState("kbm");
   
+  // State untuk Alur Baru KBM
+  const [selectedKbmClass, setSelectedKbmClass] = useState<{kelas: number, rombel: string} | null>(null);
+  const [selectedKbmSubject, setSelectedKbmSubject] = useState<Activity | null>(null);
+
   // Data Master
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [santriList, setSantriList] = useState<Santri[]>([]);
@@ -74,9 +78,8 @@ const AttendanceMonitoring = () => {
   const [formKet, setFormKet] = useState("");
 
   /* ================= HELPER ROMBEL ================= */
-  // Fungsi aman buat ngambil nama rombel (jaga-jaga kalau datanya string atau object)
   const getRombel = (rombelData: any) => {
-      if (!rombelData) return 'A'; // Default kalau kosong
+      if (!rombelData) return 'A'; 
       if (typeof rombelData === 'string') return rombelData;
       if (typeof rombelData === 'object' && rombelData.nama) return rombelData.nama;
       return 'A';
@@ -87,11 +90,9 @@ const AttendanceMonitoring = () => {
     setLoading(true);
     try {
       const selectedDate = new Date(dateFilter);
-      
       const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
-      // 🔥 PERBAIKAN QUERY: Ambil rombel langsung sebagai kolom, bukan relasi tabel
       const { data: logData, error } = await supabase
         .from('attendance_logs')
         .select(`
@@ -107,10 +108,9 @@ const AttendanceMonitoring = () => {
       if (error) throw error;
       setLogs(logData as any || []);
 
-      // 🔥 PERBAIKAN QUERY SANTRI
       const { data: sData } = await supabase
         .from('santri_2025_12_01_21_34')
-        .select('*')
+        .select('id, nama_lengkap, kelas, nis, gender, rombel, kelas_mengaji, rombel_mengaji')
         .eq('status', 'aktif');
       
       if (sData) setSantriList(sData as any);
@@ -132,6 +132,14 @@ const AttendanceMonitoring = () => {
   };
 
   useEffect(() => { fetchData(); }, [dateFilter]);
+
+  // Reset state alur KBM kalau pindah tab
+  useEffect(() => {
+     if (santriTab !== 'kbm') {
+         setSelectedKbmClass(null);
+         setSelectedKbmSubject(null);
+     }
+  }, [santriTab]);
 
   /* ================= LOGIC HELPER ================= */
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
@@ -215,10 +223,151 @@ const AttendanceMonitoring = () => {
       </Card>
   );
 
-  // --- TABEL MINGGUAN (KBM / SHOLAT / MENGAJI) ---
+  // --- ALUR BARU: RENDER KHUSUS TAB KBM SEKOLAH ---
+  const renderKbmFlow = () => {
+      // 1. TAHAP PILIH KELAS & ROMBEL
+      if (!selectedKbmClass) {
+          const classMap = new Map();
+          santriList.forEach(s => {
+              const k = s.kelas;
+              const r = getRombel(s.rombel);
+              const key = `${k}-${r}`;
+              if (!classMap.has(key)) classMap.set(key, { kelas: k, rombel: r, count: 0 });
+              classMap.get(key).count++;
+          });
+          const uniqueClasses = Array.from(classMap.values()).sort((a,b) => a.kelas === b.kelas ? a.rombel.localeCompare(b.rombel) : a.kelas - b.kelas);
+
+          return (
+              <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+                  <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-4 border-b pb-2"><Users className="text-blue-500"/> Pilih Kelas & Rombel</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {uniqueClasses.map(c => (
+                          <Card key={`${c.kelas}-${c.rombel}`} onClick={() => setSelectedKbmClass(c)} className="cursor-pointer hover:border-blue-500 hover:shadow-md transition-all group overflow-hidden border-2">
+                              <CardContent className="p-0 flex flex-col h-full">
+                                  <div className="bg-gray-50 flex-1 p-6 flex flex-col items-center justify-center text-center group-hover:bg-blue-50 transition-colors">
+                                      <div className="w-14 h-14 bg-white shadow-sm text-blue-600 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                          <GraduationCap size={28} />
+                                      </div>
+                                      <h4 className="font-extrabold text-xl text-gray-800">Kelas {c.kelas} - {c.rombel}</h4>
+                                  </div>
+                                  <div className="bg-white p-2 text-center border-t">
+                                      <p className="text-xs font-bold text-gray-500">{c.count} Santri</p>
+                                  </div>
+                              </CardContent>
+                          </Card>
+                      ))}
+                  </div>
+              </div>
+          )
+      }
+
+      // 2. TAHAP PILIH PELAJARAN
+      if (!selectedKbmSubject) {
+          const subjects = activities.filter(a => a.category === 'pelajaran');
+          return (
+              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                  <div className="flex items-center gap-3 mb-4 border-b pb-2">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedKbmClass(null)} className="hover:bg-gray-100"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                      <h3 className="font-bold text-gray-700 flex items-center gap-2">Pilih Mata Pelajaran <Badge className="bg-blue-600 ml-2">Kelas {selectedKbmClass.kelas}-{selectedKbmClass.rombel}</Badge></h3>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {subjects.length === 0 ? (
+                           <div className="col-span-full text-center p-8 text-gray-400 border border-dashed rounded-xl bg-gray-50">Belum ada data mata pelajaran di menu Jadwal.</div>
+                      ) : subjects.map(s => (
+                          <Card key={s.id} onClick={() => setSelectedKbmSubject(s)} className="cursor-pointer hover:border-green-500 hover:shadow-md transition-all group border-b-4 border-b-transparent hover:border-b-green-500">
+                              <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+                                  <div className="w-10 h-10 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-2 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                                      <BookOpen size={20} />
+                                  </div>
+                                  <h4 className="font-bold text-sm text-gray-800 line-clamp-2">{s.name}</h4>
+                              </CardContent>
+                          </Card>
+                      ))}
+                  </div>
+              </div>
+          )
+      }
+
+      // 3. TAHAP TABEL ABSENSI PERTEMUAN
+      const classStudents = santriList.filter(s => s.kelas === selectedKbmClass.kelas && getRombel(s.rombel) === selectedKbmClass.rombel);
+      const subjectLogs = logs.filter(l => l.activity_id === selectedKbmSubject.id && l.santri?.kelas === selectedKbmClass.kelas && getRombel(l.santri?.rombel) === selectedKbmClass.rombel);
+      
+      // Ambil tanggal unik dari log untuk dijadikan "Pertemuan"
+      const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
+      
+      // Kita buat template 8 pertemuan ke samping (bisa memanjang otomatis kalau data lebih dari 8)
+      const meetingCount = Math.max(uniqueDates.length, 8);
+      const meetings = Array.from({length: meetingCount}, (_, i) => ({
+          label: `Per-${i+1}`,
+          date: uniqueDates[i] || null 
+      }));
+
+      const getStatus = (santriId: string, date: string | null) => {
+          if (!date) return "-";
+          const log = subjectLogs.find(l => l.santri_id === santriId && l.created_at.startsWith(date));
+          if (!log) return "-";
+          if (log.status === 'Sakit') return <span className="text-red-500 font-bold">S</span>;
+          if (log.status === 'Izin') return <span className="text-blue-500 font-bold">I</span>;
+          if (log.status === 'Telat') return <span className="text-yellow-600 font-bold">T</span>;
+          return <span className="text-green-500 font-bold">✓</span>;
+      };
+
+      return (
+          <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 bg-green-50 p-4 rounded-xl border border-green-100">
+                  <div className="flex items-center gap-4">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedKbmSubject(null)} className="bg-white"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                      <div>
+                          <h3 className="font-extrabold text-green-900 text-lg flex items-center gap-2"><BookOpen size={18}/> {selectedKbmSubject.name}</h3>
+                          <p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedKbmClass.kelas}-{selectedKbmClass.rombel} • {classStudents.length} Santri</p>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                      <thead className="bg-gray-100 text-gray-700 uppercase font-bold border-b border-gray-200">
+                          <tr>
+                              <th className="p-3 text-center w-10 border-r">No</th>
+                              <th className="p-3 min-w-[200px] border-r">Nama Lengkap</th>
+                              <th className="p-3 w-20 border-r text-center">NIS</th>
+                              {meetings.map((m, idx) => (
+                                  <th key={idx} className="p-3 text-center w-16 border-r text-xs bg-white/50" title={m.date || "Belum ada data"}>
+                                      {m.label}
+                                      {m.date && <span className="block text-[8px] font-normal text-gray-400 mt-1">{m.date.slice(5)}</span>}
+                                  </th>
+                              ))}
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                          {classStudents.length === 0 ? (
+                              <tr><td colSpan={3 + meetings.length} className="p-8 text-center text-gray-400 italic">Tidak ada santri di rombel ini.</td></tr>
+                          ) : (
+                              classStudents.map((s, idx) => (
+                                  <tr key={s.id} className="hover:bg-blue-50/50 transition-colors">
+                                      <td className="p-3 text-center border-r text-gray-500 font-medium">{idx + 1}</td>
+                                      <td className="p-3 border-r font-bold text-gray-800">{s.nama_lengkap}</td>
+                                      <td className="p-3 border-r text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
+                                      {meetings.map((m, mIdx) => (
+                                          <td key={mIdx} className="p-3 border-r text-center bg-gray-50/30">
+                                              {getStatus(s.id, m.date)}
+                                          </td>
+                                      ))}
+                                  </tr>
+                              ))
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )
+  };
+
+  // --- TABEL LAMA UNTUK MENGAJI, SHOLAT, EKSKUL ---
   const WeeklyTable = ({ category, subjects }: { category: string, subjects: any[] }) => {
       const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
       const selectedDate = new Date(dateFilter);
+      const isMengaji = category === 'mengaji';
       
       const startOfWeek = new Date(selectedDate);
       startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1);
@@ -263,7 +412,7 @@ const AttendanceMonitoring = () => {
                               {category !== 'guru' && <td className="p-2 border-r text-gray-500">{s.nis}</td>}
                               {category !== 'guru' && (
                                   <td className="p-2 border-r text-center font-bold text-gray-700">
-                                      {category === 'mengaji' ? s.kelas_mengaji : s.kelas}-{getRombel(category === 'mengaji' ? s.rombel_mengaji : s.rombel)}
+                                      {isMengaji ? s.kelas_mengaji : s.kelas}-{getRombel(isMengaji ? s.rombel_mengaji : s.rombel)}
                                   </td>
                               )}
                               {days.map((_, i) => (
@@ -279,7 +428,6 @@ const AttendanceMonitoring = () => {
       );
   };
 
-  // --- TABEL BULANAN (KHUSUS EKSKUL) ---
   const MonthlyEkskulTable = ({ activityId }: { activityId: number }) => {
       const memberIds = members.filter(m => m.activity_id === activityId).map(m => m.santri_id);
       const subjectList = santriList.filter(s => memberIds.includes(s.id));
@@ -341,9 +489,7 @@ const AttendanceMonitoring = () => {
       );
   };
 
-  // 🔥 RENDER TABEL UTAMA (KELOMPOK KELAS -> ROMBEL -> GENDER)
   const RenderClassTables = ({ category }: { category: string }) => {
-      // Jika Ekskul, Render Per Kegiatan
       if (category === 'ekskul') {
           const ekskulActivities = activities.filter(a => a.category !== 'pelajaran' && a.category !== 'ibadah' && !a.name.toLowerCase().includes('sholat') && !a.name.toLowerCase().includes('ngaji'));
           return (
@@ -360,22 +506,19 @@ const AttendanceMonitoring = () => {
           );
       }
 
-      // Jika KBM/Sholat/Mengaji, Render Kelas -> Rombel -> Gender
+      const isMengaji = category === 'mengaji';
       const classesToShow = filterKelas === 'all' ? CLASSES : [parseInt(filterKelas)];
       
       return (
           <div className="space-y-8">
               {classesToShow.map(cls => {
-                  const isMengaji = category === 'mengaji';
                   const classStudents = santriList.filter(s => isMengaji ? s.kelas_mengaji === cls : s.kelas === cls);
                   if (filterKelas === 'all' && classStudents.length === 0) return null;
 
-                  // 1. Dapatkan daftar rombel unik di kelas ini (contoh: 'A', 'B') dan urutkan
                   const uniqueRombels = Array.from(new Set(classStudents.map(s => getRombel(isMengaji ? s.rombel_mengaji : s.rombel)))).sort();
 
                   return (
                       <div key={cls} className="animate-in fade-in slide-in-from-bottom-2 border p-4 rounded-xl bg-gray-50/50 shadow-sm">
-                          {/* HEADER KELAS */}
                           <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200">
                               <Badge className="bg-blue-700 text-base px-4 py-1.5 shadow-sm">Kelas {cls}</Badge>
                               <span className="text-sm text-gray-500 font-bold bg-white px-2 py-1 rounded border">
@@ -383,13 +526,9 @@ const AttendanceMonitoring = () => {
                               </span>
                           </div>
                           
-                          {/* 2. Looping berdasarkan Rombel */}
                           <div className="space-y-6">
                               {uniqueRombels.map(rombelName => {
-                                  // Ambil santri yang cuma ada di rombel ini
                                   const rombelStudents = classStudents.filter(s => getRombel(isMengaji ? s.rombel_mengaji : s.rombel) === rombelName);
-                                  
-                                  // Pisahkan Ikhwan dan Akhwat
                                   const ikhwan = rombelStudents.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
                                   const akhwat = rombelStudents.filter(s => s.gender === 'akhwat' || s.gender === 'P');
 
@@ -397,15 +536,12 @@ const AttendanceMonitoring = () => {
 
                                   return (
                                       <div key={rombelName} className="border border-blue-100 p-4 rounded-xl bg-white shadow-sm">
-                                          {/* HEADER ROMBEL */}
                                           <h4 className="font-bold text-blue-900 mb-3 flex items-center gap-2 border-b border-blue-50 pb-2">
                                               <Badge variant="outline" className="border-blue-400 text-blue-800 bg-blue-50/50">
                                                   Rombel {rombelName}
                                               </Badge>
                                               <span className="text-xs text-gray-400 font-medium">({rombelStudents.length} Santri)</span>
                                           </h4>
-                                          
-                                          {/* TABEL IKHWAN & AKHWAT */}
                                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                               <div>
                                                   <h5 className="text-xs font-bold text-green-700 uppercase mb-2 flex items-center gap-2 bg-green-50 p-2 rounded"><User className="w-3 h-3"/> Ikhwan ({ikhwan.length})</h5>
@@ -460,7 +596,7 @@ const AttendanceMonitoring = () => {
             <div className="bg-white p-6 rounded-xl border shadow-sm">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                     <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Rekap Absensi</h3>
-                    {santriTab !== 'ekskul' && (
+                    {santriTab !== 'ekskul' && santriTab !== 'kbm' && (
                         <Select value={filterKelas} onValueChange={setFilterKelas}>
                             <SelectTrigger className="w-[150px] h-8 text-xs font-bold"><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
                             <SelectContent><SelectItem value="all">Semua Kelas</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
@@ -469,16 +605,18 @@ const AttendanceMonitoring = () => {
                 </div>
 
                 <Tabs defaultValue="kbm" value={santriTab} onValueChange={setSantriTab} className="w-full">
+                    {/* 🔥 URUTAN TAB DIUBAH */}
                     <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg mb-6 shadow-inner">
                         <TabsTrigger value="kbm" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">KBM Sekolah</TabsTrigger>
-                        <TabsTrigger value="sholat" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Sholat</TabsTrigger>
                         <TabsTrigger value="mengaji" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Mengaji</TabsTrigger>
+                        <TabsTrigger value="sholat" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Sholat</TabsTrigger>
                         <TabsTrigger value="ekskul" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold">Ekskul</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="kbm"><RenderClassTables category="kbm" /></TabsContent>
-                    <TabsContent value="sholat"><RenderClassTables category="sholat" /></TabsContent>
+                    {/* 🔥 ALUR KBM BARU DIPANGGIL DI SINI */}
+                    <TabsContent value="kbm">{renderKbmFlow()}</TabsContent>
                     <TabsContent value="mengaji"><RenderClassTables category="mengaji" /></TabsContent>
+                    <TabsContent value="sholat"><RenderClassTables category="sholat" /></TabsContent>
                     <TabsContent value="ekskul"><RenderClassTables category="ekskul" /></TabsContent>
                 </Tabs>
             </div>
