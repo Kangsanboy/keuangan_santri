@@ -40,7 +40,8 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan | "piket">("dashboard");
+  // 🔥 PERBAIKAN ERROR DI SINI: Kurang tanda kutip setelah kesehatan
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan" | "piket">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
@@ -260,7 +261,7 @@ const Index = () => {
       {!isParent && (
         <aside className={`fixed md:relative z-50 h-full bg-green-900 text-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden"} w-[280px] md:w-auto`} style={{ width: isSidebarOpen && window.innerWidth >= 768 ? '18rem' : undefined }}>
            
-           {/* 🔥 PERBAIKAN: HEADER SIDEBAR DENGAN LOGO SIMATREN */}
+           {/* HEADER SIDEBAR DENGAN LOGO SIMATREN */}
            <div className="py-8 bg-green-950 flex items-center justify-center border-b border-green-800 relative overflow-hidden flex-shrink-0 min-h-[130px]">
                <GraduationCap className="absolute -left-4 -bottom-4 text-green-800/30 w-32 h-32" />
                <div className={`text-center flex flex-col items-center transition-opacity duration-300 relative z-10 ${!isSidebarOpen && "md:opacity-0"}`}>
@@ -323,25 +324,30 @@ const Index = () => {
              )}
 
              {/* GROUP 4: SISTEM & PIKET */}
-{hasAdminAccess && (
-    <>
-       <div className="border-t border-green-800 my-4"></div>
-       <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem & Operasional</p>
-       
-       {/* TOMBOL PIKET BARU */}
-       <button onClick={() => handleMenuClick("piket")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "piket" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
-           <ShieldCheck className="mr-3 h-5 w-5 flex-shrink-0" />Piket Harian
-       </button>
-       
-       {isSuperAdmin && (
-           <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen User</button>
-       )}
-    </>
-)}
+             {hasAdminAccess && (
+                 <>
+                    <div className="border-t border-green-800 my-4"></div>
+                    <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem & Operasional</p>
+                    
+                    {/* TOMBOL PIKET BARU */}
+                    <button onClick={() => handleMenuClick("piket")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "piket" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+                        <ShieldCheck className="mr-3 h-5 w-5 flex-shrink-0" />Piket Harian
+                    </button>
+                    
+                    {isSuperAdmin && (
+                        <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen User</button>
+                    )}
+                 </>
+             )}
+           </nav>
+           
+           <div className="p-4 border-t border-green-800 bg-green-950 flex-shrink-0"><button onClick={signOut} className="flex items-center w-full px-4 py-3 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-200 transition-colors text-sm font-medium whitespace-nowrap"><LogOut className="mr-3 h-5 w-5 flex-shrink-0" />Keluar Aplikasi</button></div>
+        </aside>
+      )}
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
         
-        {/* 🔥 PERBAIKAN: HEADER ATAS GLASSMORPHISM & PROFIL KOTAK MEWAH */}
+        {/* HEADER ATAS GLASSMORPHISM & PROFIL KOTAK MEWAH */}
         <header className="bg-gradient-to-r from-white via-green-50/50 to-green-100/60 backdrop-blur-md h-20 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b border-green-200 flex-shrink-0">
           <div className="flex items-center gap-3">
             {!isParent ? (
