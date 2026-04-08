@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Calendar, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, Sun, Sunrise
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, Sunrise
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -31,13 +31,17 @@ interface AttendanceLog {
 const COLORS = ['#22c55e', '#eab308', '#ef4444', '#3b82f6'];
 const CLASSES = [7, 8, 9, 10, 11, 12];
 
+// Komponen Pengganti Sunset sementara lucide-react versi lama
+const Sunset = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h20"/><path d="m17.66 12.34 1.41-1.41"/><path d="M22 22H2"/><path d="M8 6l4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>;
+
 const AttendanceMonitoring = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("santri");
   const [santriTab, setSantriTab] = useState("kbm");
+  const [guruTab, setGuruTab] = useState("kbm");
   
-  // States Alur Multi-Tahap
+  // States Alur Multi-Tahap Santri
   const [selectedKbmClass, setSelectedKbmClass] = useState<any>(null);
   const [selectedKbmSubject, setSelectedKbmSubject] = useState<Activity | null>(null);
   
@@ -62,9 +66,11 @@ const AttendanceMonitoring = () => {
   const [filterKelas, setFilterKelas] = useState("all");
   const [logFilterKelas, setLogFilterKelas] = useState("all");
   
+  // Form Manual State
   const [formKelas, setFormKelas] = useState("");
   const [formGender, setFormGender] = useState("");
   const [formSantriId, setFormSantriId] = useState("");
+  const [formTeacherId, setFormTeacherId] = useState("");
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
 
@@ -102,7 +108,6 @@ const AttendanceMonitoring = () => {
 
   useEffect(() => { fetchData(); }, [dateFilter]);
 
-  // Reset Alur saat pindah tab
   useEffect(() => {
      setSelectedKbmClass(null); setSelectedKbmSubject(null);
      setSelectedMengajiClass(null); setSelectedMengajiTime(null);
@@ -111,6 +116,7 @@ const AttendanceMonitoring = () => {
   }, [santriTab]);
 
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
+
   /* ================= LOGIC HELPER & CHART ================= */
   const getActivityType = (log: AttendanceLog) => {
       const cat = log.activity?.category?.toLowerCase() || '';
@@ -157,12 +163,15 @@ const AttendanceMonitoring = () => {
           if (type === 'santri') {
               if (!formSantriId) return toast({title: "Pilih Santri", variant: "destructive"});
               payload.santri_id = formSantriId;
+          } else {
+              if (!formTeacherId) return toast({title: "Pilih Guru", variant: "destructive"});
+              payload.teacher_id = parseInt(formTeacherId);
           }
           const { error } = await supabase.from('attendance_logs').insert([payload]);
           if (error) throw error;
           toast({ title: "Berhasil", description: "Data izin/sakit tersimpan." });
           fetchData();
-          setFormSantriId(""); setFormKet("");
+          setFormSantriId(""); setFormTeacherId(""); setFormKet("");
       } catch (err: any) {
           toast({ title: "Gagal", description: err.message, variant: "destructive" });
       }
@@ -188,8 +197,69 @@ const AttendanceMonitoring = () => {
           </CardContent>
       </Card>
   );
+
+  const getStatusIcon = (status: string) => {
+      if (status === 'Sakit') return <span className="text-red-500 font-bold">S</span>;
+      if (status === 'Izin') return <span className="text-blue-500 font-bold">I</span>;
+      if (status === 'Telat') return <span className="text-yellow-600 font-bold">T</span>;
+      if (status === 'Hadir') return <span className="text-green-500 font-bold">✓</span>;
+      return "-";
+  };
   
-  // Fungsi Super Tabel untuk Ikhwan/Akhwat
+  // --- FUNGSI TABEL GURU ---
+  const TeacherWeeklyTable = ({ category }: { category: string }) => {
+      const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+      const selectedDate = new Date(dateFilter);
+      const startOfWeek = new Date(selectedDate);
+      startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1);
+
+      const getStatusOnDay = (id: number, dayIndex: number) => {
+          const targetDate = new Date(startOfWeek);
+          targetDate.setDate(startOfWeek.getDate() + dayIndex);
+          const dateStr = targetDate.toISOString().split('T')[0];
+
+          const relevantLogs = logs.filter(l => {
+              const logDate = l.created_at?.split('T')[0];
+              return l.teacher_id === id && logDate === dateStr && getActivityType(l) === category;
+          });
+
+          if (relevantLogs.length === 0) return "-";
+          if (relevantLogs.some(l => l.status === 'Sakit')) return <span className="text-red-500 font-bold">S</span>;
+          if (relevantLogs.some(l => l.status === 'Izin')) return <span className="text-blue-500 font-bold">I</span>;
+          if (relevantLogs.some(l => l.status === 'Telat')) return <span className="text-yellow-600 font-bold">T</span>;
+          return <span className="text-green-500 font-bold">✓</span>;
+      };
+
+      if (teacherList.length === 0) return <div className="text-center py-2 text-xs text-gray-400 italic">Data guru kosong.</div>;
+
+      return (
+          <div className="overflow-x-auto border-2 border-teal-200 rounded-xl bg-white shadow-sm mt-1 mb-4">
+              <table className="w-full text-xs text-left">
+                  <thead className="bg-teal-50 text-teal-800 uppercase font-bold border-b-2 border-teal-200">
+                      <tr>
+                          <th className="p-3 border-r border-teal-100 w-8 text-center">No</th>
+                          <th className="p-3 border-r border-teal-100 min-w-[200px]">Nama Guru</th>
+                          {days.map(d => <th key={d} className="p-3 border-r border-teal-100 text-center w-12">{d.slice(0,3)}</th>)}
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                      {teacherList.map((t, idx) => (
+                          <tr key={t.id} className="hover:bg-teal-50/30">
+                              <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx + 1}</td>
+                              <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{t.full_name}</td>
+                              {days.map((_, i) => (
+                                  <td key={i} className="p-3 border-r border-gray-100 text-center bg-white text-sm">
+                                      {getStatusOnDay(t.id, i)}
+                                  </td>
+                              ))}
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+          </div>
+      );
+  };
+
   const renderStudentTable = (students: Santri[], title: string, colorClass: string, cols: any[], getStatus: (id: string, key: string) => any) => {
     return (
         <div className="mb-6 animate-in slide-in-from-bottom-4 duration-500">
@@ -233,15 +303,7 @@ const AttendanceMonitoring = () => {
     )
   };
 
-  const getStatusIcon = (status: string) => {
-      if (status === 'Sakit') return <span className="text-red-500 font-bold">S</span>;
-      if (status === 'Izin') return <span className="text-blue-500 font-bold">I</span>;
-      if (status === 'Telat') return <span className="text-yellow-600 font-bold">T</span>;
-      if (status === 'Hadir') return <span className="text-green-500 font-bold">✓</span>;
-      return "-";
-  };
-
-  /* ================= RENDER FLOW KBM ================= */
+  /* ================= RENDER FLOW KBM SANTRI ================= */
   const renderKbmFlow = () => {
       if (!selectedKbmClass) {
           const classMap = new Map();
@@ -315,7 +377,7 @@ const AttendanceMonitoring = () => {
       )
   };
 
-  /* ================= RENDER FLOW MENGAJI ================= */
+  /* ================= RENDER FLOW MENGAJI SANTRI ================= */
   const renderMengajiFlow = () => {
       if (!selectedMengajiClass) {
           const classMap = new Map();
@@ -392,7 +454,7 @@ const AttendanceMonitoring = () => {
       )
   };
 
-  /* ================= RENDER FLOW SHOLAT ================= */
+  /* ================= RENDER FLOW SHOLAT SANTRI ================= */
   const renderSholatFlow = () => {
       if (!selectedSholatClass) {
           const classMap = new Map();
@@ -440,15 +502,12 @@ const AttendanceMonitoring = () => {
       }
 
       const classStudents = santriList.filter(s => s.kelas === selectedSholatClass.kelas && getRombel(s.rombel) === selectedSholatClass.rombel);
-      
-      // Hitung Minggu untuk Bulan yang Dipilih (dateFilter)
       const year = new Date(dateFilter).getFullYear(); const month = new Date(dateFilter).getMonth();
       const firstDayOfMonth = new Date(year, month, 1);
       const dayOfWeek = firstDayOfMonth.getDay(); 
       const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; 
       const startOfGrid = new Date(year, month, 1);
       startOfGrid.setDate(startOfGrid.getDate() - offset); 
-
       const weekStart = new Date(startOfGrid);
       weekStart.setDate(weekStart.getDate() + (selectedSholatWeek * 7));
 
@@ -488,7 +547,7 @@ const AttendanceMonitoring = () => {
       )
   };
 
-  /* ================= RENDER FLOW EKSKUL ================= */
+  /* ================= RENDER FLOW EKSKUL SANTRI ================= */
   const renderEkskulFlow = () => {
       if (!selectedEkskul) {
           const ekskuls = activities.filter(a => a.category !== 'pelajaran' && a.category !== 'ibadah' && !a.name.toLowerCase().includes('sholat') && !a.name.toLowerCase().includes('ngaji'));
@@ -512,7 +571,6 @@ const AttendanceMonitoring = () => {
 
       const isPilihan = members.some(m => m.activity_id === selectedEkskul.id);
 
-      // Jika Wajib, harus pilih kelas dulu
       if (!isPilihan && !selectedEkskulClass) {
           const classMap = new Map();
           santriList.forEach(s => {
@@ -540,7 +598,6 @@ const AttendanceMonitoring = () => {
           )
       }
 
-      // Tabel Ekskul (Pertemuan)
       let classStudents: Santri[] = [];
       if (isPilihan) {
           const memberIds = members.filter(m => m.activity_id === selectedEkskul.id).map(m => m.santri_id);
@@ -575,18 +632,15 @@ const AttendanceMonitoring = () => {
       )
   };
 
-  // Komponen Pengganti Sunset sementara lucide-react nggak ada Sunset di versi lama
-  const Sunset = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h20"/><path d="m17.66 12.34 1.41-1.41"/><path d="M22 22H2"/><path d="M8 6l4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>;
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-green-100">
         <div>
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <FileSpreadsheet className="text-green-600" /> Monitoring Absensi
             </h1>
-            <p className="text-xs text-gray-500">Pantau kehadiran secara detail per pertemuan, atau historis mingguan/bulanan.</p>
+            <p className="text-xs text-gray-500">Pantau kehadiran santri dan guru secara detail per pertemuan, atau historis mingguan/bulanan.</p>
         </div>
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
             <Calendar className="text-gray-500 w-4 h-4" />
@@ -600,6 +654,7 @@ const AttendanceMonitoring = () => {
             <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white shadow-sm font-bold">Guru & Staf</TabsTrigger>
         </TabsList>
 
+        {/* TAB KHUSUS SANTRI */}
         <TabsContent value="santri" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <ChartCard title="Grafik KBM" data={getStats('santri', 'kbm')} />
@@ -628,7 +683,7 @@ const AttendanceMonitoring = () => {
             </div>
 
             <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
-                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Manual</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Santri</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
@@ -660,19 +715,103 @@ const AttendanceMonitoring = () => {
             </Card>
         </TabsContent>
 
-        <TabsContent value="guru" className="space-y-8">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* TAB KHUSUS GURU */}
+        <TabsContent value="guru" className="space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <ChartCard title="Kehadiran Mengajar (KBM)" data={getStats('guru', 'kbm')} />
-                <ChartCard title="Kehadiran Kegiatan Lain" data={getStats('guru', 'ibadah')} />
+                <ChartCard title="Kehadiran Ibadah & Mengaji" data={getStats('guru', 'ibadah')} />
+                <ChartCard title="Kehadiran Ekstrakurikuler" data={getStats('guru', 'ekskul')} />
             </div>
+
+            <div className="bg-white p-6 rounded-xl border border-teal-100 shadow-sm">
+                <h3 className="font-bold text-lg text-teal-800 flex items-center gap-2 mb-4"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Absensi Mingguan Guru</h3>
+                
+                <Tabs defaultValue="kbm" value={guruTab} onValueChange={setGuruTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-4 bg-teal-50 p-1 rounded-lg mb-6 border border-teal-100">
+                        <TabsTrigger value="kbm" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">KBM Sekolah</TabsTrigger>
+                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Mengaji</TabsTrigger>
+                        <TabsTrigger value="sholat" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Sholat</TabsTrigger>
+                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Ekskul</TabsTrigger>
+                    </TabsList>
+
+                    {/* Kita Panggil Langsung Fungsi Render Tabel Gurunya */}
+                    {['kbm', 'mengaji', 'sholat', 'ekskul'].map(cat => (
+                        <TabsContent key={cat} value={cat}>
+                            {(() => {
+                                const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+                                const selectedDate = new Date(dateFilter);
+                                const startOfWeek = new Date(selectedDate);
+                                startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + 1);
+
+                                const getStatusOnDay = (id: number, dayIndex: number) => {
+                                    const targetDate = new Date(startOfWeek);
+                                    targetDate.setDate(startOfWeek.getDate() + dayIndex);
+                                    const dateStr = targetDate.toISOString().split('T')[0];
+
+                                    const relevantLogs = logs.filter(l => {
+                                        const logDate = l.created_at?.split('T')[0];
+                                        return l.teacher_id === id && logDate === dateStr && getActivityType(l) === cat;
+                                    });
+
+                                    if (relevantLogs.length === 0) return "-";
+                                    if (relevantLogs.some(l => l.status === 'Sakit')) return <span className="text-red-500 font-bold">S</span>;
+                                    if (relevantLogs.some(l => l.status === 'Izin')) return <span className="text-blue-500 font-bold">I</span>;
+                                    if (relevantLogs.some(l => l.status === 'Telat')) return <span className="text-yellow-600 font-bold">T</span>;
+                                    return <span className="text-green-500 font-bold">✓</span>;
+                                };
+
+                                if (teacherList.length === 0) return <div className="text-center py-2 text-xs text-gray-400 italic">Data guru kosong.</div>;
+
+                                return (
+                                    <div className="overflow-x-auto border-2 border-teal-200 rounded-xl bg-white shadow-sm mt-1 mb-4">
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-teal-50 text-teal-800 uppercase font-bold border-b-2 border-teal-200">
+                                                <tr>
+                                                    <th className="p-3 border-r border-teal-100 w-8 text-center">No</th>
+                                                    <th className="p-3 border-r border-teal-100 min-w-[200px]">Nama Guru</th>
+                                                    {days.map(d => <th key={d} className="p-3 border-r border-teal-100 text-center w-12">{d.slice(0,3)}</th>)}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {teacherList.map((t, idx) => (
+                                                    <tr key={t.id} className="hover:bg-teal-50/30">
+                                                        <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx + 1}</td>
+                                                        <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{t.full_name}</td>
+                                                        {days.map((_, i) => (
+                                                            <td key={i} className="p-3 border-r border-gray-100 text-center bg-white text-sm">
+                                                                {getStatusOnDay(t.id, i)}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })()}
+                        </TabsContent>
+                    ))}
+                </Tabs>
+            </div>
+
+            {/* Input Manual Izin Sakit Khusus Guru */}
+            <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
+                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Guru</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Guru</label><Select value={formTeacherId} onValueChange={setFormTeacherId}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{teacherList.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
+                    <div className="md:col-span-4 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('guru')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                </CardContent>
+            </Card>
+
             <Card className="shadow-sm border-teal-200">
-                <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800">Log Absensi Guru</CardTitle></CardHeader>
+                <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800 flex items-center gap-2"><Clock className="w-4 h-4 text-teal-600"/> Log Absensi Guru Hari Ini</CardTitle></CardHeader>
                 <CardContent className="p-0">
                     <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
                         {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
                             <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru hari ini.</div>
                         ) : (
-                            dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className="bg-teal-600 text-[9px] h-4 px-1 shadow-sm">{log.status}</Badge></div></div>))
+                            dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white')}`}>{log.status}</Badge></div></div>))
                         )}
                     </div>
                 </CardContent>
