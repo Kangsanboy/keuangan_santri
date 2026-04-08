@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  ClipboardCheck, Clock, MapPin, User, CheckCircle2, XCircle, AlertCircle, ShieldCheck 
+  ClipboardCheck, Clock, MapPin, User, CheckCircle2, XCircle, AlertCircle, ShieldCheck, CalendarDays
 } from "lucide-react";
 
 interface ScheduleItem {
