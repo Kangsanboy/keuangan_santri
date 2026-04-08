@@ -10,21 +10,20 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Baby, Store } from "lucide-react";
+import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Baby, Store, BookOpen } from "lucide-react";
 
-// Update Interface sesuai kolom di tabel 'users' (image_69e946.png)
+// Update Interface: viewer diubah jadi guru
 interface AppUser {
   id: string;
   email: string;
-  role: "super_admin" | "admin" | "viewer" | "parent" | "pending" | "kantin";
+  role: "super_admin" | "admin" | "guru" | "parent" | "pending" | "kantin";
   full_name: string;
-  linked_santri_id?: string | null; // Nama kolom sesuai screenshot
+  linked_santri_id?: string | null; 
 }
 
-// Update Interface sesuai kolom di tabel 'santri_...' (image_69e97e.png)
 interface SantriData {
   id: string;
-  nama_lengkap: string; // Nama kolom sesuai screenshot
+  nama_lengkap: string; 
 }
 
 const UserManagement = () => {
@@ -36,7 +35,7 @@ const UserManagement = () => {
   
   // State untuk Edit
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
-  const [newRole, setNewRole] = useState<string>("viewer");
+  const [newRole, setNewRole] = useState<string>("guru"); // default dropdown ke guru
   
   // State Santri
   const [santriList, setSantriList] = useState<SantriData[]>([]);
@@ -45,7 +44,6 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // Mengambil semua data users termasuk linked_santri_id
       const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       // @ts-ignore
@@ -55,12 +53,11 @@ const UserManagement = () => {
     } finally { setLoading(false); }
   };
 
-  // Ambil data dari tabel santri yang spesifik
   const fetchSantriList = async () => {
     try {
       const { data, error } = await supabase
-        .from('santri_2025_12_01_21_34') // Nama tabel sesuai screenshot
-        .select('id, nama_lengkap')       // Kolom sesuai screenshot
+        .from('santri_2025_12_01_21_34') 
+        .select('id, nama_lengkap')       
         .order('nama_lengkap', { ascending: true });
 
       if (error) throw error;
@@ -80,16 +77,38 @@ const UserManagement = () => {
     try {
       const updates: any = { role: newRole };
       
-      // Update kolom linked_santri_id
       if (newRole === 'parent') {
         updates.linked_santri_id = selectedSantriId;
       } else {
-        updates.linked_santri_id = null; // Reset jika bukan parent
+        updates.linked_santri_id = null; 
       }
 
+      // 1. Update role di tabel users
       const { error } = await supabase.from('users').update(updates).eq('id', editingUser.id);
-      
       if (error) throw error;
+
+      // 2. 🔥 MAGIC: OTOMATISASI INSERT KE DATA GURU 🔥
+      if (newRole === 'guru') {
+          // Cek apakah guru dengan nama ini sudah ada di tabel teachers
+          const { data: existingTeacher } = await supabase
+              .from('teachers')
+              .select('id')
+              .eq('full_name', editingUser.full_name)
+              .maybeSingle();
+
+          // Kalau belum ada, masukin otomatis!
+          if (!existingTeacher) {
+              const { error: teacherError } = await supabase.from('teachers').insert([{
+                  full_name: editingUser.full_name,
+                  gender: 'L', // Default laki-laki, bisa diedit nanti
+                  is_active: true
+                  // NIP & RFID biarkan null/kosong agar diisi oleh Admin di menu Data Guru
+              }]);
+              
+              if (teacherError) console.error("Gagal auto-sync ke tabel guru:", teacherError);
+          }
+      }
+
       toast({ title: "Berhasil", description: `Role diubah menjadi ${newRole}.` });
       setEditingUser(null); 
       fetchUsers();
@@ -114,18 +133,17 @@ const UserManagement = () => {
     return matchesSearch && matchesRole;
   });
 
-  // Statistik
+  // Statistik Role
   const superAdminCount = users.filter(u => u.role === 'super_admin').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
   const kantinCount = users.filter(u => u.role === 'kantin').length;
   const parentCount = users.filter(u => u.role === 'parent').length;
-  const viewerCount = users.filter(u => u.role === 'viewer').length;
+  const guruCount = users.filter(u => u.role === 'guru').length; // Ubah dari viewer ke guru
   const pendingCount = users.filter(u => u.role === 'pending').length;
 
   const handleEditClick = (user: AppUser) => {
     setEditingUser(user);
     setNewRole(user.role);
-    // Load existing linked_santri_id
     setSelectedSantriId(user.linked_santri_id || null);
   };
 
@@ -150,9 +168,10 @@ const UserManagement = () => {
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-orange-700">Orang Tua</CardTitle><Baby className="h-4 w-4 text-orange-600" /></CardHeader>
             <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-orange-900">{parentCount}</div></CardContent>
         </Card>
-        <Card onClick={() => toggleFilter('viewer')} className={`cursor-pointer bg-blue-50 border-blue-200 ${filterRole === 'viewer' ? 'ring-2 ring-blue-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-blue-700">Viewer</CardTitle><Users className="h-4 w-4 text-blue-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-blue-900">{viewerCount}</div></CardContent>
+        {/* CARD KHUSUS GURU */}
+        <Card onClick={() => toggleFilter('guru')} className={`cursor-pointer bg-blue-50 border-blue-200 ${filterRole === 'guru' ? 'ring-2 ring-blue-500' : ''}`}>
+            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-blue-700">Guru / Staf</CardTitle><BookOpen className="h-4 w-4 text-blue-600" /></CardHeader>
+            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-blue-900">{guruCount}</div></CardContent>
         </Card>
         <Card onClick={() => toggleFilter('pending')} className={`cursor-pointer bg-yellow-50 border-yellow-200 ${filterRole === 'pending' ? 'ring-2 ring-yellow-500' : ''}`}>
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-yellow-700">Pending</CardTitle><User className="h-4 w-4 text-yellow-600" /></CardHeader>
@@ -164,7 +183,16 @@ const UserManagement = () => {
 
       <Card className="border-green-100 shadow-sm bg-white">
         <CardHeader className="flex flex-col md:flex-row justify-between gap-4 bg-gray-50/50 border-b pb-4"><div><CardTitle>Manajemen Pengguna</CardTitle></div><div className="relative w-full md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari user..." className="pl-9 h-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></CardHeader>
-        <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-700 font-semibold border-b"><tr><th className="p-4">Nama</th><th className="p-4">Email</th><th className="p-4">Role</th><th className="p-4 text-center">Aksi</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => (<tr key={user.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{user.full_name}</td><td className="p-4 text-gray-600">{user.email}</td><td className="p-4"><span className={`px-2 py-1 rounded-full text-xs font-bold border uppercase ${user.role==='super_admin'?'bg-purple-100 text-purple-700':user.role==='kantin'?'bg-teal-100 text-teal-700':user.role==='parent'?'bg-orange-100 text-orange-700':user.role==='admin'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-700'}`}>{user.role.replace('_',' ')}</span></td><td className="p-4 text-center flex justify-center gap-2">
+        <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-700 font-semibold border-b"><tr><th className="p-4">Nama</th><th className="p-4">Email</th><th className="p-4">Role</th><th className="p-4 text-center">Aksi</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => (<tr key={user.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{user.full_name}</td><td className="p-4 text-gray-600">{user.email}</td><td className="p-4">
+            <span className={`px-2 py-1 rounded-full text-xs font-bold border uppercase ${
+                user.role==='super_admin' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                user.role==='admin' ? 'bg-green-100 text-green-700 border-green-200' :
+                user.role==='guru' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                user.role==='parent' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                user.role==='kantin' ? 'bg-teal-100 text-teal-700 border-teal-200' :
+                'bg-gray-100 text-gray-700 border-gray-200'
+            }`}>{user.role.replace('_',' ')}</span>
+        </td><td className="p-4 text-center flex justify-center gap-2">
             <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}><Edit className="h-4 w-4" /></Button>
             <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user)}><Trash2 className="h-4 w-4 text-red-500" /></Button></td></tr>))}</tbody></table></div></CardContent>
       </Card>
@@ -179,16 +207,15 @@ const UserManagement = () => {
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="viewer">Viewer</SelectItem>
+                            <SelectItem value="guru" className="text-blue-600 font-bold">Guru / Staf</SelectItem>
                             <SelectItem value="parent" className="text-orange-600 font-bold">Orang Tua</SelectItem>
                             <SelectItem value="kantin" className="text-teal-600 font-bold">Warung / Kantin</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="super_admin" className="text-purple-600 font-bold">噫 Super Admin</SelectItem>
+                            <SelectItem value="admin" className="text-green-600 font-bold">Admin</SelectItem>
+                            <SelectItem value="super_admin" className="text-purple-600 font-bold">🚀 Super Admin</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
 
-                {/* Tampilan Dropdown Santri: Menggunakan 'nama_lengkap' */}
                 {newRole === 'parent' && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                         <label className="text-sm font-medium text-orange-700">Hubungkan dengan Santri</label>
