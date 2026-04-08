@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
-  User, Plus, Save, Trash2, Search, IdCard, CheckCircle, XCircle, ScanBarcode, Pencil 
+  User, Plus, Save, Trash2, Search, IdCard, CheckCircle, XCircle, ScanBarcode, Pencil, RefreshCw 
 } from "lucide-react";
 
 interface Teacher {
@@ -20,6 +20,7 @@ const TeacherManagement = () => {
   const { toast } = useToast();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false); // State loading untuk tombol sync
   const [showModal, setShowModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -52,7 +53,46 @@ const TeacherManagement = () => {
     fetchTeachers();
   }, []);
 
-  // 2. Simpan atau Update Guru
+  // 2. FUNGSI SINKRONISASI AKUN GURU
+  const handleSyncAccounts = async () => {
+    setIsSyncing(true);
+    try {
+      // a. Tarik semua user yang rolenya 'guru'
+      const { data: guruUsers, error: userErr } = await supabase.from('users').select('full_name').eq('role', 'guru');
+      if (userErr) throw userErr;
+
+      // b. Tarik semua data di tabel teachers saat ini
+      const { data: currentTeachers, error: teacherErr } = await supabase.from('teachers').select('full_name');
+      if (teacherErr) throw teacherErr;
+
+      const existingNames = currentTeachers.map(t => t.full_name?.toLowerCase());
+      
+      // c. Filter user guru yang belum ada di tabel teachers
+      const newTeachers = guruUsers
+        .filter(u => u.full_name && !existingNames.includes(u.full_name.toLowerCase()))
+        .map(u => ({
+          full_name: u.full_name,
+          gender: 'L', // default gender, bisa diedit admin nanti
+          is_active: true
+        }));
+
+      // d. Insert guru baru jika ada
+      if (newTeachers.length > 0) {
+        const { error: insertErr } = await supabase.from('teachers').insert(newTeachers);
+        if (insertErr) throw insertErr;
+        toast({ title: "Sinkronisasi Berhasil", description: `${newTeachers.length} guru baru ditambahkan otomatis dari akun pengguna.`, className: "bg-green-600 text-white" });
+        fetchTeachers(); // Refresh tabel
+      } else {
+        toast({ title: "Sudah Sinkron", description: "Semua akun guru sudah masuk di data ini." });
+      }
+    } catch (err: any) {
+      toast({ title: "Gagal Sync", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // 3. Simpan atau Update Guru (Manual)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.full_name) {
@@ -61,11 +101,10 @@ const TeacherManagement = () => {
     }
 
     if (isEditMode && editingId) {
-        // UPDATE GURU YANG SUDAH ADA (Misal: Nambahin RFID)
         const { error } = await supabase.from("teachers").update({
             full_name: formData.full_name,
             nip: formData.nip,
-            rfid_uid: formData.rfid_uid || null, // Kosong jadikan null biar gak error unique
+            rfid_uid: formData.rfid_uid || null, 
             gender: formData.gender
         }).eq("id", editingId);
 
@@ -77,7 +116,6 @@ const TeacherManagement = () => {
             fetchTeachers();
         }
     } else {
-        // INSERT GURU BARU MANUAL
         const { error } = await supabase.from("teachers").insert([{
             full_name: formData.full_name,
             nip: formData.nip,
@@ -96,7 +134,7 @@ const TeacherManagement = () => {
     }
   };
 
-  // 3. Hapus Guru
+  // 4. Hapus Guru
   const handleDelete = async (id: number) => {
     if(!window.confirm("Yakin hapus guru ini? Semua data jadwal beliau akan menjadi kosong.")) return;
 
@@ -135,8 +173,8 @@ const TeacherManagement = () => {
   return (
     <div className="space-y-4 animate-in fade-in zoom-in duration-300">
       
-      {/* HEADER */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-lg border shadow-sm">
+      {/* HEADER DENGAN TOMBOL SYNC */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-4 rounded-lg border shadow-sm gap-4">
         <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 rounded-full text-green-700">
                 <User size={24} />
@@ -146,9 +184,15 @@ const TeacherManagement = () => {
                 <p className="text-xs text-gray-500">Kelola data pengajar & integrasi kartu RFID</p>
             </div>
         </div>
-        <Button onClick={openAdd} className="bg-green-700 hover:bg-green-800">
-          <Plus className="mr-2 h-4 w-4" /> Tambah Manual
-        </Button>
+        <div className="flex gap-2 w-full md:w-auto">
+            <Button onClick={handleSyncAccounts} disabled={isSyncing} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 w-full md:w-auto shadow-sm">
+                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} /> 
+                {isSyncing ? 'Menyinkronkan...' : 'Sync Akun'}
+            </Button>
+            <Button onClick={openAdd} className="bg-green-700 hover:bg-green-800 w-full md:w-auto shadow-md">
+                <Plus className="mr-2 h-4 w-4" /> Tambah Manual
+            </Button>
+        </div>
       </div>
 
       {/* TABEL DATA */}
@@ -186,17 +230,17 @@ const TeacherManagement = () => {
                         )}
                     </td>
                     <td className="px-6 py-4 text-right flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(t)} className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(t)} className="text-blue-500 hover:text-blue-700 hover:bg-blue-50" title="Edit Data & RFID">
                             <Pencil size={16} />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50" title="Hapus Guru">
                             <Trash2 size={16} />
                         </Button>
                     </td>
                   </tr>
                 ))}
                 {teachers.length === 0 && !isLoading && (
-                    <tr><td colSpan={5} className="text-center py-8 text-gray-500 italic">Belum ada data guru.</td></tr>
+                    <tr><td colSpan={5} className="text-center py-8 text-gray-500 italic">Belum ada data guru. Klik "Sync Akun" untuk menarik data.</td></tr>
                 )}
               </tbody>
             </table>
