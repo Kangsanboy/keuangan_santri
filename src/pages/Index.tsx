@@ -396,7 +396,7 @@ const Index = () => {
                                 </span>
                             ) : (
                                 <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-blue-200 shadow-sm">
-                                    Viewer
+                                    Guru / Staf
                                 </span>
                             )}
                         </div>
