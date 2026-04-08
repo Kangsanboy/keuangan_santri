@@ -13,6 +13,7 @@ import AcademicSettings from "@/components/AcademicSettings";
 import AttendanceMonitoring from "@/components/AttendanceMonitoring"; 
 import FinanceChart from "@/components/FinanceChart";
 import ClassManagement from "@/components/ClassManagement";
+import PiketManagement from "@/components/PiketManagement";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,7 +23,7 @@ import {
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
-  Activity, Shield, Library
+  Activity, Shield, Library, ShieldCheck
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -39,7 +40,7 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan">("dashboard");
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan | "piket">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
@@ -321,19 +322,22 @@ const Index = () => {
                  </button>
              )}
 
-             {/* GROUP 4: SISTEM */}
-             {isSuperAdmin && (
-                 <>
-                    <div className="border-t border-green-800 my-4"></div>
-                    <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem</p>
-                    <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen User</button>
-                 </>
-             )}
-           </nav>
-           
-           <div className="p-4 border-t border-green-800 bg-green-950 flex-shrink-0"><button onClick={signOut} className="flex items-center w-full px-4 py-3 rounded-lg text-red-300 hover:bg-red-900/30 hover:text-red-200 transition-colors text-sm font-medium whitespace-nowrap"><LogOut className="mr-3 h-5 w-5 flex-shrink-0" />Keluar Aplikasi</button></div>
-        </aside>
-      )}
+             {/* GROUP 4: SISTEM & PIKET */}
+{hasAdminAccess && (
+    <>
+       <div className="border-t border-green-800 my-4"></div>
+       <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem & Operasional</p>
+       
+       {/* TOMBOL PIKET BARU */}
+       <button onClick={() => handleMenuClick("piket")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "piket" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+           <ShieldCheck className="mr-3 h-5 w-5 flex-shrink-0" />Piket Harian
+       </button>
+       
+       {isSuperAdmin && (
+           <button onClick={() => handleMenuClick("pengguna")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pengguna" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><UserCog className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen User</button>
+       )}
+    </>
+)}
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
         
@@ -495,6 +499,7 @@ const Index = () => {
                     {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
                     {activeMenu === "absensi" && <AttendanceMonitoring />}
                     {activeMenu === "kesehatan" && <SickLeaveManagement />}
+                    {activeMenu === "piket" && hasAdminAccess && <PiketManagement />}
                 </>
             )}
           </div>
