@@ -25,13 +25,10 @@ const App = () => (
             <Route path="/keuangan" element={<Index />} />
             <Route path="/users" element={<Index />} /> {/* Biar refresh di menu users gak 404 */}
             <Route path="/pengguna" element={<Index />} /> {/* Jaga-jaga kalau pathnya pengguna */}
-            
             <Route path="/saldo-kelas/:kelas" element={<SaldoKelas />} />
             <Route path="/portal-ortu" element={<PortalYayasan />} />
-            
             {/* 🔥 ROUTE KASIR (Sekarang aman karena sudah di-import) */}
             <Route path="/kasir" element={<CashierPage />} />
-            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </HashRouter>
