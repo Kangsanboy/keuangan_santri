@@ -40,7 +40,6 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  // 🔥 PERBAIKAN ERROR DI SINI: Kurang tanda kutip setelah kesehatan
   const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan" | "piket">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
@@ -232,8 +231,11 @@ const Index = () => {
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
+  
+  // 🔥 PENENTUAN HAK AKSES KHUSUS
   const isParent = userRole === 'parent';
   const isSuperAdmin = userRole === 'super_admin';
+  const isGuru = userRole === 'guru'; 
   const hasAdminAccess = isAdmin || isSuperAdmin; 
 
   if (userRole === 'pending') {
@@ -286,22 +288,20 @@ const Index = () => {
              {/* GROUP 2: AKADEMIK */}
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
-             <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
-
-             {/* MENU MANAJEMEN KELAS */}
-             <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
-               <Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas
-             </button>
              
-             <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru
-             </button>
+             {/* 🔥 HILANGKAN MENU INI JIKA ROLE GURU */}
+             {!isGuru && (
+                 <>
+                     <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
+                     <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas</button>
+                     <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru</button>
+                 </>
+             )}
              
-             {/* MENU ABSENSI */}
+             {/* MENU ABSENSI & KESEHATAN (GURU BISA AKSES) */}
              <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                 <Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi
              </button>
-
-             {/* MENU KESEHATAN */}
              <button onClick={() => handleMenuClick("kesehatan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "kesehatan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                 <Activity className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Kesehatan
              </button>
@@ -313,14 +313,18 @@ const Index = () => {
                 </button>
              )}
              
-             {/* GROUP 3: KEUANGAN */}
-             <div className="border-t border-green-800 my-4"></div>
-             <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Keuangan Digital</p>
-             <button onClick={() => handleMenuClick("keuangan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Wallet className="mr-3 h-5 w-5 flex-shrink-0" />Tabungan & Saldo</button>
-             {isSuperAdmin && (
-                 <button onClick={() => handleMenuClick("monitoring_warung")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "monitoring_warung" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
-                    <Store className="mr-3 h-5 w-5 flex-shrink-0" /> Monitoring Kantin
-                 </button>
+             {/* GROUP 3: KEUANGAN (HILANGKAN JIKA GURU) */}
+             {!isGuru && (
+                 <>
+                    <div className="border-t border-green-800 my-4"></div>
+                    <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Keuangan Digital</p>
+                    <button onClick={() => handleMenuClick("keuangan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "keuangan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Wallet className="mr-3 h-5 w-5 flex-shrink-0" />Tabungan & Saldo</button>
+                    {isSuperAdmin && (
+                        <button onClick={() => handleMenuClick("monitoring_warung")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "monitoring_warung" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
+                            <Store className="mr-3 h-5 w-5 flex-shrink-0" /> Monitoring Kantin
+                        </button>
+                    )}
+                 </>
              )}
 
              {/* GROUP 4: SISTEM & PIKET */}
@@ -329,7 +333,6 @@ const Index = () => {
                     <div className="border-t border-green-800 my-4"></div>
                     <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem & Operasional</p>
                     
-                    {/* TOMBOL PIKET BARU */}
                     <button onClick={() => handleMenuClick("piket")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "piket" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}>
                         <ShieldCheck className="mr-3 h-5 w-5 flex-shrink-0" />Piket Harian
                     </button>
@@ -366,12 +369,10 @@ const Index = () => {
                         onClick={signOut} 
                         title="Klik untuk Keluar"
                     >
-                        {/* Lingkaran Avatar */}
                         <div className="h-10 w-10 rounded-full bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center text-white font-bold text-sm shadow-inner shrink-0 overflow-hidden">
                             {avatarUrl ? <img src={avatarUrl} alt="User" className="h-full w-full object-cover" /> : getInitials(userName)}
                         </div>
                         
-                        {/* Nama & Email */}
                         <div className="hidden sm:flex flex-col justify-center text-left">
                             <span className="text-sm font-bold text-gray-800 leading-none capitalize truncate max-w-[120px] lg:max-w-[200px] group-hover:text-red-600 transition-colors">
                                 {userName}
@@ -381,10 +382,8 @@ const Index = () => {
                             </span>
                         </div>
 
-                        {/* Garis Pemisah */}
                         <div className="hidden sm:block h-6 w-px bg-gray-200 mx-1"></div>
 
-                        {/* Badge Role */}
                         <div className="hidden sm:block">
                             {isSuperAdmin ? (
                                 <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-yellow-200 shadow-sm">
@@ -394,9 +393,13 @@ const Index = () => {
                                 <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-green-200 shadow-sm">
                                     <ShieldAlert className="w-3 h-3" /> Admin
                                 </span>
-                            ) : (
+                            ) : isGuru ? (
                                 <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-blue-200 shadow-sm">
                                     Guru / Staf
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 bg-gray-50 text-gray-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-gray-200 shadow-sm">
+                                    Viewer
                                 </span>
                             )}
                         </div>
@@ -485,21 +488,22 @@ const Index = () => {
                         </div>
                     )}
 
-                    {/* DATA SANTRI */}
-                    {activeMenu === "santri" && (
+                    {/* DATA SANTRI (DIBLOKIR UNTUK GURU) */}
+                    {activeMenu === "santri" && !isGuru && (
                       <div className="animate-in fade-in zoom-in duration-300 space-y-4">
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
                     )}
                     
-                    {activeMenu === "guru" && (
+                    {/* DATA GURU (DIBLOKIR UNTUK GURU) */}
+                    {activeMenu === "guru" && !isGuru && (
                      <div className="animate-in fade-in zoom-in duration-300">
                        <TeacherManagement />
                      </div>
                     )}
                   
-                    {/* LAIN-LAIN */}
-                    {activeMenu === "manajemen_kelas" && <ClassManagement />}
+                    {/* LAIN-LAIN (DIBLOKIR SESUAI ROLE) */}
+                    {activeMenu === "manajemen_kelas" && !isGuru && <ClassManagement />}
                     {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
                     {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
                     {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
