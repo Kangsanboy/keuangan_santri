@@ -21,6 +21,7 @@ interface Santri {
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
 interface ActivityMember { activity_id: number; santri_id: string; }
+interface Schedule { id: number; activity_id: number; teacher_id?: number; kelas?: number; rombel_id?: number; day_of_week: number; rombel?: { nama: string; kategori: string }; }
 interface AttendanceLog {
   id: string; scan_time: string; status: string; created_at: string;
   santri_id?: string; teacher_id?: number; activity_id?: number; location_id?: number;
@@ -36,31 +37,33 @@ const AttendanceMonitoring = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("santri");
+  const [userRole, setUserRole] = useState<string>("viewer"); // 🔥 TAMPUNG ROLE
   
   // TABS STATE
   const [santriTab, setSantriTab] = useState("kbm");
   const [guruTab, setGuruTab] = useState("kbm");
   
-  // STATES ALUR SANTRI
+  // STATES ALUR SANTRI (Semua pake ID/Object relasional)
   const [selectedKbmClass, setSelectedKbmClass] = useState<any>(null);
   const [selectedKbmSubject, setSelectedKbmSubject] = useState<Activity | null>(null);
   const [selectedMengajiClass, setSelectedMengajiClass] = useState<any>(null);
-  const [selectedMengajiTime, setSelectedMengajiTime] = useState<string | null>(null);
+  const [selectedMengajiSubject, setSelectedMengajiSubject] = useState<Activity | null>(null);
   const [selectedSholatClass, setSelectedSholatClass] = useState<any>(null);
-  const [selectedSholatTime, setSelectedSholatTime] = useState<string | null>(null);
+  const [selectedSholatSubject, setSelectedSholatSubject] = useState<Activity | null>(null);
   const [selectedSholatWeek, setSelectedSholatWeek] = useState<number>(0);
   const [selectedEkskul, setSelectedEkskul] = useState<Activity | null>(null);
   const [selectedEkskulClass, setSelectedEkskulClass] = useState<any>(null);
 
   // STATES ALUR GURU
   const [selectedGuruKbmSubject, setSelectedGuruKbmSubject] = useState<Activity | null>(null);
-  const [selectedGuruMengajiTime, setSelectedGuruMengajiTime] = useState<string | null>(null);
-  const [selectedGuruSholatTime, setSelectedGuruSholatTime] = useState<string | null>(null);
+  const [selectedGuruMengajiSubject, setSelectedGuruMengajiSubject] = useState<Activity | null>(null);
+  const [selectedGuruSholatSubject, setSelectedGuruSholatSubject] = useState<Activity | null>(null);
   const [selectedGuruSholatWeek, setSelectedGuruSholatWeek] = useState<number>(0);
   const [selectedGuruEkskul, setSelectedGuruEkskul] = useState<Activity | null>(null);
 
   // DATA MASTER
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]); 
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [teacherList, setTeacherList] = useState<Teacher[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -84,6 +87,18 @@ const AttendanceMonitoring = () => {
       return 'A';
   };
 
+  // 🔥 FETCH ROLE USER SAAT INI
+  useEffect(() => {
+    const fetchRole = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+            const { data } = await supabase.from('users').select('role').eq('id', session.user.id).single();
+            if (data) setUserRole(data.role);
+        }
+    };
+    fetchRole();
+  }, []);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -94,13 +109,16 @@ const AttendanceMonitoring = () => {
       const { data: logData } = await supabase.from('attendance_logs').select(`id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id, santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel, kelas_mengaji, rombel_mengaji), teacher:teachers(full_name), activity:activity_id(name, category, tipe_ekskul), location:location_id(name)`).gte('created_at', startOfMonth.toISOString()).lte('created_at', endOfMonth.toISOString() + 'T23:59:59');
       if (logData) setLogs(logData as any);
 
+      const { data: schData } = await supabase.from('schedules').select('id, activity_id, teacher_id, kelas, rombel_id, day_of_week, rombel:rombels(nama, kategori)');
+      if (schData) setSchedules(schData as any[]);
+
       const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nis, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
       if (sData) setSantriList(sData as any);
 
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
       if (tData) setTeacherList(tData);
 
-      const { data: actData } = await supabase.from('activities').select('*');
+      const { data: actData } = await supabase.from('activities').select('*').order('name');
       if (actData) setActivities(actData);
 
       const { data: memData } = await supabase.from('activity_members').select('*');
@@ -111,19 +129,18 @@ const AttendanceMonitoring = () => {
 
   useEffect(() => { fetchData(); }, [dateFilter]);
 
-  // Reset Alur saat pindah tab (Santri)
+  // Reset Alur saat pindah tab
   useEffect(() => {
      setSelectedKbmClass(null); setSelectedKbmSubject(null);
-     setSelectedMengajiClass(null); setSelectedMengajiTime(null);
-     setSelectedSholatClass(null); setSelectedSholatTime(null);
+     setSelectedMengajiClass(null); setSelectedMengajiSubject(null);
+     setSelectedSholatClass(null); setSelectedSholatSubject(null); setSelectedSholatWeek(0);
      setSelectedEkskul(null); setSelectedEkskulClass(null);
   }, [santriTab]);
 
-  // Reset Alur saat pindah tab (Guru)
   useEffect(() => {
      setSelectedGuruKbmSubject(null);
-     setSelectedGuruMengajiTime(null);
-     setSelectedGuruSholatTime(null); setSelectedGuruSholatWeek(0);
+     setSelectedGuruMengajiSubject(null);
+     setSelectedGuruSholatSubject(null); setSelectedGuruSholatWeek(0);
      setSelectedGuruEkskul(null);
   }, [guruTab]);
 
@@ -161,14 +178,7 @@ const AttendanceMonitoring = () => {
 
   const handleSubmitPermission = async (type: 'santri' | 'guru') => {
       try {
-          const payload: any = {
-              status: formStatus,
-              scan_time: new Date().toLocaleTimeString(),
-              created_at: new Date().toISOString(),
-              activity_id: null,
-              location_id: null,
-              keterangan: formKet
-          };
+          const payload: any = { status: formStatus, scan_time: new Date().toLocaleTimeString(), created_at: new Date().toISOString(), activity_id: null, location_id: null, keterangan: formKet };
           if (type === 'santri') {
               if (!formSantriId) return toast({title: "Pilih Santri", variant: "destructive"});
               payload.santri_id = formSantriId;
@@ -179,11 +189,8 @@ const AttendanceMonitoring = () => {
           const { error } = await supabase.from('attendance_logs').insert([payload]);
           if (error) throw error;
           toast({ title: "Berhasil", description: "Data izin/sakit tersimpan." });
-          fetchData();
-          setFormSantriId(""); setFormTeacherId(""); setFormKet("");
-      } catch (err: any) {
-          toast({ title: "Gagal", description: err.message, variant: "destructive" });
-      }
+          fetchData(); setFormSantriId(""); setFormTeacherId(""); setFormKet("");
+      } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
   const ChartCard = ({ title, data }: { title: string, data: any[] }) => (
@@ -194,13 +201,7 @@ const AttendanceMonitoring = () => {
                   <div className="flex items-center justify-center h-full text-xs text-gray-400">Belum ada data</div>
               ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                          <Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value">
-                              {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
-                          </Pie>
-                          <RechartsTooltip />
-                          <Legend verticalAlign="bottom" height={36} iconSize={8} wrapperStyle={{ fontSize: '10px' }}/>
-                      </PieChart>
+                      <PieChart><Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value">{data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><RechartsTooltip /><Legend verticalAlign="bottom" height={36} iconSize={8} wrapperStyle={{ fontSize: '10px' }}/></PieChart>
                   </ResponsiveContainer>
               )}
           </CardContent>
@@ -218,9 +219,7 @@ const AttendanceMonitoring = () => {
   const renderStudentTable = (students: Santri[], title: string, colorClass: string, cols: any[], getStatus: (id: string, key: string) => any) => {
     return (
         <div className="mb-6 animate-in slide-in-from-bottom-4 duration-500">
-            <h4 className={`text-sm font-bold uppercase mb-3 flex items-center gap-2 p-2 rounded-lg ${colorClass}`}>
-                <User size={16}/> {title} ({students.length})
-            </h4>
+            <h4 className={`text-sm font-bold uppercase mb-3 flex items-center gap-2 p-2 rounded-lg ${colorClass}`}><User size={16}/> {title} ({students.length})</h4>
             <div className="overflow-x-auto border-2 border-green-200 rounded-xl bg-white shadow-sm">
                 <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead className="bg-green-50 text-green-800 uppercase font-bold border-b-2 border-green-200">
@@ -244,11 +243,7 @@ const AttendanceMonitoring = () => {
                                 <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx+1}</td>
                                 <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{s.nama_lengkap}</td>
                                 <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
-                                {cols.map((c, i) => (
-                                    <td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">
-                                        {getStatus(s.id, c.key)}
-                                    </td>
-                                ))}
+                                {cols.map((c, i) => (<td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">{getStatus(s.id, c.key)}</td>))}
                             </tr>
                         ))}
                     </tbody>
@@ -261,9 +256,7 @@ const AttendanceMonitoring = () => {
   const renderTeacherTable = (teachers: Teacher[], title: string, colorClass: string, cols: any[], getStatus: (id: number, key: string) => any) => {
     return (
         <div className="mb-6 animate-in slide-in-from-bottom-4 duration-500">
-            <h4 className={`text-sm font-bold uppercase mb-3 flex items-center gap-2 p-2 rounded-lg ${colorClass}`}>
-                <User size={16}/> {title} ({teachers.length})
-            </h4>
+            <h4 className={`text-sm font-bold uppercase mb-3 flex items-center gap-2 p-2 rounded-lg ${colorClass}`}><User size={16}/> {title} ({teachers.length})</h4>
             <div className="overflow-x-auto border-2 border-teal-200 rounded-xl bg-white shadow-sm">
                 <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead className="bg-teal-50 text-teal-800 uppercase font-bold border-b-2 border-teal-200">
@@ -287,11 +280,7 @@ const AttendanceMonitoring = () => {
                                 <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx+1}</td>
                                 <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{t.full_name}</td>
                                 <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{t.nip || '-'}</td>
-                                {cols.map((c, i) => (
-                                    <td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">
-                                        {getStatus(t.id, c.key)}
-                                    </td>
-                                ))}
+                                {cols.map((c, i) => (<td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">{getStatus(t.id, c.key)}</td>))}
                             </tr>
                         ))}
                     </tbody>
@@ -328,7 +317,7 @@ const AttendanceMonitoring = () => {
       }
 
       if (!selectedKbmSubject) {
-          const subjects = activities.filter(a => a.category === 'pelajaran');
+          const subjects = activities.filter(a => a.category === 'pelajaran' && schedules.some(sch => sch.activity_id === a.id && sch.kelas === selectedKbmClass.kelas && (!sch.rombel || sch.rombel.nama === selectedKbmClass.rombel)));
           return (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
                   <div className="flex items-center gap-3 mb-4 border-b border-green-200 pb-3">
@@ -336,10 +325,10 @@ const AttendanceMonitoring = () => {
                       <h3 className="font-bold text-green-800 flex items-center gap-2">Pilih Pelajaran <Badge className="bg-green-600 ml-2 shadow-sm">Kls {selectedKbmClass.kelas}-{selectedKbmClass.rombel}</Badge></h3>
                   </div>
                   <div className="flex flex-col gap-3 max-h-[450px] overflow-y-auto pr-2 pb-2">
-                      {subjects.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50">Belum ada mata pelajaran.</div>) : subjects.map(s => (
+                      {subjects.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50">Belum ada jadwal mapel untuk kelas ini.</div>) : subjects.map(s => (
                           <div key={s.id} onClick={() => setSelectedKbmSubject(s)} className="flex items-center p-3 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all group shadow-sm">
                               <div className="w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mr-4 group-hover:bg-green-600 group-hover:text-white transition-colors border border-green-200"><BookOpen size={20} /></div>
-                              <h4 className="font-bold text-sm text-gray-800 flex-1">{s.name}</h4><Badge variant="outline" className="border-green-300 text-green-700 bg-green-50 mr-2">{s.category}</Badge>
+                              <h4 className="font-bold text-sm text-gray-800 flex-1">{s.name}</h4>
                               <div className="text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight size={18}/></div>
                           </div>
                       ))}
@@ -400,12 +389,8 @@ const AttendanceMonitoring = () => {
           )
       }
 
-      if (!selectedMengajiTime) {
-          const times = [
-              { name: "Ba'da Pagi", icon: <Sunrise size={24}/>, color: "text-orange-500 bg-orange-50 border-orange-200 group-hover:bg-orange-500" },
-              { name: "Ba'da Maghrib", icon: <Sunset size={24}/>, color: "text-purple-600 bg-purple-50 border-purple-200 group-hover:bg-purple-600" },
-              { name: "Ba'da Isya", icon: <Moon size={24}/>, color: "text-indigo-600 bg-indigo-50 border-indigo-200 group-hover:bg-indigo-600" }
-          ];
+      if (!selectedMengajiSubject) {
+          const mengajiActivities = activities.filter(a => a.category === 'mengaji' && schedules.some(sch => sch.activity_id === a.id && sch.kelas === selectedMengajiClass.kelas));
           return (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
                   <div className="flex items-center gap-3 mb-4 border-b border-green-200 pb-3">
@@ -413,10 +398,10 @@ const AttendanceMonitoring = () => {
                       <h3 className="font-bold text-green-800 flex items-center gap-2">Pilih Waktu Mengaji <Badge className="bg-blue-600 ml-2">Kls {selectedMengajiClass.kelas}-{selectedMengajiClass.rombel}</Badge></h3>
                   </div>
                   <div className="flex flex-col gap-3">
-                      {times.map(t => (
-                          <div key={t.name} onClick={() => setSelectedMengajiTime(t.name)} className="flex items-center p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 transition-all group shadow-sm">
-                              <div className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors border ${t.color} group-hover:text-white`}>{t.icon}</div>
-                              <h4 className="font-bold text-lg text-gray-800 flex-1">{t.name}</h4>
+                      {mengajiActivities.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50">Belum ada jadwal mengaji untuk kelas ini.</div>) : mengajiActivities.map(a => (
+                          <div key={a.id} onClick={() => setSelectedMengajiSubject(a)} className="flex items-center p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 transition-all group shadow-sm">
+                              <div className="w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors border text-orange-500 bg-orange-50 border-orange-200 group-hover:bg-orange-500 group-hover:text-white"><BookOpen size={24}/></div>
+                              <h4 className="font-bold text-lg text-gray-800 flex-1">{a.name}</h4>
                               <div className="text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight size={20}/></div>
                           </div>
                       ))}
@@ -432,7 +417,7 @@ const AttendanceMonitoring = () => {
 
       const getStatus = (santriId: string, day: string) => {
           const targetDateStr = `${year}-${String(month+1).padStart(2,'0')}-${day.padStart(2,'0')}`;
-          const log = logs.find(l => l.santri_id === santriId && l.activity?.name === selectedMengajiTime && l.created_at.startsWith(targetDateStr));
+          const log = logs.find(l => l.santri_id === santriId && l.activity_id === selectedMengajiSubject.id && l.created_at.startsWith(targetDateStr));
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -442,8 +427,8 @@ const AttendanceMonitoring = () => {
       return (
           <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
               <div className="flex items-center gap-4 mb-4 bg-green-50 p-4 rounded-xl border-2 border-green-200 shadow-sm">
-                  <Button variant="outline" size="sm" onClick={() => setSelectedMengajiTime(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                  <div><h3 className="font-extrabold text-green-900 text-lg">Ngaji {selectedMengajiTime}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedMengajiClass.kelas}-{selectedMengajiClass.rombel} • Skala Bulanan</p></div>
+                  <Button variant="outline" size="sm" onClick={() => setSelectedMengajiSubject(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                  <div><h3 className="font-extrabold text-green-900 text-lg">Ngaji {selectedMengajiSubject.name}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedMengajiClass.kelas}-{selectedMengajiClass.rombel} • Skala Bulanan</p></div>
               </div>
               {renderStudentTable(ikhwan, "Ikhwan", "bg-green-100 text-green-800 border-l-4 border-green-600", columns, getStatus)}
               {renderStudentTable(akhwat, "Akhwat", "bg-pink-100 text-pink-800 border-l-4 border-pink-500", columns, getStatus)}
@@ -463,7 +448,7 @@ const AttendanceMonitoring = () => {
 
           return (
               <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
-                  <h3 className="font-bold text-green-800 flex items-center gap-2 mb-4 border-b border-green-200 pb-2"><Moon className="text-green-600"/> Pilih Kelas (Sholat)</h3>
+                  <h3 className="font-bold text-green-800 flex items-center gap-2 mb-4 border-b border-green-200 pb-2"><Moon className="text-green-600"/> Pilih Kelas (Filter Tampilan)</h3>
                   <div className="flex flex-col gap-3">
                       {uniqueClasses.map(c => (
                           <div key={`${c.kelas}-${c.rombel}`} onClick={() => setSelectedSholatClass(c)} className="flex items-center justify-between p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all group">
@@ -476,8 +461,8 @@ const AttendanceMonitoring = () => {
           )
       }
 
-      if (!selectedSholatTime) {
-          const times = ["Subuh", "Dzuhur", "Ashar", "Maghrib", "Isya"];
+      if (!selectedSholatSubject) {
+          const sholatActivities = activities.filter(a => a.category === 'sholat' && schedules.some(sch => sch.activity_id === a.id));
           return (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
                   <div className="flex items-center gap-3 mb-4 border-b border-green-200 pb-3">
@@ -485,10 +470,10 @@ const AttendanceMonitoring = () => {
                       <h3 className="font-bold text-green-800 flex items-center gap-2">Pilih Waktu Sholat <Badge className="bg-teal-600 ml-2">Kls {selectedSholatClass.kelas}-{selectedSholatClass.rombel}</Badge></h3>
                   </div>
                   <div className="flex flex-col gap-3">
-                      {times.map(t => (
-                          <div key={t} onClick={() => setSelectedSholatTime(t)} className="flex items-center p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all group">
+                      {sholatActivities.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50">Belum ada jadwal sholat.</div>) : sholatActivities.map(a => (
+                          <div key={a.id} onClick={() => setSelectedSholatSubject(a)} className="flex items-center p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all group shadow-sm">
                               <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center mr-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><Moon size={20} /></div>
-                              <h4 className="font-bold text-lg text-gray-800 flex-1">Sholat {t}</h4>
+                              <h4 className="font-bold text-lg text-gray-800 flex-1">{a.name}</h4>
                               <div className="text-green-400 opacity-0 group-hover:opacity-100"><ArrowRight size={20}/></div>
                           </div>
                       ))}
@@ -516,7 +501,7 @@ const AttendanceMonitoring = () => {
       const getStatus = (santriId: string, dayIndexStr: string) => {
           const cellDate = new Date(weekStart); cellDate.setDate(cellDate.getDate() + parseInt(dayIndexStr));
           const dateStr = cellDate.toISOString().split('T')[0];
-          const log = logs.find(l => l.santri_id === santriId && l.activity?.name?.includes(selectedSholatTime) && l.created_at.startsWith(dateStr));
+          const log = logs.find(l => l.santri_id === santriId && l.activity_id === selectedSholatSubject.id && l.created_at.startsWith(dateStr));
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -527,8 +512,8 @@ const AttendanceMonitoring = () => {
           <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 bg-green-50 p-4 rounded-xl border-2 border-green-200 shadow-sm">
                   <div className="flex items-center gap-4">
-                      <Button variant="outline" size="sm" onClick={() => setSelectedSholatTime(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                      <div><h3 className="font-extrabold text-green-900 text-lg">Sholat {selectedSholatTime}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedSholatClass.kelas}-{selectedSholatClass.rombel}</p></div>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedSholatSubject(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                      <div><h3 className="font-extrabold text-green-900 text-lg">{selectedSholatSubject.name}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedSholatClass.kelas}-{selectedSholatClass.rombel}</p></div>
                   </div>
                   <Select value={String(selectedSholatWeek)} onValueChange={v => setSelectedSholatWeek(parseInt(v))}>
                       <SelectTrigger className="w-[150px] bg-white border-green-300 font-bold text-green-800"><SelectValue/></SelectTrigger>
@@ -545,12 +530,12 @@ const AttendanceMonitoring = () => {
 
   const renderEkskulFlow = () => {
       if (!selectedEkskul) {
-          const ekskuls = activities.filter(a => a.category === 'ekskul');
+          const ekskuls = activities.filter(a => a.category === 'ekskul' && schedules.some(sch => sch.activity_id === a.id));
           return (
               <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                   <h3 className="font-bold text-green-800 flex items-center gap-2 mb-4 border-b border-green-200 pb-2"><Trophy className="text-green-600"/> Pilih Ekstrakurikuler</h3>
                   <div className="flex flex-col gap-3">
-                      {ekskuls.length === 0 ? <div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50">Belum ada data ekskul.</div> : ekskuls.map(e => {
+                      {ekskuls.length === 0 ? <div className="text-center p-8 text-gray-400 border-2 border-dashed border-green-200 rounded-xl bg-green-50">Belum ada data ekskul yang dijadwalkan.</div> : ekskuls.map(e => {
                           const isPilihan = members.some(m => m.activity_id === e.id) || e.tipe_ekskul === 'pilihan';
                           return (
                               <div key={e.id} onClick={() => setSelectedEkskul(e)} className="flex items-center justify-between p-4 bg-white border-2 border-green-100 rounded-xl cursor-pointer hover:border-green-500 hover:bg-green-50 transition-all group shadow-sm">
@@ -630,14 +615,14 @@ const AttendanceMonitoring = () => {
   /* ================= 2. FLOW GURU ================= */
   const renderGuruKbmFlow = () => {
         if (!selectedGuruKbmSubject) {
-            const subjects = activities.filter(a => a.category === 'pelajaran');
+            const subjects = activities.filter(a => a.category === 'pelajaran' && schedules.some(sch => sch.activity_id === a.id && sch.teacher_id));
             return (
                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                     <h3 className="font-bold text-teal-800 flex items-center gap-2 mb-4 border-b border-teal-200 pb-2">
                         <BookOpen className="text-teal-600"/> Pilih Pelajaran yang Diajarkan
                     </h3>
                     <div className="flex flex-col gap-3 max-h-[450px] overflow-y-auto pr-2 pb-2">
-                        {subjects.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada mata pelajaran.</div>) : subjects.map(s => (
+                        {subjects.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada jadwal KBM yang menugaskan guru.</div>) : subjects.map(s => (
                             <div key={s.id} onClick={() => setSelectedGuruKbmSubject(s)} className="flex items-center p-3 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 hover:bg-teal-50 transition-all group shadow-sm">
                                 <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center mr-4 group-hover:bg-teal-600 group-hover:text-white transition-colors border border-teal-200"><BookOpen size={20} /></div>
                                 <h4 className="font-bold text-sm text-gray-800 flex-1">{s.name}</h4>
@@ -648,6 +633,9 @@ const AttendanceMonitoring = () => {
                 </div>
             )
         }
+
+        const scheduledTeacherIds = schedules.filter(sch => sch.activity_id === selectedGuruKbmSubject.id && sch.teacher_id).map(s => s.teacher_id);
+        const activeTeachers = teacherList.filter(t => scheduledTeacherIds.includes(t.id));
 
         const subjectLogs = logs.filter(l => l.activity_id === selectedGuruKbmSubject.id && l.teacher_id);
         const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
@@ -666,26 +654,22 @@ const AttendanceMonitoring = () => {
                     <Button variant="outline" size="sm" onClick={() => setSelectedGuruKbmSubject(null)} className="bg-white border-teal-200 text-teal-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
                     <div><h3 className="font-extrabold text-teal-900 text-lg flex items-center gap-2"><BookOpen size={18}/> {selectedGuruKbmSubject.name}</h3><p className="text-xs font-bold text-teal-700 mt-1">Kehadiran Mengajar KBM Sekolah</p></div>
                 </div>
-                {renderTeacherTable(teacherList, "Daftar Guru / Staf", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
+                {renderTeacherTable(activeTeachers, "Daftar Guru Pengampu", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
             </div>
         )
   };
 
   const renderGuruMengajiFlow = () => {
-        if (!selectedGuruMengajiTime) {
-            const times = [
-                { name: "Ba'da Pagi", icon: <Sunrise size={24}/>, color: "text-orange-500 bg-orange-50 border-orange-200 group-hover:bg-orange-500" },
-                { name: "Ba'da Maghrib", icon: <Sunset size={24}/>, color: "text-purple-600 bg-purple-50 border-purple-200 group-hover:bg-purple-600" },
-                { name: "Ba'da Isya", icon: <Moon size={24}/>, color: "text-indigo-600 bg-indigo-50 border-indigo-200 group-hover:bg-indigo-600" }
-            ];
+        if (!selectedGuruMengajiSubject) {
+            const mengajiActivities = activities.filter(a => a.category === 'mengaji' && schedules.some(sch => sch.activity_id === a.id && sch.teacher_id));
             return (
                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                     <h3 className="font-bold text-teal-800 flex items-center gap-2 mb-4 border-b border-teal-200 pb-2"><BookOpen className="text-teal-600"/> Pilih Waktu Bimbingan Mengaji</h3>
                     <div className="flex flex-col gap-3">
-                        {times.map(t => (
-                            <div key={t.name} onClick={() => setSelectedGuruMengajiTime(t.name)} className="flex items-center p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 transition-all group shadow-sm">
-                                <div className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors border ${t.color} group-hover:text-white`}>{t.icon}</div>
-                                <h4 className="font-bold text-lg text-gray-800 flex-1">Pembimbing {t.name}</h4>
+                        {mengajiActivities.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada jadwal pembimbing mengaji.</div>) : mengajiActivities.map(a => (
+                            <div key={a.id} onClick={() => setSelectedGuruMengajiSubject(a)} className="flex items-center p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 transition-all group shadow-sm">
+                                <div className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors border text-orange-500 bg-orange-50 border-orange-200 group-hover:bg-orange-500 group-hover:text-white`}><BookOpen size={24}/></div>
+                                <h4 className="font-bold text-lg text-gray-800 flex-1">Pembimbing {a.name}</h4>
                                 <div className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight size={20}/></div>
                             </div>
                         ))}
@@ -694,38 +678,41 @@ const AttendanceMonitoring = () => {
             )
         }
 
+        const scheduledTeacherIds = schedules.filter(sch => sch.activity_id === selectedGuruMengajiSubject.id && sch.teacher_id).map(s => s.teacher_id);
+        const activeTeachers = teacherList.filter(t => scheduledTeacherIds.includes(t.id));
+
         const year = new Date(dateFilter).getFullYear(); const month = new Date(dateFilter).getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const columns = Array.from({length: daysInMonth}, (_, i) => ({ key: String(i+1), label: String(i+1) }));
 
         const getStatus = (teacherId: number, day: string) => {
             const targetDateStr = `${year}-${String(month+1).padStart(2,'0')}-${day.padStart(2,'0')}`;
-            const log = logs.find(l => l.teacher_id === teacherId && l.activity?.name === selectedGuruMengajiTime && l.created_at.startsWith(targetDateStr));
+            const log = logs.find(l => l.teacher_id === teacherId && l.activity_id === selectedGuruMengajiSubject.id && l.created_at.startsWith(targetDateStr));
             return log ? getStatusIcon(log.status) : "-";
         };
 
         return (
             <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
                 <div className="flex items-center gap-4 mb-4 bg-teal-50 p-4 rounded-xl border-2 border-teal-200 shadow-sm">
-                    <Button variant="outline" size="sm" onClick={() => setSelectedGuruMengajiTime(null)} className="bg-white border-teal-200 text-teal-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                    <div><h3 className="font-extrabold text-teal-900 text-lg">Kehadiran Pembimbing Mengaji {selectedGuruMengajiTime}</h3><p className="text-xs font-bold text-teal-700 mt-1">Skala Bulanan</p></div>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedGuruMengajiSubject(null)} className="bg-white border-teal-200 text-teal-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                    <div><h3 className="font-extrabold text-teal-900 text-lg">Kehadiran Pembimbing Mengaji {selectedGuruMengajiSubject.name}</h3><p className="text-xs font-bold text-teal-700 mt-1">Skala Bulanan</p></div>
                 </div>
-                {renderTeacherTable(teacherList, "Daftar Guru / Ustaz", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
+                {renderTeacherTable(activeTeachers, "Daftar Guru / Ustaz", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
             </div>
         )
   };
 
   const renderGuruSholatFlow = () => {
-        if (!selectedGuruSholatTime) {
-            const times = ["Subuh", "Dzuhur", "Ashar", "Maghrib", "Isya"];
+        if (!selectedGuruSholatSubject) {
+            const sholatActivities = activities.filter(a => a.category === 'sholat' && schedules.some(sch => sch.activity_id === a.id && sch.teacher_id));
             return (
                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                     <h3 className="font-bold text-teal-800 flex items-center gap-2 mb-4 border-b border-teal-200 pb-2"><Moon className="text-teal-600"/> Pilih Waktu Sholat Jamaah</h3>
                     <div className="flex flex-col gap-3">
-                        {times.map(t => (
-                            <div key={t} onClick={() => setSelectedGuruSholatTime(t)} className="flex items-center p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 transition-all group shadow-sm">
+                        {sholatActivities.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada penugasan Imam sholat.</div>) : sholatActivities.map(a => (
+                            <div key={a.id} onClick={() => setSelectedGuruSholatSubject(a)} className="flex items-center p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 transition-all group shadow-sm">
                                 <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center mr-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><Moon size={20} /></div>
-                                <h4 className="font-bold text-lg text-gray-800 flex-1">Imam / Pembimbing Sholat {t}</h4>
+                                <h4 className="font-bold text-lg text-gray-800 flex-1">Imam / Pembimbing {a.name}</h4>
                                 <div className="text-teal-400 opacity-0 group-hover:opacity-100"><ArrowRight size={20}/></div>
                             </div>
                         ))}
@@ -733,6 +720,9 @@ const AttendanceMonitoring = () => {
                 </div>
             )
         }
+
+        const scheduledTeacherIds = schedules.filter(sch => sch.activity_id === selectedGuruSholatSubject.id && sch.teacher_id).map(s => s.teacher_id);
+        const activeTeachers = teacherList.filter(t => scheduledTeacherIds.includes(t.id));
 
         const year = new Date(dateFilter).getFullYear(); const month = new Date(dateFilter).getMonth();
         const firstDayOfMonth = new Date(year, month, 1);
@@ -752,7 +742,7 @@ const AttendanceMonitoring = () => {
         const getStatus = (teacherId: number, dayIndexStr: string) => {
             const cellDate = new Date(weekStart); cellDate.setDate(cellDate.getDate() + parseInt(dayIndexStr));
             const dateStr = cellDate.toISOString().split('T')[0];
-            const log = logs.find(l => l.teacher_id === teacherId && l.activity?.name?.includes(selectedGuruSholatTime) && l.created_at.startsWith(dateStr));
+            const log = logs.find(l => l.teacher_id === teacherId && l.activity_id === selectedGuruSholatSubject.id && l.created_at.startsWith(dateStr));
             return log ? getStatusIcon(log.status) : "-";
         };
 
@@ -760,8 +750,8 @@ const AttendanceMonitoring = () => {
             <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 bg-teal-50 p-4 rounded-xl border-2 border-teal-200 shadow-sm">
                     <div className="flex items-center gap-4">
-                        <Button variant="outline" size="sm" onClick={() => setSelectedGuruSholatTime(null)} className="bg-white border-teal-200 text-teal-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                        <div><h3 className="font-extrabold text-teal-900 text-lg">Kehadiran Guru di Sholat {selectedGuruSholatTime}</h3></div>
+                        <Button variant="outline" size="sm" onClick={() => setSelectedGuruSholatSubject(null)} className="bg-white border-teal-200 text-teal-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                        <div><h3 className="font-extrabold text-teal-900 text-lg">Kehadiran Guru di {selectedGuruSholatSubject.name}</h3></div>
                     </div>
                     <Select value={String(selectedGuruSholatWeek)} onValueChange={v => setSelectedGuruSholatWeek(parseInt(v))}>
                         <SelectTrigger className="w-[150px] bg-white border-teal-300 font-bold text-teal-800"><SelectValue/></SelectTrigger>
@@ -770,19 +760,19 @@ const AttendanceMonitoring = () => {
                         </SelectContent>
                     </Select>
                 </div>
-                {renderTeacherTable(teacherList, "Daftar Guru / Staf", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
+                {renderTeacherTable(activeTeachers, "Daftar Imam / Pendamping", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
             </div>
         )
   };
 
   const renderGuruEkskulFlow = () => {
       if (!selectedGuruEkskul) {
-          const ekskuls = activities.filter(a => a.category === 'ekskul');
+          const ekskuls = activities.filter(a => a.category === 'ekskul' && schedules.some(sch => sch.activity_id === a.id && sch.teacher_id));
           return (
               <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                   <h3 className="font-bold text-teal-800 flex items-center gap-2 mb-4 border-b border-teal-200 pb-2"><Trophy className="text-teal-600"/> Pilih Pembina Ekstrakurikuler</h3>
                   <div className="flex flex-col gap-3">
-                      {ekskuls.length === 0 ? <div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada data ekskul.</div> : ekskuls.map(e => {
+                      {ekskuls.length === 0 ? <div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada data penugasan pembina ekskul.</div> : ekskuls.map(e => {
                           const isPilihan = members.some(m => m.activity_id === e.id) || e.tipe_ekskul === 'pilihan';
                           return (
                               <div key={e.id} onClick={() => setSelectedGuruEkskul(e)} className="flex items-center justify-between p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 hover:bg-teal-50 transition-all group shadow-sm">
@@ -795,6 +785,9 @@ const AttendanceMonitoring = () => {
               </div>
           )
       }
+
+      const scheduledTeacherIds = schedules.filter(sch => sch.activity_id === selectedGuruEkskul.id && sch.teacher_id).map(s => s.teacher_id);
+      const activeTeachers = teacherList.filter(t => scheduledTeacherIds.includes(t.id));
 
       const subjectLogs = logs.filter(l => l.activity_id === selectedGuruEkskul.id && l.teacher_id);
       const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
@@ -813,7 +806,7 @@ const AttendanceMonitoring = () => {
                   <Button variant="outline" size="sm" onClick={() => setSelectedGuruEkskul(null)} className="bg-white border-teal-200 text-teal-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
                   <div><h3 className="font-extrabold text-teal-900 text-lg flex items-center gap-2"><Trophy size={18}/> {selectedGuruEkskul.name}</h3><p className="text-xs font-bold text-teal-700 mt-1">Kehadiran Pembina Ekskul</p></div>
               </div>
-              {renderTeacherTable(teacherList, "Daftar Guru / Pembina", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
+              {renderTeacherTable(activeTeachers, "Daftar Guru / Pembina", "bg-teal-100 text-teal-800 border-l-4 border-teal-600", columns, getStatus)}
           </div>
       )
   };
@@ -826,7 +819,7 @@ const AttendanceMonitoring = () => {
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <FileSpreadsheet className="text-green-600" /> Monitoring Absensi
             </h1>
-            <p className="text-xs text-gray-500">Pantau kehadiran santri dan guru secara detail per pertemuan, atau historis mingguan/bulanan.</p>
+            <p className="text-xs text-gray-500">Pantau kehadiran santri secara detail per pertemuan, atau historis mingguan/bulanan.</p>
         </div>
         <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
             <Calendar className="text-gray-500 w-4 h-4" />
@@ -835,9 +828,13 @@ const AttendanceMonitoring = () => {
       </div>
 
       <Tabs defaultValue="santri" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6 bg-gray-100 p-1">
+        
+        {/* 🔥 TABS GURU DIHILANGKAN JIKA ROLE = GURU 🔥 */}
+        <TabsList className={`grid w-full mb-6 bg-gray-100 p-1 ${userRole === 'guru' ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <TabsTrigger value="santri" className="data-[state=active]:bg-green-600 data-[state=active]:text-white shadow-sm font-bold">Santri</TabsTrigger>
-            <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white shadow-sm font-bold">Guru & Staf</TabsTrigger>
+            {userRole !== 'guru' && (
+                <TabsTrigger value="guru" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white shadow-sm font-bold">Guru & Staf</TabsTrigger>
+            )}
         </TabsList>
 
         <TabsContent value="santri" className="space-y-6">
@@ -897,53 +894,55 @@ const AttendanceMonitoring = () => {
             </Card>
         </TabsContent>
 
-        <TabsContent value="guru" className="space-y-6">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <ChartCard title="Kehadiran Mengajar (KBM)" data={getStats('guru', 'kbm')} />
-                <ChartCard title="Kehadiran Ibadah & Mengaji" data={getStats('guru', 'ibadah')} />
-                <ChartCard title="Kehadiran Ekstrakurikuler" data={getStats('guru', 'ekskul')} />
-            </div>
+        {/* 🔥 TABS GURU DIHILANGKAN JIKA ROLE = GURU 🔥 */}
+        {userRole !== 'guru' && (
+            <TabsContent value="guru" className="space-y-6">
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <ChartCard title="Kehadiran Mengajar (KBM)" data={getStats('guru', 'kbm')} />
+                    <ChartCard title="Kehadiran Ibadah & Mengaji" data={getStats('guru', 'ibadah')} />
+                    <ChartCard title="Kehadiran Ekstrakurikuler" data={getStats('guru', 'ekskul')} />
+                </div>
 
-            <div className="bg-white p-6 rounded-xl border border-teal-100 shadow-sm">
-                <h3 className="font-bold text-lg text-teal-800 flex items-center gap-2 mb-6"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Absensi Terpadu Guru</h3>
-                <Tabs defaultValue="kbm" value={guruTab} onValueChange={setGuruTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 bg-teal-50 p-1 rounded-lg mb-6 border border-teal-100">
-                        <TabsTrigger value="kbm" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">KBM Sekolah</TabsTrigger>
-                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Mengaji</TabsTrigger>
-                        <TabsTrigger value="sholat" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Sholat</TabsTrigger>
-                        <TabsTrigger value="ekskul" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Ekskul</TabsTrigger>
-                    </TabsList>
+                <div className="bg-white p-6 rounded-xl border border-teal-100 shadow-sm">
+                    <h3 className="font-bold text-lg text-teal-800 flex items-center gap-2 mb-6"><FileSpreadsheet className="w-5 h-5 text-teal-600"/> Rekap Absensi Terpadu Guru</h3>
+                    <Tabs defaultValue="kbm" value={guruTab} onValueChange={setGuruTab} className="w-full">
+                        <TabsList className="grid w-full grid-cols-4 bg-teal-50 p-1 rounded-lg mb-6 border border-teal-100">
+                            <TabsTrigger value="kbm" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">KBM Sekolah</TabsTrigger>
+                            <TabsTrigger value="mengaji" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Mengaji</TabsTrigger>
+                            <TabsTrigger value="sholat" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Sholat</TabsTrigger>
+                            <TabsTrigger value="ekskul" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-[10px] md:text-sm font-bold transition-all">Ekskul</TabsTrigger>
+                        </TabsList>
 
-                    <TabsContent value="kbm">{renderGuruKbmFlow()}</TabsContent>
-                    <TabsContent value="mengaji">{renderGuruMengajiFlow()}</TabsContent>
-                    <TabsContent value="sholat">{renderGuruSholatFlow()}</TabsContent>
-                    <TabsContent value="ekskul">{renderGuruEkskulFlow()}</TabsContent>
-                </Tabs>
-            </div>
+                        <TabsContent value="kbm">{renderGuruKbmFlow()}</TabsContent>
+                        <TabsContent value="mengaji">{renderGuruMengajiFlow()}</TabsContent>
+                        <TabsContent value="sholat">{renderGuruSholatFlow()}</TabsContent>
+                        <TabsContent value="ekskul">{renderGuruEkskulFlow()}</TabsContent>
+                    </Tabs>
+                </div>
 
-            {/* Input Manual Izin Sakit Khusus Guru */}
-            <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
-                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Guru</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Guru</label><Select value={formTeacherId} onValueChange={setFormTeacherId}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{teacherList.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-4 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('guru')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
-                </CardContent>
-            </Card>
+                <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Guru</CardTitle></CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                        <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Guru</label><Select value={formTeacherId} onValueChange={setFormTeacherId}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{teacherList.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select></div>
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
+                        <div className="md:col-span-4 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('guru')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                    </CardContent>
+                </Card>
 
-            <Card className="shadow-sm border-teal-200">
-                <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800 flex items-center gap-2"><Clock className="w-4 h-4 text-teal-600"/> Log Absensi Guru Hari Ini</CardTitle></CardHeader>
-                <CardContent className="p-0">
-                    <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
-                        {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
-                            <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru hari ini.</div>
-                        ) : (
-                            dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white')}`}>{log.status}</Badge></div></div>))
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-        </TabsContent>
+                <Card className="shadow-sm border-teal-200">
+                    <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800 flex items-center gap-2"><Clock className="w-4 h-4 text-teal-600"/> Log Absensi Guru Hari Ini</CardTitle></CardHeader>
+                    <CardContent className="p-0">
+                        <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
+                            {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
+                                <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru hari ini.</div>
+                            ) : (
+                                dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white')}`}>{log.status}</Badge></div></div>))
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+        )}
 
       </Tabs>
     </div>
