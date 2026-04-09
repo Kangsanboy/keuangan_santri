@@ -289,10 +289,12 @@ const Index = () => {
              <div className="border-t border-green-800 my-4"></div>
              <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
              
+             {/* MENU DATA SANTRI (GURU BISA AKSES) */}
+             <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
+
              {/* 🔥 HILANGKAN MENU INI JIKA ROLE GURU */}
              {!isGuru && (
                  <>
-                     <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
                      <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas</button>
                      <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru</button>
                  </>
@@ -489,7 +491,7 @@ const Index = () => {
                     )}
 
                     {/* DATA SANTRI (DIBLOKIR UNTUK GURU) */}
-                    {activeMenu === "santri" && !isGuru && (
+                    {activeMenu === "santri" && (
                       <div className="animate-in fade-in zoom-in duration-300 space-y-4">
                         {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                       </div>
