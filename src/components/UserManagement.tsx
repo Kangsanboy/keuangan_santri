@@ -10,20 +10,13 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Baby, Store, BookOpen } from "lucide-react";
+import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Store, BookOpen } from "lucide-react";
 
-// Update Interface: viewer diubah jadi guru
 interface AppUser {
   id: string;
   email: string;
-  role: "super_admin" | "admin" | "guru" | "parent" | "pending" | "kantin";
+  role: "super_admin" | "admin" | "guru" | "pending" | "kantin";
   full_name: string;
-  linked_santri_id?: string | null; 
-}
-
-interface SantriData {
-  id: string;
-  nama_lengkap: string; 
 }
 
 const UserManagement = () => {
@@ -35,11 +28,7 @@ const UserManagement = () => {
   
   // State untuk Edit
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
-  const [newRole, setNewRole] = useState<string>("guru"); // default dropdown ke guru
-  
-  // State Santri
-  const [santriList, setSantriList] = useState<SantriData[]>([]);
-  const [selectedSantriId, setSelectedSantriId] = useState<string | null>(null);
+  const [newRole, setNewRole] = useState<string>("guru"); 
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -53,23 +42,8 @@ const UserManagement = () => {
     } finally { setLoading(false); }
   };
 
-  const fetchSantriList = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('santri_2025_12_01_21_34') 
-        .select('id, nama_lengkap')       
-        .order('nama_lengkap', { ascending: true });
-
-      if (error) throw error;
-      setSantriList(data || []);
-    } catch (error: any) {
-      console.error("Gagal ambil data santri:", error.message);
-    }
-  };
-
   useEffect(() => { 
     fetchUsers(); 
-    fetchSantriList(); 
   }, []);
 
   const handleUpdateRole = async () => {
@@ -77,34 +51,24 @@ const UserManagement = () => {
     try {
       const updates: any = { role: newRole };
       
-      if (newRole === 'parent') {
-        updates.linked_santri_id = selectedSantriId;
-      } else {
-        updates.linked_santri_id = null; 
-      }
-
       // 1. Update role di tabel users
       const { error } = await supabase.from('users').update(updates).eq('id', editingUser.id);
       if (error) throw error;
 
-      // 2. 🔥 MAGIC: OTOMATISASI INSERT KE DATA GURU 🔥
+      // 2. OTOMATISASI INSERT KE DATA GURU
       if (newRole === 'guru') {
-          // Cek apakah guru dengan nama ini sudah ada di tabel teachers
           const { data: existingTeacher } = await supabase
               .from('teachers')
               .select('id')
               .eq('full_name', editingUser.full_name)
               .maybeSingle();
 
-          // Kalau belum ada, masukin otomatis!
           if (!existingTeacher) {
               const { error: teacherError } = await supabase.from('teachers').insert([{
                   full_name: editingUser.full_name,
-                  gender: 'L', // Default laki-laki, bisa diedit nanti
+                  gender: 'L', 
                   is_active: true
-                  // NIP & RFID biarkan null/kosong agar diisi oleh Admin di menu Data Guru
               }]);
-              
               if (teacherError) console.error("Gagal auto-sync ke tabel guru:", teacherError);
           }
       }
@@ -133,25 +97,22 @@ const UserManagement = () => {
     return matchesSearch && matchesRole;
   });
 
-  // Statistik Role
+  // Statistik Role (Parent Dihapus)
   const superAdminCount = users.filter(u => u.role === 'super_admin').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
   const kantinCount = users.filter(u => u.role === 'kantin').length;
-  const parentCount = users.filter(u => u.role === 'parent').length;
-  const guruCount = users.filter(u => u.role === 'guru').length; // Ubah dari viewer ke guru
+  const guruCount = users.filter(u => u.role === 'guru').length; 
   const pendingCount = users.filter(u => u.role === 'pending').length;
 
   const handleEditClick = (user: AppUser) => {
     setEditingUser(user);
     setNewRole(user.role);
-    setSelectedSantriId(user.linked_santri_id || null);
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* GRID STATISTIK */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 lg:grid-cols-5">
         <Card onClick={() => toggleFilter('super_admin')} className={`cursor-pointer bg-purple-50 border-purple-200 ${filterRole === 'super_admin' ? 'ring-2 ring-purple-500' : ''}`}>
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-purple-700">Super Admin</CardTitle><Rocket className="h-4 w-4 text-purple-600" /></CardHeader>
             <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-purple-900">{superAdminCount}</div></CardContent>
@@ -164,11 +125,6 @@ const UserManagement = () => {
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-teal-700">Warung/Kantin</CardTitle><Store className="h-4 w-4 text-teal-600" /></CardHeader>
             <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-teal-900">{kantinCount}</div></CardContent>
         </Card>
-        <Card onClick={() => toggleFilter('parent')} className={`cursor-pointer bg-orange-50 border-orange-200 ${filterRole === 'parent' ? 'ring-2 ring-orange-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-orange-700">Orang Tua</CardTitle><Baby className="h-4 w-4 text-orange-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-orange-900">{parentCount}</div></CardContent>
-        </Card>
-        {/* CARD KHUSUS GURU */}
         <Card onClick={() => toggleFilter('guru')} className={`cursor-pointer bg-blue-50 border-blue-200 ${filterRole === 'guru' ? 'ring-2 ring-blue-500' : ''}`}>
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-blue-700">Guru / Staf</CardTitle><BookOpen className="h-4 w-4 text-blue-600" /></CardHeader>
             <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-blue-900">{guruCount}</div></CardContent>
@@ -188,7 +144,6 @@ const UserManagement = () => {
                 user.role==='super_admin' ? 'bg-purple-100 text-purple-700 border-purple-200' :
                 user.role==='admin' ? 'bg-green-100 text-green-700 border-green-200' :
                 user.role==='guru' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                user.role==='parent' ? 'bg-orange-100 text-orange-700 border-orange-200' :
                 user.role==='kantin' ? 'bg-teal-100 text-teal-700 border-teal-200' :
                 'bg-gray-100 text-gray-700 border-gray-200'
             }`}>{user.role.replace('_',' ')}</span>
@@ -208,41 +163,12 @@ const UserManagement = () => {
                         <SelectContent>
                             <SelectItem value="pending">Pending</SelectItem>
                             <SelectItem value="guru" className="text-blue-600 font-bold">Guru / Staf</SelectItem>
-                            <SelectItem value="parent" className="text-orange-600 font-bold">Orang Tua</SelectItem>
                             <SelectItem value="kantin" className="text-teal-600 font-bold">Warung / Kantin</SelectItem>
                             <SelectItem value="admin" className="text-green-600 font-bold">Admin</SelectItem>
                             <SelectItem value="super_admin" className="text-purple-600 font-bold">🚀 Super Admin</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
-
-                {newRole === 'parent' && (
-                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                        <label className="text-sm font-medium text-orange-700">Hubungkan dengan Santri</label>
-                        <Select 
-                            value={selectedSantriId || ""} 
-                            onValueChange={setSelectedSantriId}
-                        >
-                            <SelectTrigger className="border-orange-200 bg-orange-50/50">
-                                <SelectValue placeholder="Pilih Nama Santri..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {santriList.length > 0 ? santriList.map((santri) => (
-                                    <SelectItem key={santri.id} value={santri.id}>
-                                        {santri.nama_lengkap}
-                                    </SelectItem>
-                                )) : (
-                                    <div className="p-2 text-sm text-gray-500 text-center">
-                                        Data santri kosong
-                                    </div>
-                                )}
-                            </SelectContent>
-                        </Select>
-                        <p className="text-xs text-gray-500">
-                            Santri yang dipilih akan terhubung dengan akun ini.
-                        </p>
-                    </div>
-                )}
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setEditingUser(null)}>Batal</Button>
