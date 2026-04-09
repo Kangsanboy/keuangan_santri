@@ -7,7 +7,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SaldoKelas from "@/pages/SaldoKelas";
-import CashierPage from "./components/CashierPage"; 
+import CashierPage from "./components/CashierPage";
+import PortalYayasan from "./components/PortalYayasan";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/pengguna" element={<Index />} /> {/* Jaga-jaga kalau pathnya pengguna */}
             
             <Route path="/saldo-kelas/:kelas" element={<SaldoKelas />} />
+            <Route path="/portal-ortu" element={<PortalYayasan />} />
             
             {/* 🔥 ROUTE KASIR (Sekarang aman karena sudah di-import) */}
             <Route path="/kasir" element={<CashierPage />} />
