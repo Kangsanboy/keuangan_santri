@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTo
 import { Wallet, Clock, ArrowUpCircle, ArrowDownCircle, Search, UserCheck, GraduationCap, Building } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const COLORS = ['#22c55e', '#eab308', '#3b82f6', '#ef4444']; // Hadir, Izin, Sakit, Alpa
+const COLORS = ['#22c55e', '#eab308', '#3b82f6', '#ef4444']; 
 
 const PortalYayasan = () => {
   const { toast } = useToast();
@@ -17,7 +17,6 @@ const PortalYayasan = () => {
   const [santri, setSantri] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("saldo");
 
-  // State Data
   const [saldo, setSaldo] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [attendanceStats, setAttendanceStats] = useState<any>({
@@ -30,17 +29,15 @@ const PortalYayasan = () => {
 
     setLoading(true);
     try {
-      // 1. Cari Santri berdasarkan NISN (nis)
       const { data: santriData, error: santriErr } = await supabase
         .from('santri_2025_12_01_21_34')
         .select('*')
-        .eq('nis', nisn)
+        .eq('nisn', nisn) // 🔥 SUDAH DIGANTI JADI NISN
         .single();
 
       if (santriErr || !santriData) throw new Error("Data santri tidak ditemukan. Periksa kembali NISN.");
       setSantri(santriData);
 
-      // 2. Tarik Data Transaksi & Hitung Saldo
       const { data: trxData } = await supabase
         .from('transactions_2025_12_01_21_34')
         .select('*, merchant:merchant_id(full_name)')
@@ -55,7 +52,6 @@ const PortalYayasan = () => {
         setSaldo(totalSaldo);
       }
 
-      // 3. Tarik Data Absensi
       const { data: absData } = await supabase
         .from('attendance_logs')
         .select('status, activity:activities(category, name)')
@@ -73,7 +69,6 @@ const PortalYayasan = () => {
     }
   };
 
-  // Fungsi memproses log absen jadi persentase & jumlah
   const processAttendance = (logs: any[]) => {
     const categories = { kbm: [], mengaji: [], sholat: [], ekskul: [] };
 
@@ -87,7 +82,7 @@ const PortalYayasan = () => {
           if (l.status === 'Hadir') counts.Hadir++;
           else if (l.status === 'Izin') counts.Izin++;
           else if (l.status === 'Sakit') counts.Sakit++;
-          else counts.Alpa++; // Anggap selain itu Alpa
+          else counts.Alpa++; 
       });
 
       return [
@@ -106,7 +101,6 @@ const PortalYayasan = () => {
     return categories;
   };
 
-  // Kustom Tooltip untuk Pie Chart (Menampilkan 90% (90 JP))
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -146,7 +140,6 @@ const PortalYayasan = () => {
     </Card>
   );
 
-  // ---------------- TAMPILAN LOGIN NISN ----------------
   if (!santri) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -183,10 +176,8 @@ const PortalYayasan = () => {
     );
   }
 
-  // ---------------- TAMPILAN DASHBOARD ORTU ----------------
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header Info Santri */}
       <div className="bg-blue-700 text-white p-6 md:p-8 rounded-b-[2rem] shadow-md">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -198,7 +189,7 @@ const PortalYayasan = () => {
                     <div className="flex gap-3 text-blue-100 text-sm mt-1">
                         <span className="flex items-center gap-1"><GraduationCap size={14}/> Kelas {santri.kelas}</span>
                         <span>•</span>
-                        <span className="font-mono tracking-wider">NISN: {santri.nis}</span>
+                        <span className="font-mono tracking-wider">NISN: {santri.nisn}</span> {/* 🔥 SUDAH DIGANTI JADI NISN */}
                     </div>
                 </div>
             </div>
@@ -215,7 +206,6 @@ const PortalYayasan = () => {
                 <TabsTrigger value="absen" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-base font-bold rounded-md">Rekap Absensi</TabsTrigger>
             </TabsList>
 
-            {/* TAB SALDO */}
             <TabsContent value="saldo" className="space-y-6 animate-in fade-in duration-300">
                 <Card className="bg-gradient-to-br from-blue-600 to-blue-800 text-white border-0 shadow-lg">
                     <CardContent className="p-6 md:p-8 flex flex-col items-center text-center">
@@ -254,7 +244,6 @@ const PortalYayasan = () => {
                 </Card>
             </TabsContent>
 
-            {/* TAB ABSENSI */}
             <TabsContent value="absen" className="space-y-6 animate-in fade-in duration-300">
                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-blue-800 text-sm mb-4">
                     <p>Berikut adalah rekapitulasi kehadiran ananda berdasarkan data tapping kartu di area pesantren dan absensi guru di kelas.</p>
