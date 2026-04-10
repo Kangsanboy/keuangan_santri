@@ -49,7 +49,6 @@ const Index = () => {
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>("pending"); 
   
-  // State Target Tab Absensi saat diklik dari Dashboard
   const [targetAbsensiTab, setTargetAbsensiTab] = useState<string>("kbm");
 
   /* ================= STATE DATA ================= */
@@ -62,7 +61,7 @@ const Index = () => {
   const [keluar7Hari, setKeluar7Hari] = useState(0);
   const [keluarHariIni, setKeluarHariIni] = useState(0);
   const [trxHariIni, setTrxHariIni] = useState<TransaksiItem[]>([]);
-  const [absensiLogs, setAbsensiLogs] = useState<any[]>([]); // Data Absensi Dashboard
+  const [absensiLogs, setAbsensiLogs] = useState<any[]>([]); 
   
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
   const yearsList = [2024, 2025, 2026, 2027, 2028];
@@ -169,7 +168,6 @@ const Index = () => {
     }
   }, [userRole]);
 
-  // Fetch Absensi Khusus Dashboard (Hari Ini)
   const fetchAbsensiHariIni = useCallback(async () => {
     if (userRole === 'pending') return;
     const now = new Date();
@@ -177,7 +175,7 @@ const Index = () => {
     
     const { data } = await supabase.from('attendance_logs')
         .select(`status, activity:activity_id(name, category)`)
-        .not('santri_id', 'is', null) // Hanya data Santri
+        .not('santri_id', 'is', null) 
         .gte('created_at', `${todayStr}T00:00:00`)
         .lte('created_at', `${todayStr}T23:59:59`);
         
@@ -265,24 +263,28 @@ const Index = () => {
       ].filter(x => x.value > 0);
   };
 
+  // 🔥 PERUBAHAN: Komponen Pie Chart Dashboard dibikin sama kayak Saldo (border hijau melengkung)
   const DashboardChartCard = ({ title, data, tabName }: { title: string, data: any[], tabName: string }) => (
       <Card 
-          className="border shadow-sm cursor-pointer hover:border-green-400 hover:shadow-md transition-all group bg-white"
+          className="border-2 border-green-400/80 rounded-2xl bg-white shadow-sm cursor-pointer group relative overflow-hidden active:scale-95 transition-transform hover:border-green-500 hover:shadow-md"
           onClick={() => {
               setTargetAbsensiTab(tabName);
               handleMenuClick("absensi");
           }}
       >
-          <CardHeader className="pb-2 bg-gray-50/50 group-hover:bg-green-50/50 transition-colors border-b border-gray-100">
-              <CardTitle className="text-xs font-bold text-center uppercase text-gray-500 group-hover:text-green-700">{title}</CardTitle>
+          {/* Elemen Dekorasi di Pojok Kanan Atas (Sama dengan Kotak Saldo) */}
+          <div className="absolute top-0 right-0 w-12 h-12 bg-green-50 rounded-bl-full -mr-6 -mt-6 z-0 group-hover:bg-green-100 transition-colors"></div>
+          
+          <CardHeader className="pb-2 relative z-10 border-b border-gray-100 bg-transparent px-3 pt-3">
+              <CardTitle className="text-xs font-extrabold text-center uppercase text-gray-700 group-hover:text-green-700 transition-colors">{title}</CardTitle>
           </CardHeader>
-          <CardContent className="h-[160px] pt-4 pb-2">
+          <CardContent className="h-[140px] pt-3 pb-2 relative z-10 bg-transparent px-2">
               {data[0].name === 'Belum Ada Data' ? (
-                  <div className="flex items-center justify-center h-full text-xs text-gray-400 italic">Belum ada absen hari ini</div>
+                  <div className="flex items-center justify-center h-full text-[10px] text-gray-400 italic">Belum ada absen hari ini</div>
               ) : (
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                          <Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={50} paddingAngle={5} dataKey="value">
+                          <Pie data={data} cx="50%" cy="50%" innerRadius={30} outerRadius={45} paddingAngle={5} dataKey="value">
                               {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                           </Pie>
                           <RechartsTooltip wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
@@ -434,9 +436,9 @@ const Index = () => {
                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                    <div className="text-center space-y-2 pb-4 border-b border-gray-200"><h1 className="text-xl md:text-3xl font-bold text-green-700 uppercase tracking-wide px-2">DASHBOARD PUSAT</h1><p className="text-gray-500 max-w-3xl mx-auto text-xs md:text-base leading-relaxed px-4">Ringkasan data pesantren secara real-time.</p></div>
                    
-                   {/* 🔥 GRAFIK ABSENSI PINDAH KE ATAS SINI 🔥 */}
-                   <div className="space-y-3 bg-white p-4 rounded-xl border shadow-sm border-green-100">
-                       <h3 className="font-bold text-gray-800 text-sm md:text-lg pl-2 border-l-4 border-green-500">Rekap Kehadiran Santri Hari Ini</h3>
+                   {/* 🔥 PERUBAHAN: GRAFIK ABSENSI DI ATAS, TANPA CONTAINER PUTIH, JUDUL DI TENGAH 🔥 */}
+                   <div className="space-y-4 mb-8 mt-2">
+                       <h3 className="text-center font-extrabold text-gray-800 text-sm md:text-lg tracking-widest uppercase">MONITOR ABSENSI SANTRI</h3>
                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                            <DashboardChartCard title="KBM Sekolah" data={getDashboardAbsenStats('kbm')} tabName="kbm" />
                            <DashboardChartCard title="Mengaji" data={getDashboardAbsenStats('mengaji')} tabName="mengaji" />
@@ -452,7 +454,7 @@ const Index = () => {
                        const akhwat = rekapSaldo.find((r) => r.kelas === kls && r.gender === "akhwat")?.saldo || 0;
                        const total = ikhwan + akhwat;
                        return (
-                         <div key={kls} onClick={() => handleOpenKelas(kls)} className="border-2 border-green-400/80 rounded-2xl bg-white shadow-sm p-4 cursor-pointer group relative overflow-hidden active:scale-95 transition-transform">
+                         <div key={kls} onClick={() => handleOpenKelas(kls)} className="border-2 border-green-400/80 rounded-2xl bg-white shadow-sm p-4 cursor-pointer group relative overflow-hidden active:scale-95 transition-transform hover:shadow-md">
                            <div className="absolute top-0 right-0 w-12 h-12 bg-green-50 rounded-bl-full -mr-6 -mt-6 z-0 group-hover:bg-green-100 transition-colors"></div>
                            <h3 className="text-center font-bold text-gray-800 mb-3 text-lg relative z-10">Kelas {kls}</h3>
                            <div className="space-y-2 text-sm font-medium relative z-10"><div className="flex justify-between items-center text-gray-600"><span>Ikhwan</span><span className="text-green-600">Rp {ikhwan.toLocaleString("id-ID")}</span></div><div className="flex justify-between items-center text-gray-600"><span>Akhwat</span><span className="text-pink-600">Rp {akhwat.toLocaleString("id-ID")}</span></div><div className="h-px bg-gray-200 my-1"></div><div className="flex justify-between items-center font-bold text-gray-900"><span>Total</span><span>Rp {total.toLocaleString("id-ID")}</span></div></div>
@@ -469,7 +471,7 @@ const Index = () => {
                            { title: "Keluar 7 Hari", value: keluar7Hari, color: "text-red-600" }, 
                            { title: "Keluar Hari Ini", value: keluarHariIni, color: "text-orange-600" }
                        ].map((item, idx) => (
-                           <div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px]">
+                           <div key={idx} className="border border-green-500 rounded-xl bg-white shadow-sm p-3 text-center flex flex-col justify-center min-h-[100px] hover:shadow-md transition-shadow">
                                <h4 className="text-[10px] md:text-xs font-bold text-gray-700 mb-1 uppercase tracking-wide">{item.title}</h4>
                                <p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>Rp {item.value.toLocaleString("id-ID")}</p>
                            </div>
