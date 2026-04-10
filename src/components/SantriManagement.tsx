@@ -27,7 +27,7 @@ interface TransactionHistory {
 }
 
 interface SantriSaldo {
-  id: string; nama_lengkap: string; nis: string; kelas: number;
+  id: string; nama_lengkap: string; nisn: string; kelas: number;
   rombel: string; 
   kelas_mengaji?: number;
   rombel_mengaji?: string;
@@ -49,28 +49,23 @@ interface ClassSummary {
 const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagementProps) => {
   const { toast } = useToast();
   
-  // State Navigasi & Data
   const [activeKelas, setActiveKelas] = useState<number | null>(initialKelas ? parseInt(initialKelas) : null);
   const [santris, setSantris] = useState<SantriSaldo[]>([]);
   const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Tab Gender
   const [activeTab, setActiveTab] = useState<"ikhwan" | "akhwat">("ikhwan");
 
-  // State Dialog Form Manual
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState<Partial<SantriSaldo>>({
     gender: 'ikhwan', status: 'aktif', kelas: 7, rombel: 'A', rfid_card_id: ''
   });
 
-  // 🔥 State Dialog Import Excel
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
-  /* FETCH DATA */
   const fetchSummaries = async () => {
     setLoading(true);
     try {
@@ -93,7 +88,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     if (activeKelas === null) return;
     setLoading(true);
     try {
-      // 1. Tarik data utama santri yang udah ada kelas_mengaji nya
       const { data: baseData, error } = await supabase.from('santri_2025_12_01_21_34')
         .select('*')
         .eq('kelas', activeKelas)
@@ -102,32 +96,24 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         
       if (error) throw error;
 
-      // 2. Tarik data saldo dari view
       const { data: saldoData } = await supabase.from('view_santri_saldo')
         .select('id, saldo')
         .eq('kelas', activeKelas);
 
-      // 3. Gabungkan datanya (Merge)
       const mergedData = baseData?.map(santri => {
           const matchSaldo = saldoData?.find(s => s.id === santri.id);
-          return {
-              ...santri,
-              saldo: matchSaldo?.saldo || 0
-          };
+          return { ...santri, saldo: matchSaldo?.saldo || 0 };
       });
 
       // @ts-ignore
       setSantris(mergedData || []);
     } catch (error: any) { 
       toast({ title: "Error", description: error.message, variant: "destructive" }); 
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); }, [activeKelas]);
 
-  /* CRUD & ACTIONS */
   const handleNaikKelasMassal = async () => {
     setLoading(true);
     try {
@@ -143,7 +129,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     try {
       const payload = { 
           nama_lengkap: formData.nama_lengkap, 
-          nis: formData.nis, 
+          nisn: formData.nisn, 
           kelas: formData.kelas,
           rombel: formData.rombel || 'A', 
           gender: formData.gender, 
@@ -160,7 +146,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         if (error) throw error; toast({ title: "Sukses", description: "Santri baru ditambahkan" });
       }
       setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'aktif', kelas: 7, rombel: 'A', rfid_card_id: '' });
-    } catch (error: any) { toast({ title: "Gagal", description: "Cek kembali data (Mungkin NIS/Kartu sudah dipakai).", variant: "destructive" }); }
+    } catch (error: any) { toast({ title: "Gagal", description: "Cek kembali data (Mungkin NISN/Kartu sudah dipakai).", variant: "destructive" }); }
   };
 
   const handleDelete = async (id: string) => {
@@ -171,9 +157,8 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
   };
 
-  /* 🔥 FUNGSI IMPORT EXCEL (CSV) */
   const downloadTemplate = () => {
-    const headers = "nis,nama_lengkap,kelas,rombel,gender,nama_wali,rfid_card_id\n";
+    const headers = "nisn,nama_lengkap,kelas,rombel,gender,nama_wali,rfid_card_id\n";
     const sample1 = "11111,Ahmad Fulan,7,A,ikhwan,Bapak Ahmad,\n";
     const sample2 = "22222,Siti Fulanah,7,B,akhwat,Ibu Siti,\n";
     const csvContent = "data:text/csv;charset=utf-8," + headers + sample1 + sample2;
@@ -188,9 +173,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   };
 
   const handleImport = async () => {
-    if (!importFile) {
-        return toast({ title: "Pilih file dulu", description: "Anda belum memasukkan file CSV.", variant: "destructive" });
-    }
+    if (!importFile) return toast({ title: "Pilih file dulu", description: "Anda belum memasukkan file CSV.", variant: "destructive" });
 
     setLoading(true);
     const reader = new FileReader();
@@ -198,56 +181,35 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     reader.onload = async (e) => {
         try {
             const text = e.target?.result as string;
-            // Pisahkan per baris
             const rows = text.split('\n').map(row => row.trim()).filter(row => row !== '');
-            
             if (rows.length < 2) throw new Error("File kosong atau tidak ada data santri.");
 
-            // Ambil nama kolom dari baris pertama (header)
             const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
-            
             const dataToInsert = [];
             
-            // Looping baris data (mulai dari index 1 karena index 0 adalah header)
             for (let i = 1; i < rows.length; i++) {
                 const values = rows[i].split(',').map(v => v.trim());
-                if (values.length < 2) continue; // Lewati baris yang tidak valid
+                if (values.length < 2) continue; 
 
                 const santri: any = { status: 'aktif' };
-                
                 headers.forEach((header, index) => {
-                    if (header === 'kelas') {
-                        santri[header] = parseInt(values[index]) || 7;
-                    } else if (values[index]) {
-                        santri[header] = values[index];
-                    }
+                    if (header === 'kelas') { santri[header] = parseInt(values[index]) || 7; } 
+                    else if (values[index]) { santri[header] = values[index]; }
                 });
 
-                // Syarat mutlak: Nama lengkap harus ada
-                if (santri.nama_lengkap) {
-                    dataToInsert.push(santri);
-                }
+                if (santri.nama_lengkap) dataToInsert.push(santri);
             }
 
             if (dataToInsert.length === 0) throw new Error("Tidak ada baris data yang valid ditemukan di file.");
 
-            // Masukkan data massal ke Supabase
             const { error } = await supabase.from('santri_2025_12_01_21_34').insert(dataToInsert);
             if (error) throw error;
 
             toast({ title: "Sukses Import 🎉", description: `${dataToInsert.length} santri berhasil ditambahkan.`, className: "bg-green-600 text-white border-none" });
+            setIsImportOpen(false); setImportFile(null); activeKelas === null ? fetchSummaries() : fetchSantrisInClass();
             
-            setIsImportOpen(false);
-            setImportFile(null);
-            activeKelas === null ? fetchSummaries() : fetchSantrisInClass();
-            
-        } catch (err: any) {
-            toast({ title: "Gagal Import", description: err.message, variant: "destructive" });
-        } finally {
-            setLoading(false);
-        }
+        } catch (err: any) { toast({ title: "Gagal Import", description: err.message, variant: "destructive" }); } finally { setLoading(false); }
     };
-
     reader.readAsText(importFile);
   };
 
@@ -264,8 +226,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
              <div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-green-600" /> Database Santri</h2><p className="text-sm text-gray-500">Pilih kelas untuk melihat detail.</p></div>
-             
-             {/* 🔥 TOMBOL IMPORT DI DASHBOARD UTAMA */}
              <div className="flex flex-wrap gap-2 w-full md:w-auto">
                  <Button onClick={() => setIsImportOpen(true)} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-sm flex-1 md:flex-none">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel
@@ -296,7 +256,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                 <DialogHeader><DialogTitle>Tambah Santri Baru</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">NISN</label><Input value={formData.nisn || ''} onChange={e => setFormData({...formData, nisn: e.target.value})} placeholder="12345678" /></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
                     </div>
                     <div className="space-y-2">
@@ -305,26 +265,22 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     </div>
                     
                     <div className="grid grid-cols-3 gap-4">
-    <div className="col-span-2 space-y-2">
-        <label className="text-sm font-medium">Kelas Sekolah</label>
-        <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
-            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
-            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-            <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
-        </Select>
-    </div>
-    <div className="col-span-1 space-y-2">
-        <label className="text-sm font-medium">Rombel</label>
-        <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
-            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
-            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-            <SelectContent>
-                {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-        </Select>
-    </div>
-</div>
-{isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
+                        <div className="col-span-2 space-y-2">
+                            <label className="text-sm font-medium">Kelas Sekolah</label>
+                            <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
+                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+                                <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div className="col-span-1 space-y-2">
+                            <label className="text-sm font-medium">Rombel</label>
+                            <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+                                <SelectContent>{['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    {isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
 
                     <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
@@ -333,12 +289,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
             </DialogContent>
         </Dialog>
 
-        {/* 🔥 DIALOG IMPORT EXCEL */}
+        {/* DIALOG IMPORT EXCEL */}
         <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Santri</DialogTitle>
-                </DialogHeader>
+                <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Santri</DialogTitle></DialogHeader>
                 <div className="space-y-6 py-2">
                     <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col gap-3">
                         <p className="text-sm text-blue-800 leading-relaxed">
@@ -351,16 +305,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                             <Download className="w-4 h-4 mr-2" /> Download Template Excel
                         </Button>
                     </div>
-                    
                     <div className="space-y-2">
                         <label className="text-sm font-bold text-gray-700">Upload File CSV yang sudah diisi</label>
                         <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
-                            <Input 
-                                type="file" 
-                                accept=".csv" 
-                                onChange={(e) => setImportFile(e.target.files?.[0] || null)} 
-                                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0"
-                            />
+                            <Input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0" />
                         </div>
                     </div>
                 </div>
@@ -387,12 +335,9 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <div className="relative flex-1 min-w-[200px] md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari santri..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-            
-            {/* 🔥 TOMBOL IMPORT DI HALAMAN DETAIL KELAS */}
             <Button onClick={() => setIsImportOpen(true)} size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 h-9">
                 <FileSpreadsheet className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Import</span>
             </Button>
-            
             <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
                 <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
             </Button>
@@ -410,7 +355,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           <table className="w-full text-sm text-left">
             <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
               <tr>
-                <th className="p-4 w-[80px]">NIS</th>
+                <th className="p-4 w-[80px]">NISN</th>
                 <th className="p-4 min-w-[200px]">Nama Lengkap</th>
                 <th className="p-4 text-center w-[120px]">Kls Sekolah</th>
                 <th className="p-4 text-center w-[120px]">Kls Mengaji</th>
@@ -424,25 +369,15 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
               ) : (
                   currentTabSantris.map((santri) => (
                     <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
-                      <td className="p-4 font-mono text-gray-500">{santri.nis || "-"}</td>
+                      <td className="p-4 font-mono text-gray-500">{santri.nisn || "-"}</td>
                       <td className="p-4">
                           <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
                               {santri.nama_lengkap}
                               {santri.rfid_card_id && (<span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>)}
                           </div>
                       </td>
-                      <td className="p-4 text-center">
-                        <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">
-                          {santri.kelas}-{santri.rombel || 'A'}
-                        </span>
-                      </td>
-
-{/* KELAS MENGAJI */}
-                      <td className="p-4 text-center">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">
-                          {santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}
-                        </span>
-                      </td>
+                      <td className="p-4 text-center"><span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">{santri.kelas}-{santri.rombel || 'A'}</span></td>
+                      <td className="p-4 text-center"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">{santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}</span></td>
                       <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
                       <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={(e) => openEdit(e, santri)}><Pencil size={14} /></Button>
@@ -461,7 +396,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
             <DialogContent><DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-sm font-medium">NIS</label><Input value={formData.nis || ''} onChange={e => setFormData({...formData, nis: e.target.value})} placeholder="12345" /></div>
+                        <div className="space-y-2"><label className="text-sm font-medium">NISN</label><Input value={formData.nisn || ''} onChange={e => setFormData({...formData, nisn: e.target.value})} placeholder="12345678" /></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
                     </div>
                     <div className="space-y-2">
@@ -470,26 +405,22 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     </div>
                     
                     <div className="grid grid-cols-3 gap-4">
-    <div className="col-span-2 space-y-2">
-        <label className="text-sm font-medium">Kelas Sekolah</label>
-        <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
-            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
-            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-            <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
-        </Select>
-    </div>
-    <div className="col-span-1 space-y-2">
-        <label className="text-sm font-medium">Rombel</label>
-        <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
-            {/* 🔥 Tambahkan disabled di SelectTrigger juga */}
-            <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-            <SelectContent>
-                {['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-        </Select>
-    </div>
-</div>
-{isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
+                        <div className="col-span-2 space-y-2">
+                            <label className="text-sm font-medium">Kelas Sekolah</label>
+                            <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
+                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+                                <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div className="col-span-1 space-y-2">
+                            <label className="text-sm font-medium">Rombel</label>
+                            <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
+                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+                                <SelectContent>{['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    {isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
 
                     <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
@@ -501,9 +432,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         {/* DIALOG IMPORT EXCEL (Copy buat halaman detail) */}
         <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Santri</DialogTitle>
-                </DialogHeader>
+                <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Santri</DialogTitle></DialogHeader>
                 <div className="space-y-6 py-2">
                     <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col gap-3">
                         <p className="text-sm text-blue-800 leading-relaxed">
@@ -516,16 +445,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                             <Download className="w-4 h-4 mr-2" /> Download Template Excel
                         </Button>
                     </div>
-                    
                     <div className="space-y-2">
                         <label className="text-sm font-bold text-gray-700">Upload File CSV yang sudah diisi</label>
                         <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
-                            <Input 
-                                type="file" 
-                                accept=".csv" 
-                                onChange={(e) => setImportFile(e.target.files?.[0] || null)} 
-                                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0"
-                            />
+                            <Input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0" />
                         </div>
                     </div>
                 </div>
