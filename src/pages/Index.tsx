@@ -25,6 +25,7 @@ import {
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
   Activity, Shield, Library, ShieldCheck
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
 /* ================= TYPES ================= */
 interface RekapSaldo { kelas: number; gender: "ikhwan" | "akhwat"; saldo: number; }
@@ -33,6 +34,8 @@ interface TransaksiItem {
   transaction_date: string; santri: { nama_lengkap: string; kelas: number; } | null;
   merchant: { full_name: string; } | null; 
 }
+
+const COLORS = ['#22c55e', '#eab308', '#ef4444', '#3b82f6'];
 
 const Index = () => {
   const { user, loading, isAdmin, signOut } = useAuth();
@@ -45,6 +48,9 @@ const Index = () => {
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>("pending"); 
+  
+  // State Target Tab Absensi saat diklik dari Dashboard
+  const [targetAbsensiTab, setTargetAbsensiTab] = useState<string>("kbm");
 
   /* ================= STATE DATA ================= */
   const [exportMonth, setExportMonth] = useState(new Date().getMonth());
@@ -56,6 +62,7 @@ const Index = () => {
   const [keluar7Hari, setKeluar7Hari] = useState(0);
   const [keluarHariIni, setKeluarHariIni] = useState(0);
   const [trxHariIni, setTrxHariIni] = useState<TransaksiItem[]>([]);
+  const [absensiLogs, setAbsensiLogs] = useState<any[]>([]); // Data Absensi Dashboard
   
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
   const yearsList = [2024, 2025, 2026, 2027, 2028];
@@ -162,8 +169,42 @@ const Index = () => {
     }
   }, [userRole]);
 
-  useEffect(() => { if (user) { fetchKeuangan(); fetchRekapSaldo(); } }, [user, userRole, fetchKeuangan, fetchRekapSaldo]);
+  // Fetch Absensi Khusus Dashboard (Hari Ini)
+  const fetchAbsensiHariIni = useCallback(async () => {
+    if (userRole === 'pending') return;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    const { data } = await supabase.from('attendance_logs')
+        .select(`status, activity:activity_id(name, category)`)
+        .not('santri_id', 'is', null) // Hanya data Santri
+        .gte('created_at', `${todayStr}T00:00:00`)
+        .lte('created_at', `${todayStr}T23:59:59`);
+        
+    if (data) setAbsensiLogs(data);
+  }, [userRole]);
+
+  useEffect(() => { if (user) { fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni(); } }, [user, userRole, fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni]);
   
+  /* AUTO REFRESH */
+  useEffect(() => {
+    const calculateTimeToMidnight = () => {
+        const now = new Date(); const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0); 
+        return (tomorrow.getTime() - now.getTime()) + 2000; 
+    };
+    const scheduleRefresh = () => {
+        const timeToWait = calculateTimeToMidnight();
+        const timerId = setTimeout(() => {
+            fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni();
+            toast({ title: "Pergantian Hari 🕛", description: "Data reset.", duration: 5000 });
+            scheduleRefresh();
+        }, timeToWait);
+        return timerId;
+    };
+    const timer = scheduleRefresh(); return () => clearTimeout(timer);
+  }, [fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni, toast]);
+
   /* ACTIONS */
   const handleDeleteTransaction = async (id: string) => {
     if (!window.confirm("Hapus transaksi ini?")) return;
@@ -198,13 +239,68 @@ const Index = () => {
   const handleSelectSantri = (id: string) => { navigateTo("santri", id); }
   const handleBackFromDetail = () => { window.history.back(); }
 
+  /* ================= LOGIC GRAFIK DASHBOARD ================= */
+  const getActivityType = (log: any) => {
+      const cat = log.activity?.category?.toLowerCase() || '';
+      const name = log.activity?.name?.toLowerCase() || '';
+      if (cat === 'pelajaran') return 'kbm';
+      if (cat === 'sholat' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
+      if (cat === 'mengaji' || name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
+      return 'ekskul'; 
+  };
+
+  const getDashboardAbsenStats = (group: string) => {
+      let filtered = absensiLogs.filter(l => getActivityType(l) === group);
+      const total = filtered.length;
+      if (total === 0) return [{ name: 'Belum Ada Data', value: 1 }];
+      const hadir = filtered.filter(l => l.status === 'Hadir').length;
+      const telat = filtered.filter(l => l.status === 'Telat').length;
+      const izin = filtered.filter(l => l.status === 'Izin').length;
+      const sakit = filtered.filter(l => l.status === 'Sakit').length;
+
+      return [
+          { name: 'Hadir', value: hadir },
+          { name: 'Telat', value: telat },
+          { name: 'Sakit/Izin', value: izin + sakit },
+      ].filter(x => x.value > 0);
+  };
+
+  const DashboardChartCard = ({ title, data, tabName }: { title: string, data: any[], tabName: string }) => (
+      <Card 
+          className="border shadow-sm cursor-pointer hover:border-green-400 hover:shadow-md transition-all group bg-white"
+          onClick={() => {
+              setTargetAbsensiTab(tabName);
+              handleMenuClick("absensi");
+          }}
+      >
+          <CardHeader className="pb-2 bg-gray-50/50 group-hover:bg-green-50/50 transition-colors border-b border-gray-100">
+              <CardTitle className="text-xs font-bold text-center uppercase text-gray-500 group-hover:text-green-700">{title}</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[160px] pt-4 pb-2">
+              {data[0].name === 'Belum Ada Data' ? (
+                  <div className="flex items-center justify-center h-full text-xs text-gray-400 italic">Belum ada absen hari ini</div>
+              ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                          <Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={50} paddingAngle={5} dataKey="value">
+                              {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                          </Pie>
+                          <RechartsTooltip wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                          <Legend verticalAlign="bottom" height={24} iconSize={8} wrapperStyle={{ fontSize: '10px' }}/>
+                      </PieChart>
+                  </ResponsiveContainer>
+              )}
+          </CardContent>
+      </Card>
+  );
+
+  /* ================= UI RENDER ================= */
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin h-10 w-10 border-b-2 border-green-600 rounded-full" /></div>;
   if (!user) return <AuthPage />;
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
   
-  // ROLE CHECKS
   const isSuperAdmin = userRole === 'super_admin';
   const isGuru = userRole === 'guru'; 
   const hasAdminAccess = isAdmin || isSuperAdmin; 
@@ -251,10 +347,8 @@ const Index = () => {
            <div className="border-t border-green-800 my-4"></div>
            <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Akademik & Kesiswaan</p>
            
-           {/* DATA SANTRI BISA DIAKSES SEMUA (ADMIN & GURU) */}
            <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
 
-           {/* HILANGKAN MENU INI JIKA ROLE GURU */}
            {!isGuru && (
                <>
                    <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas</button>
@@ -334,6 +428,7 @@ const Index = () => {
 
         <main className="flex-1 overflow-y-auto p-3 md:p-8 bg-gray-50/50 w-full">
           <div className="max-w-7xl mx-auto space-y-6 pb-20">
+             
              {/* DASHBOARD */}
              {activeMenu === "dashboard" && (
                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
@@ -367,6 +462,18 @@ const Index = () => {
                            </div>
                        ))}
                    </div>
+
+                   {/* 🔥 GRAFIK ABSENSI (KLIK UNTUK MENUJU KE MENU ABSENSI TAB TERKAIT) */}
+                   <div className="space-y-3 bg-white p-4 rounded-xl border shadow-sm border-green-100">
+                       <h3 className="font-bold text-gray-800 text-sm md:text-lg pl-2 border-l-4 border-green-500">Rekap Kehadiran Santri Hari Ini</h3>
+                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                           <DashboardChartCard title="KBM Sekolah" data={getDashboardAbsenStats('kbm')} tabName="kbm" />
+                           <DashboardChartCard title="Mengaji" data={getDashboardAbsenStats('mengaji')} tabName="mengaji" />
+                           <DashboardChartCard title="Sholat" data={getDashboardAbsenStats('sholat')} tabName="sholat" />
+                           <DashboardChartCard title="Ekskul" data={getDashboardAbsenStats('ekskul')} tabName="ekskul" />
+                       </div>
+                   </div>
+
                    <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
                 </div>
              )}
@@ -405,20 +512,20 @@ const Index = () => {
                  </div>
              )}
 
-             {/* DATA SANTRI (DIAKSES ADMIN & GURU) */}
+             {/* DATA SANTRI */}
              {activeMenu === "santri" && (
                <div className="animate-in fade-in zoom-in duration-300 space-y-4">
                  {detailSantriId ? <SantriDetail santriId={detailSantriId} onBack={handleBackFromDetail} /> : (<><div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-3 rounded-lg border shadow-sm gap-2"><h2 className="text-base md:text-lg font-bold text-gray-800">{selectedKelasSantri ? `Data Santri Kelas ${selectedKelasSantri}` : "Data Semua Santri"}</h2>{selectedKelasSantri && <Button variant="outline" size="sm" onClick={() => setSelectedKelasSantri(null)} className="w-full md:w-auto">Tampilkan Semua</Button>}</div><SantriManagement key={selectedKelasSantri || 'all'} kelas={selectedKelasSantri ? String(selectedKelasSantri) : null} onSelectSantri={handleSelectSantri} /></>)}
                </div>
              )}
              
-             {/* LAIN-LAIN (DIBLOKIR SESUAI ROLE) */}
+             {/* LAIN-LAIN */}
              {activeMenu === "guru" && !isGuru && <div className="animate-in fade-in zoom-in duration-300"><TeacherManagement /></div>}
              {activeMenu === "manajemen_kelas" && !isGuru && <ClassManagement />}
              {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
              {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
              {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
-             {activeMenu === "absensi" && <AttendanceMonitoring />}
+             {activeMenu === "absensi" && <AttendanceMonitoring initialTab={targetAbsensiTab} />}
              {activeMenu === "kesehatan" && <SickLeaveManagement />}
              {activeMenu === "piket" && hasAdminAccess && <PiketManagement />}
           </div>
