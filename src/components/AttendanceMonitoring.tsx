@@ -31,13 +31,18 @@ interface AttendanceLog {
 const COLORS = ['#22c55e', '#eab308', '#ef4444', '#3b82f6'];
 const CLASSES = [7, 8, 9, 10, 11, 12];
 
-const AttendanceMonitoring = () => {
+interface AttendanceMonitoringProps {
+  initialTab?: string;
+}
+
+const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("santri");
   const [userRole, setUserRole] = useState<string>("viewer"); 
   
-  const [santriTab, setSantriTab] = useState("kbm");
+  // Tangkap initialTab dari properti yang dikirim Dashboard
+  const [santriTab, setSantriTab] = useState(initialTab);
   const [guruTab, setGuruTab] = useState("kbm");
   
   const [selectedKbmClass, setSelectedKbmClass] = useState<any>(null);
@@ -80,6 +85,14 @@ const AttendanceMonitoring = () => {
       if (typeof rombelData === 'object' && rombelData.nama) return rombelData.nama;
       return 'A';
   };
+
+  // 🔥 Pantau jika Dashboard ngirim perintah ganti tab
+  useEffect(() => {
+      if (initialTab) {
+          setSantriTab(initialTab);
+          setActiveTab("santri"); // Pastikan masuk ke halaman santri
+      }
+  }, [initialTab]);
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -147,7 +160,6 @@ const AttendanceMonitoring = () => {
       return 'ekskul'; 
   };
 
-  // 🔥 PERUBAHAN: Memecah getStats jadi 4 kategori akurat
   const getStats = (type: 'santri' | 'guru', group?: string) => {
       let filtered = dailyLogs.filter(l => type === 'santri' ? l.santri_id : l.teacher_id);
       
@@ -831,7 +843,6 @@ const AttendanceMonitoring = () => {
 
         <TabsContent value="santri" className="space-y-6">
             
-            {/* 🔥 PERUBAHAN: GRID GRAFIK SANTRI JADI 4 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <ChartCard title="Grafik KBM" data={getStats('santri', 'kbm')} />
                 <ChartCard title="Grafik Mengaji" data={getStats('santri', 'mengaji')} />
@@ -892,7 +903,6 @@ const AttendanceMonitoring = () => {
         {userRole !== 'guru' && (
             <TabsContent value="guru" className="space-y-6">
                 
-                 {/* 🔥 PERUBAHAN: GRID GRAFIK GURU JADI 4 */}
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <ChartCard title="Kehadiran KBM" data={getStats('guru', 'kbm')} />
                     <ChartCard title="Kehadiran Mengaji" data={getStats('guru', 'mengaji')} />
