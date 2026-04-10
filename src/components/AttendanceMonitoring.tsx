@@ -41,7 +41,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [activeTab, setActiveTab] = useState("santri");
   const [userRole, setUserRole] = useState<string>("viewer"); 
   
-  // Tangkap initialTab dari properti yang dikirim Dashboard
   const [santriTab, setSantriTab] = useState(initialTab);
   const [guruTab, setGuruTab] = useState("kbm");
   
@@ -68,10 +67,13 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [activities, setActivities] = useState<Activity[]>([]);
   const [members, setMembers] = useState<ActivityMember[]>([]);
   
+  // DateFilter tetap ada untuk patokan query (Hari Ini), tapi UI-nya dihapus
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Form State
+  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]); // TANGGAL INPUT MANUAL
   const [filterKelas, setFilterKelas] = useState("all");
   const [logFilterKelas, setLogFilterKelas] = useState("all");
-  
   const [formKelas, setFormKelas] = useState("");
   const [formGender, setFormGender] = useState("");
   const [formSantriId, setFormSantriId] = useState("");
@@ -86,11 +88,10 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       return 'A';
   };
 
-  // 🔥 Pantau jika Dashboard ngirim perintah ganti tab
   useEffect(() => {
       if (initialTab) {
           setSantriTab(initialTab);
-          setActiveTab("santri"); // Pastikan masuk ke halaman santri
+          setActiveTab("santri"); 
       }
   }, [initialTab]);
 
@@ -170,21 +171,36 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
       const total = filtered.length;
       if (total === 0) return [{ name: 'Belum Ada Data', value: 1 }];
+      
       const hadir = filtered.filter(l => l.status === 'Hadir').length;
       const telat = filtered.filter(l => l.status === 'Telat').length;
       const izin = filtered.filter(l => l.status === 'Izin').length;
       const sakit = filtered.filter(l => l.status === 'Sakit').length;
+      const pulang = filtered.filter(l => l.status === 'Pulang').length;
 
       return [
           { name: 'Hadir', value: hadir },
           { name: 'Telat', value: telat },
-          { name: 'Sakit/Izin', value: izin + sakit },
+          { name: 'Izin/Sakit/Plg', value: izin + sakit + pulang },
       ].filter(x => x.value > 0);
   };
 
   const handleSubmitPermission = async (type: 'santri' | 'guru') => {
       try {
-          const payload: any = { status: formStatus, scan_time: new Date().toLocaleTimeString(), created_at: new Date().toISOString(), activity_id: null, location_id: null, keterangan: formKet };
+          // Gabungkan tanggal dari form dengan waktu saat ini
+          const selectedDateTime = new Date(formDate);
+          const now = new Date();
+          selectedDateTime.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
+          const payload: any = { 
+              status: formStatus, 
+              scan_time: selectedDateTime.toLocaleTimeString(), 
+              created_at: selectedDateTime.toISOString(), 
+              activity_id: null, 
+              location_id: null, 
+              keterangan: formKet 
+          };
+          
           if (type === 'santri') {
               if (!formSantriId) return toast({title: "Pilih Santri", variant: "destructive"});
               payload.santri_id = formSantriId;
@@ -192,11 +208,16 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
               if (!formTeacherId) return toast({title: "Pilih Guru", variant: "destructive"});
               payload.teacher_id = parseInt(formTeacherId);
           }
+
           const { error } = await supabase.from('attendance_logs').insert([payload]);
           if (error) throw error;
+          
           toast({ title: "Berhasil", description: "Data izin/sakit tersimpan." });
-          fetchData(); setFormSantriId(""); setFormTeacherId(""); setFormKet("");
-      } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
+          fetchData(); 
+          setFormSantriId(""); setFormTeacherId(""); setFormKet("");
+      } catch (err: any) { 
+          toast({ title: "Gagal", description: err.message, variant: "destructive" }); 
+      }
   };
 
   const ChartCard = ({ title, data }: { title: string, data: any[] }) => (
@@ -217,6 +238,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const getStatusIcon = (status: string) => {
       if (status === 'Sakit') return <span className="text-red-500 font-bold">S</span>;
       if (status === 'Izin') return <span className="text-blue-500 font-bold">I</span>;
+      if (status === 'Pulang') return <span className="text-purple-500 font-bold">P</span>;
       if (status === 'Telat') return <span className="text-yellow-600 font-bold">T</span>;
       if (status === 'Hadir') return <span className="text-green-500 font-bold">✓</span>;
       return "-";
@@ -824,12 +846,9 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <FileSpreadsheet className="text-green-600" /> Monitoring Absensi
             </h1>
-            <p className="text-xs text-gray-500">Pantau kehadiran santri secara detail per pertemuan, atau historis mingguan/bulanan.</p>
+            <p className="text-xs text-gray-500">Pantau kehadiran secara detail per pertemuan, atau historis mingguan/bulanan.</p>
         </div>
-        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-            <Calendar className="text-gray-500 w-4 h-4" />
-            <input type="date" className="bg-transparent text-sm font-bold text-gray-700 outline-none" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-        </div>
+        {/* UI DateFilter di Atas Dihapus sesuai permintaan */}
       </div>
 
       <Tabs defaultValue="santri" value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -868,30 +887,39 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
             </div>
 
             <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
-                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Santri</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Manual Sakit / Izin / Pulang (Santri)</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
                     <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} ({s.kelas}-{getRombel(s.rombel)})</SelectItem>))}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-5 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem><SelectItem value="Pulang" className="text-purple-600 font-bold">Pulang</SelectItem></SelectContent></Select></div>
+                    <div className="md:col-span-6 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
                 </CardContent>
             </Card>
 
             <Card className="shadow-sm border-green-200">
                 <CardHeader className="flex flex-row justify-between items-center bg-green-50/50 border-b border-green-100 pb-2 pt-3 px-4">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2 text-green-800"><Clock className="w-4 h-4 text-green-600"/> Riwayat Absensi Santri Hari Ini</CardTitle>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2 text-green-800"><Clock className="w-4 h-4 text-green-600"/> Riwayat Absensi Santri (Sesuai Tanggal Filter)</CardTitle>
                     <Select value={logFilterKelas} onValueChange={setLogFilterKelas}><SelectTrigger className="w-[100px] h-7 text-[10px] bg-white font-bold border-green-200"><SelectValue placeholder="Filter" /></SelectTrigger><SelectContent><SelectItem value="all">Semua</SelectItem>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
                         {dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).length === 0 ? (
-                             <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada aktivitas absensi di hari ini.</div>
+                             <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada aktivitas absensi.</div>
                         ) : (
                             dailyLogs.filter(l => l.santri_id).filter(l => logFilterKelas === 'all' || String(l.santri?.kelas) === logFilterKelas).map((log) => (
                                 <div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-green-50/50 transition-colors">
-                                    <div className="flex items-center gap-3"><div className={`p-1.5 rounded-full shadow-sm border ${log.status === 'Hadir' ? 'bg-green-100 text-green-600 border-green-200' : 'bg-red-100 text-red-600 border-red-200'}`}>{log.status === 'Hadir' ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}</div><div><p className="font-bold text-gray-800 text-sm">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500 mt-0.5"><span className="bg-gray-100 px-1.5 rounded font-bold border">Kls {log.santri?.kelas}-{getRombel(log.santri?.rombel)}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div></div>
-                                    <div className="text-right"><span className="font-mono font-bold text-gray-700 block text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge variant="outline" className={`text-[9px] h-4 px-1 ${log.status === 'Hadir' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{log.status}</Badge></div>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-1.5 rounded-full shadow-sm border ${log.status === 'Hadir' ? 'bg-green-100 text-green-600 border-green-200' : (log.status === 'Pulang' ? 'bg-purple-100 text-purple-600 border-purple-200' : 'bg-red-100 text-red-600 border-red-200')}`}>
+                                            {log.status === 'Hadir' ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}
+                                        </div>
+                                        <div><p className="font-bold text-gray-800 text-sm">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500 mt-0.5"><span className="bg-gray-100 px-1.5 rounded font-bold border">Kls {log.santri?.kelas}-{getRombel(log.santri?.rombel)}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="font-mono font-bold text-gray-700 block text-xs mb-1">{log.scan_time.slice(0,5)}</span>
+                                        <Badge variant="outline" className={`text-[9px] h-4 px-1 ${log.status === 'Hadir' ? 'text-green-600 border-green-200 bg-green-50' : (log.status === 'Pulang' ? 'text-purple-600 border-purple-200 bg-purple-50' : 'text-red-600 border-red-200 bg-red-50')}`}>{log.status}</Badge>
+                                    </div>
                                 </div>
                             ))
                         )}
@@ -928,22 +956,23 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                 </div>
 
                 <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
-                    <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Izin / Sakit Guru</CardTitle></CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Manual Sakit / Izin / Pulang (Guru)</CardTitle></CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
                         <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Guru</label><Select value={formTeacherId} onValueChange={setFormTeacherId}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{teacherList.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select></div>
-                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem></SelectContent></Select></div>
-                        <div className="md:col-span-4 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('guru')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem><SelectItem value="Pulang" className="text-purple-600 font-bold">Pulang</SelectItem></SelectContent></Select></div>
+                        <div className="md:col-span-5 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('guru')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
                     </CardContent>
                 </Card>
 
                 <Card className="shadow-sm border-teal-200">
-                    <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800 flex items-center gap-2"><Clock className="w-4 h-4 text-teal-600"/> Log Absensi Guru Hari Ini</CardTitle></CardHeader>
+                    <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-2 pt-3 px-4"><CardTitle className="text-sm font-bold text-teal-800 flex items-center gap-2"><Clock className="w-4 h-4 text-teal-600"/> Log Absensi Guru (Sesuai Tanggal Filter)</CardTitle></CardHeader>
                     <CardContent className="p-0">
                         <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-100">
                             {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
-                                <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru hari ini.</div>
+                                <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru.</div>
                             ) : (
-                                dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white')}`}>{log.status}</Badge></div></div>))
+                                dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Pulang' ? 'bg-purple-500 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'))}`}>{log.status}</Badge></div></div>))
                             )}
                         </div>
                     </CardContent>
