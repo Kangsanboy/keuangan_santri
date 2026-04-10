@@ -13,9 +13,8 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
-/* ================= TYPES ================= */
 interface Santri { 
-  id: string; nama_lengkap: string; kelas: number; gender: string; nis: string;
+  id: string; nama_lengkap: string; kelas: number; gender: string; nisn: string;
   rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any;
 }
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
@@ -25,7 +24,7 @@ interface Schedule { id: number; activity_id: number; teacher_id?: number; kelas
 interface AttendanceLog {
   id: string; scan_time: string; status: string; created_at: string;
   santri_id?: string; teacher_id?: number; activity_id?: number; location_id?: number;
-  santri?: { nama_lengkap: string; kelas: number; nis: string; gender: string; rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any; };
+  santri?: { nama_lengkap: string; kelas: number; nisn: string; gender: string; rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any; };
   teacher?: { full_name: string; }; activity?: { name: string; category: string; tipe_ekskul?: string; }; location?: { name: string }; keterangan?: string;
 }
 
@@ -37,13 +36,11 @@ const AttendanceMonitoring = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("santri");
-  const [userRole, setUserRole] = useState<string>("viewer"); // 🔥 TAMPUNG ROLE
+  const [userRole, setUserRole] = useState<string>("viewer"); 
   
-  // TABS STATE
   const [santriTab, setSantriTab] = useState("kbm");
   const [guruTab, setGuruTab] = useState("kbm");
   
-  // STATES ALUR SANTRI (Semua pake ID/Object relasional)
   const [selectedKbmClass, setSelectedKbmClass] = useState<any>(null);
   const [selectedKbmSubject, setSelectedKbmSubject] = useState<Activity | null>(null);
   const [selectedMengajiClass, setSelectedMengajiClass] = useState<any>(null);
@@ -54,14 +51,12 @@ const AttendanceMonitoring = () => {
   const [selectedEkskul, setSelectedEkskul] = useState<Activity | null>(null);
   const [selectedEkskulClass, setSelectedEkskulClass] = useState<any>(null);
 
-  // STATES ALUR GURU
   const [selectedGuruKbmSubject, setSelectedGuruKbmSubject] = useState<Activity | null>(null);
   const [selectedGuruMengajiSubject, setSelectedGuruMengajiSubject] = useState<Activity | null>(null);
   const [selectedGuruSholatSubject, setSelectedGuruSholatSubject] = useState<Activity | null>(null);
   const [selectedGuruSholatWeek, setSelectedGuruSholatWeek] = useState<number>(0);
   const [selectedGuruEkskul, setSelectedGuruEkskul] = useState<Activity | null>(null);
 
-  // DATA MASTER
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]); 
   const [santriList, setSantriList] = useState<Santri[]>([]);
@@ -87,7 +82,6 @@ const AttendanceMonitoring = () => {
       return 'A';
   };
 
-  // 🔥 FETCH ROLE USER SAAT INI
   useEffect(() => {
     const fetchRole = async () => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -106,13 +100,13 @@ const AttendanceMonitoring = () => {
       const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
-      const { data: logData } = await supabase.from('attendance_logs').select(`id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id, santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nis, gender, rombel, kelas_mengaji, rombel_mengaji), teacher:teachers(full_name), activity:activity_id(name, category, tipe_ekskul), location:location_id(name)`).gte('created_at', startOfMonth.toISOString()).lte('created_at', endOfMonth.toISOString() + 'T23:59:59');
+      const { data: logData } = await supabase.from('attendance_logs').select(`id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id, santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nisn, gender, rombel, kelas_mengaji, rombel_mengaji), teacher:teachers(full_name), activity:activity_id(name, category, tipe_ekskul), location:location_id(name)`).gte('created_at', startOfMonth.toISOString()).lte('created_at', endOfMonth.toISOString() + 'T23:59:59');
       if (logData) setLogs(logData as any);
 
       const { data: schData } = await supabase.from('schedules').select('id, activity_id, teacher_id, kelas, rombel_id, day_of_week, rombel:rombels(nama, kategori)');
       if (schData) setSchedules(schData as any[]);
 
-      const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nis, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
+      const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nisn, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
       if (sData) setSantriList(sData as any);
 
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
@@ -129,7 +123,6 @@ const AttendanceMonitoring = () => {
 
   useEffect(() => { fetchData(); }, [dateFilter]);
 
-  // Reset Alur saat pindah tab
   useEffect(() => {
      setSelectedKbmClass(null); setSelectedKbmSubject(null);
      setSelectedMengajiClass(null); setSelectedMengajiSubject(null);
@@ -146,7 +139,6 @@ const AttendanceMonitoring = () => {
 
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
 
-  /* ================= LOGIC HELPER & CHART ================= */
   const getActivityType = (log: AttendanceLog) => {
       const cat = log.activity?.category?.toLowerCase() || '';
       const name = log.activity?.name?.toLowerCase() || '';
@@ -226,7 +218,7 @@ const AttendanceMonitoring = () => {
                         <tr>
                             <th className="p-3 text-center w-10 border-r border-green-100">No</th>
                             <th className="p-3 min-w-[200px] border-r border-green-100">Nama Lengkap</th>
-                            <th className="p-3 w-20 border-r border-green-100 text-center">NIS</th>
+                            <th className="p-3 w-20 border-r border-green-100 text-center">NISN</th>
                             {cols.map((c, i) => (
                                 <th key={i} className="p-3 text-center border-r border-green-100 text-xs bg-white" title={c.tooltip}>
                                     {c.label}
@@ -242,7 +234,7 @@ const AttendanceMonitoring = () => {
                             <tr key={s.id} className="hover:bg-green-50/50 transition-colors">
                                 <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx+1}</td>
                                 <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{s.nama_lengkap}</td>
-                                <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
+                                <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nisn || '-'}</td>
                                 {cols.map((c, i) => (<td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">{getStatus(s.id, c.key)}</td>))}
                             </tr>
                         ))}
@@ -667,7 +659,7 @@ const AttendanceMonitoring = () => {
                     <h3 className="font-bold text-teal-800 flex items-center gap-2 mb-4 border-b border-teal-200 pb-2"><BookOpen className="text-teal-600"/> Pilih Waktu Bimbingan Mengaji</h3>
                     <div className="flex flex-col gap-3">
                         {mengajiActivities.length === 0 ? (<div className="text-center p-8 text-gray-400 border-2 border-dashed border-teal-200 rounded-xl bg-teal-50">Belum ada jadwal pembimbing mengaji.</div>) : mengajiActivities.map(a => (
-                            <div key={a.id} onClick={() => setSelectedGuruMengajiSubject(a)} className="flex items-center p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-500 transition-all group shadow-sm">
+                            <div key={a.id} onClick={() => setSelectedGuruMengajiSubject(a)} className="flex items-center p-4 bg-white border-2 border-teal-100 rounded-xl cursor-pointer hover:border-teal-50 transition-all group shadow-sm">
                                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors border text-orange-500 bg-orange-50 border-orange-200 group-hover:bg-orange-500 group-hover:text-white`}><BookOpen size={24}/></div>
                                 <h4 className="font-bold text-lg text-gray-800 flex-1">Pembimbing {a.name}</h4>
                                 <div className="text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity"><ArrowRight size={20}/></div>
@@ -829,7 +821,6 @@ const AttendanceMonitoring = () => {
 
       <Tabs defaultValue="santri" value={activeTab} onValueChange={setActiveTab} className="w-full">
         
-        {/* 🔥 TABS GURU DIHILANGKAN JIKA ROLE = GURU 🔥 */}
         <TabsList className={`grid w-full mb-6 bg-gray-100 p-1 ${userRole === 'guru' ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <TabsTrigger value="santri" className="data-[state=active]:bg-green-600 data-[state=active]:text-white shadow-sm font-bold">Santri</TabsTrigger>
             {userRole !== 'guru' && (
@@ -894,7 +885,6 @@ const AttendanceMonitoring = () => {
             </Card>
         </TabsContent>
 
-        {/* 🔥 TABS GURU DIHILANGKAN JIKA ROLE = GURU 🔥 */}
         {userRole !== 'guru' && (
             <TabsContent value="guru" className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
