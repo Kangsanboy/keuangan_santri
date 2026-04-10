@@ -13,7 +13,7 @@ import {
 
 interface SantriClass {
   id: string;
-  nis: string;
+  nisn: string;
   nama_lengkap: string;
   gender: string;
   kelas: number;
@@ -30,12 +30,10 @@ const ClassManagement = () => {
   const [activeTab, setActiveTab] = useState("sekolah");
   const [filterKelas, setFilterKelas] = useState("all");
 
-  // State Import
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // State Edit Satuan
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState<SantriClass | null>(null);
 
@@ -44,7 +42,7 @@ const ClassManagement = () => {
     try {
       const { data, error } = await supabase
         .from('santri_2025_12_01_21_34')
-        .select('id, nis, nama_lengkap, gender, kelas, rombel, kelas_mengaji, rombel_mengaji')
+        .select('id, nisn, nama_lengkap, gender, kelas, rombel, kelas_mengaji, rombel_mengaji')
         .eq('status', 'aktif')
         .order('kelas')
         .order('nama_lengkap');
@@ -53,25 +51,19 @@ const ClassManagement = () => {
       setSantris(data || []);
     } catch (err: any) {
       toast({ title: "Gagal memuat data", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetchSantris();
-  }, []);
+  useEffect(() => { fetchSantris(); }, []);
 
-  /* ================= FITUR EXCEL ================= */
-  // Download Template berisi seluruh data santri
   const downloadTemplate = () => {
     if (santris.length === 0) {
         return toast({ title: "Data kosong", description: "Belum ada data santri untuk didownload.", variant: "destructive" });
     }
 
-    const headers = "ID_SISTEM,NIS,NAMA_SANTRI,KELAS_SEKOLAH,ROMBEL_SEKOLAH,KELAS_MENGAJI,ROMBEL_MENGAJI\n";
+    const headers = "ID_SISTEM,NISN,NAMA_SANTRI,KELAS_SEKOLAH,ROMBEL_SEKOLAH,KELAS_MENGAJI,ROMBEL_MENGAJI\n";
     const rows = santris.map(s => 
-        `${s.id},${s.nis || '-'},${s.nama_lengkap},${s.kelas},${s.rombel || 'A'},${s.kelas_mengaji || s.kelas},${s.rombel_mengaji || 'A'}`
+        `${s.id},${s.nisn || '-'},${s.nama_lengkap},${s.kelas},${s.rombel || 'A'},${s.kelas_mengaji || s.kelas},${s.rombel_mengaji || 'A'}`
     ).join("\n");
     
     const csvContent = "data:text/csv;charset=utf-8," + headers + rows;
@@ -96,7 +88,6 @@ const ClassManagement = () => {
             const rows = text.split('\n').map(row => row.trim()).filter(row => row !== '');
             if (rows.length < 2) throw new Error("File kosong atau format salah.");
 
-            // Lakukan update satu per satu secara paralel agar cepat
             const updatePromises = [];
             
             for (let i = 1; i < rows.length; i++) {
@@ -109,7 +100,6 @@ const ClassManagement = () => {
                 const k_mengaji = parseInt(cols[5]) || 7;
                 const r_mengaji = cols[6] || 'A';
 
-                // Skip header atau data tidak valid
                 if (id_sistem === 'ID_SISTEM' || !id_sistem) continue;
 
                 const updateQuery = supabase
@@ -128,20 +118,13 @@ const ClassManagement = () => {
             await Promise.all(updatePromises);
             
             toast({ title: "Sukses Update 🎉", description: `Berhasil memperbarui kelas & rombel santri.`, className: "bg-green-600 text-white" });
-            setIsImportOpen(false);
-            setImportFile(null);
-            fetchSantris();
+            setIsImportOpen(false); setImportFile(null); fetchSantris();
             
-        } catch (err: any) {
-            toast({ title: "Gagal Update", description: err.message, variant: "destructive" });
-        } finally {
-            setIsUploading(false);
-        }
+        } catch (err: any) { toast({ title: "Gagal Update", description: err.message, variant: "destructive" }); } finally { setIsUploading(false); }
     };
     reader.readAsText(importFile);
   };
 
-  /* ================= FITUR EDIT MANUAL ================= */
   const handleEditSave = async () => {
       if (!editData) return;
       try {
@@ -157,20 +140,17 @@ const ClassManagement = () => {
           
           if (error) throw error;
           toast({ title: "Berhasil", description: "Kelas santri diperbarui." });
-          setIsEditOpen(false);
-          fetchSantris();
-      } catch (err: any) {
-          toast({ title: "Gagal", description: err.message, variant: "destructive" });
-      }
+          setIsEditOpen(false); fetchSantris();
+      } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
-  /* ================= RENDER ================= */
   const filteredSantris = santris.filter(s => {
       const matchName = s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase());
       const matchKelas = filterKelas === "all" ? true : 
                          activeTab === 'sekolah' ? s.kelas === parseInt(filterKelas) : s.kelas_mengaji === parseInt(filterKelas);
       return matchName && matchKelas;
   });
+
   const renderTabelGender = (dataList: SantriClass[], label: string, color: string) => {
     if (dataList.length === 0) return <div className="p-4 text-center text-xs text-gray-400 border rounded-lg border-dashed">Tidak ada data</div>;
     
@@ -184,7 +164,7 @@ const ClassManagement = () => {
           <thead className="bg-gray-50 border-b">
              <tr>
                <th className="p-2 w-8 text-center">No</th>
-               <th className="p-2">Nama & NIS</th>
+               <th className="p-2">Nama & NISN</th>
                <th className="p-2 text-center">Rombel</th>
                <th className="p-2 text-center w-12">Aksi</th>
              </tr>
@@ -195,7 +175,7 @@ const ClassManagement = () => {
                   <td className="p-2 text-center text-gray-400">{idx + 1}</td>
                   <td className="p-2">
                     <p className="font-bold text-gray-800">{s.nama_lengkap}</p>
-                    <p className="text-[10px] text-gray-500 font-mono">{s.nis || '-'}</p>
+                    <p className="text-[10px] text-gray-500 font-mono">{s.nisn || '-'}</p>
                   </td>
                   <td className="p-2 text-center">
                       <span className="bg-gray-100 px-2 py-1 rounded border font-bold text-gray-700">
@@ -217,18 +197,12 @@ const ClassManagement = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
         <div>
-            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <Users className="text-green-600" /> Manajemen Kelas & Rombel
-            </h1>
+            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-green-600" /> Manajemen Kelas & Rombel</h1>
             <p className="text-xs text-gray-500">Atur pemisahan kelas formal (sekolah) dan diniyah (mengaji).</p>
         </div>
-        <Button onClick={() => setIsImportOpen(true)} className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto shadow-sm">
-            <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Update Massal
-        </Button>
+        <Button onClick={() => setIsImportOpen(true)} className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto shadow-sm"><FileSpreadsheet className="mr-2 h-4 w-4" /> Import Update Massal</Button>
       </div>
 
       <Card className="shadow-sm border-t-4 border-t-green-600">
@@ -236,12 +210,8 @@ const ClassManagement = () => {
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
                  <Tabs defaultValue="sekolah" value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
                     <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1">
-                        <TabsTrigger value="sekolah" className="data-[state=active]:bg-green-600 data-[state=active]:text-white text-xs font-bold gap-2">
-                            <GraduationCap size={14}/> Kelas Sekolah
-                        </TabsTrigger>
-                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs font-bold gap-2">
-                            <BookOpen size={14}/> Kelas Mengaji
-                        </TabsTrigger>
+                        <TabsTrigger value="sekolah" className="data-[state=active]:bg-green-600 data-[state=active]:text-white text-xs font-bold gap-2"><GraduationCap size={14}/> Kelas Sekolah</TabsTrigger>
+                        <TabsTrigger value="mengaji" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs font-bold gap-2"><BookOpen size={14}/> Kelas Mengaji</TabsTrigger>
                     </TabsList>
                  </Tabs>
 
@@ -253,25 +223,17 @@ const ClassManagement = () => {
                              {[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}
                          </SelectContent>
                      </Select>
-                     <div className="relative flex-1 md:w-48">
-                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-                         <Input placeholder="Cari nama..." className="pl-9 h-9 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                     </div>
+                     <div className="relative flex-1 md:w-48"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari nama..." className="pl-9 h-9 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                  </div>
               </div>
           </CardHeader>
           <CardContent className="p-4 bg-gray-50/50 border-t border-gray-100 mt-2">
              <div className="space-y-6">
                 {[7, 8, 9, 10, 11, 12].map(kelas => {
-                    // Kalau lagi filter 1 kelas doang, lewati kelas yang lain
                     if (filterKelas !== 'all' && parseInt(filterKelas) !== kelas) return null;
-
-                    // Ambil santri khusus di kelas ini sesuai tab yang aktif
                     const muridKelasIni = filteredSantris.filter(s => activeTab === 'sekolah' ? s.kelas === kelas : s.kelas_mengaji === kelas);
-                    
                     if (muridKelasIni.length === 0) return null;
 
-                    // Pisahkan Ikhwan dan Akhwat
                     const ikhwan = muridKelasIni.filter(s => s.gender === 'ikhwan' || s.gender === 'L');
                     const akhwat = muridKelasIni.filter(s => s.gender === 'akhwat' || s.gender === 'P');
 
@@ -283,7 +245,6 @@ const ClassManagement = () => {
                           </div>
                           
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              {/* Panggil pabrik tabel mini yang kita buat di atas */}
                               {renderTabelGender(ikhwan, "👳‍♂️ IKHWAN", "bg-green-100 text-green-800")}
                               {renderTabelGender(akhwat, "🧕 AKHWAT", "bg-pink-100 text-pink-800")}
                           </div>
@@ -291,17 +252,12 @@ const ClassManagement = () => {
                     )
                 })}
                 
-                {filteredSantris.length === 0 && !loading && (
-                   <div className="p-8 text-center text-gray-400 italic bg-white rounded-xl border">Tidak ada santri ditemukan.</div>
-                )}
-                {loading && (
-                   <div className="p-8 text-center text-gray-500 bg-white rounded-xl border animate-pulse">Memuat data...</div>
-                )}
+                {filteredSantris.length === 0 && !loading && (<div className="p-8 text-center text-gray-400 italic bg-white rounded-xl border">Tidak ada santri ditemukan.</div>)}
+                {loading && (<div className="p-8 text-center text-gray-500 bg-white rounded-xl border animate-pulse">Memuat data...</div>)}
              </div>
           </CardContent>
       </Card>
 
-      {/* DIALOG IMPORT */}
       <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
           <DialogContent className="sm:max-w-md">
               <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Update Kelas</DialogTitle></DialogHeader>
@@ -330,14 +286,13 @@ const ClassManagement = () => {
           </DialogContent>
       </Dialog>
 
-      {/* DIALOG EDIT MANUAL */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <DialogContent className="sm:max-w-md">
               <DialogHeader><DialogTitle>Edit Kelas & Rombel</DialogTitle></DialogHeader>
               {editData && (
                   <div className="space-y-4 py-4">
                       <div className="p-3 bg-gray-50 rounded-lg border text-sm">
-                          <span className="font-bold text-gray-800">{editData.nama_lengkap}</span> <span className="text-gray-500">({editData.nis})</span>
+                          <span className="font-bold text-gray-800">{editData.nama_lengkap}</span> <span className="text-gray-500">({editData.nisn})</span>
                       </div>
                       <div className="grid grid-cols-2 gap-4 border p-3 rounded-lg bg-green-50/30">
                           <div className="col-span-2 text-xs font-bold text-green-700 mb-1">Pendidikan Formal (Sekolah)</div>
