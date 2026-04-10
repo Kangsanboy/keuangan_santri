@@ -433,6 +433,19 @@ const Index = () => {
              {activeMenu === "dashboard" && (
                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                    <div className="text-center space-y-2 pb-4 border-b border-gray-200"><h1 className="text-xl md:text-3xl font-bold text-green-700 uppercase tracking-wide px-2">DASHBOARD PUSAT</h1><p className="text-gray-500 max-w-3xl mx-auto text-xs md:text-base leading-relaxed px-4">Ringkasan data pesantren secara real-time.</p></div>
+                   
+                   {/* 🔥 GRAFIK ABSENSI PINDAH KE ATAS SINI 🔥 */}
+                   <div className="space-y-3 bg-white p-4 rounded-xl border shadow-sm border-green-100">
+                       <h3 className="font-bold text-gray-800 text-sm md:text-lg pl-2 border-l-4 border-green-500">Rekap Kehadiran Santri Hari Ini</h3>
+                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                           <DashboardChartCard title="KBM Sekolah" data={getDashboardAbsenStats('kbm')} tabName="kbm" />
+                           <DashboardChartCard title="Mengaji" data={getDashboardAbsenStats('mengaji')} tabName="mengaji" />
+                           <DashboardChartCard title="Sholat" data={getDashboardAbsenStats('sholat')} tabName="sholat" />
+                           <DashboardChartCard title="Ekskul" data={getDashboardAbsenStats('ekskul')} tabName="ekskul" />
+                       </div>
+                   </div>
+
+                   {/* DATA KEUANGAN */}
                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                      {[7, 8, 9, 10, 11, 12].map((kls) => {
                        const ikhwan = rekapSaldo.find((r) => r.kelas === kls && r.gender === "ikhwan")?.saldo || 0;
@@ -461,17 +474,6 @@ const Index = () => {
                                <p className={`text-sm md:text-xl font-bold ${item.color} break-words`}>Rp {item.value.toLocaleString("id-ID")}</p>
                            </div>
                        ))}
-                   </div>
-
-                   {/* 🔥 GRAFIK ABSENSI (KLIK UNTUK MENUJU KE MENU ABSENSI TAB TERKAIT) */}
-                   <div className="space-y-3 bg-white p-4 rounded-xl border shadow-sm border-green-100">
-                       <h3 className="font-bold text-gray-800 text-sm md:text-lg pl-2 border-l-4 border-green-500">Rekap Kehadiran Santri Hari Ini</h3>
-                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                           <DashboardChartCard title="KBM Sekolah" data={getDashboardAbsenStats('kbm')} tabName="kbm" />
-                           <DashboardChartCard title="Mengaji" data={getDashboardAbsenStats('mengaji')} tabName="mengaji" />
-                           <DashboardChartCard title="Sholat" data={getDashboardAbsenStats('sholat')} tabName="sholat" />
-                           <DashboardChartCard title="Ekskul" data={getDashboardAbsenStats('ekskul')} tabName="ekskul" />
-                       </div>
                    </div>
 
                    <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
