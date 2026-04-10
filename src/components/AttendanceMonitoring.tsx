@@ -30,7 +30,6 @@ interface AttendanceLog {
 
 const COLORS = ['#22c55e', '#eab308', '#ef4444', '#3b82f6'];
 const CLASSES = [7, 8, 9, 10, 11, 12];
-const Sunset = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h20"/><path d="m17.66 12.34 1.41-1.41"/><path d="M22 22H2"/><path d="M8 6l4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>;
 
 const AttendanceMonitoring = () => {
   const { toast } = useToast();
@@ -143,15 +142,18 @@ const AttendanceMonitoring = () => {
       const cat = log.activity?.category?.toLowerCase() || '';
       const name = log.activity?.name?.toLowerCase() || '';
       if (cat === 'pelajaran') return 'kbm';
-      if (cat === 'sholat' || cat === 'ibadah' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
+      if (cat === 'sholat' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
       if (cat === 'mengaji' || name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
       return 'ekskul'; 
   };
 
+  // 🔥 PERUBAHAN: Memecah getStats jadi 4 kategori akurat
   const getStats = (type: 'santri' | 'guru', group?: string) => {
       let filtered = dailyLogs.filter(l => type === 'santri' ? l.santri_id : l.teacher_id);
+      
       if (group === 'kbm') filtered = filtered.filter(l => getActivityType(l) === 'kbm');
-      else if (group === 'ibadah') filtered = filtered.filter(l => getActivityType(l) === 'sholat' || getActivityType(l) === 'mengaji');
+      else if (group === 'mengaji') filtered = filtered.filter(l => getActivityType(l) === 'mengaji');
+      else if (group === 'sholat') filtered = filtered.filter(l => getActivityType(l) === 'sholat');
       else if (group === 'ekskul') filtered = filtered.filter(l => getActivityType(l) === 'ekskul');
 
       const total = filtered.length;
@@ -282,7 +284,6 @@ const AttendanceMonitoring = () => {
     )
   };
 
-  /* ================= 1. FLOW SANTRI ================= */
   const renderKbmFlow = () => {
       if (!selectedKbmClass) {
           const classMap = new Map();
@@ -829,9 +830,12 @@ const AttendanceMonitoring = () => {
         </TabsList>
 
         <TabsContent value="santri" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            {/* 🔥 PERUBAHAN: GRID GRAFIK SANTRI JADI 4 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <ChartCard title="Grafik KBM" data={getStats('santri', 'kbm')} />
-                <ChartCard title="Grafik Ibadah" data={getStats('santri', 'ibadah')} />
+                <ChartCard title="Grafik Mengaji" data={getStats('santri', 'mengaji')} />
+                <ChartCard title="Grafik Sholat" data={getStats('santri', 'sholat')} />
                 <ChartCard title="Grafik Ekskul" data={getStats('santri', 'ekskul')} />
             </div>
 
@@ -887,10 +891,13 @@ const AttendanceMonitoring = () => {
 
         {userRole !== 'guru' && (
             <TabsContent value="guru" className="space-y-6">
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <ChartCard title="Kehadiran Mengajar (KBM)" data={getStats('guru', 'kbm')} />
-                    <ChartCard title="Kehadiran Ibadah & Mengaji" data={getStats('guru', 'ibadah')} />
-                    <ChartCard title="Kehadiran Ekstrakurikuler" data={getStats('guru', 'ekskul')} />
+                
+                 {/* 🔥 PERUBAHAN: GRID GRAFIK GURU JADI 4 */}
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <ChartCard title="Kehadiran KBM" data={getStats('guru', 'kbm')} />
+                    <ChartCard title="Kehadiran Mengaji" data={getStats('guru', 'mengaji')} />
+                    <ChartCard title="Kehadiran Sholat" data={getStats('guru', 'sholat')} />
+                    <ChartCard title="Kehadiran Ekskul" data={getStats('guru', 'ekskul')} />
                 </div>
 
                 <div className="bg-white p-6 rounded-xl border border-teal-100 shadow-sm">
