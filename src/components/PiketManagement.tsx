@@ -92,25 +92,32 @@ const PiketManagement = () => {
   const handleOverrideAttendance = async (teacherId: number, activityId: number, status: string) => {
     try {
       const today = new Date();
-      const dateStr = today.toISOString().split('T')[0];
-      
-      // Cek apakah log sudah ada
       const existingLog = logs.find(l => l.teacher_id === teacherId && l.activity_id === activityId);
 
+      // 🔥 FIX 1: Tangani "Hapus Status" dengan menghapus data log-nya
+      if (status === 'Belum Ada Info') {
+          if (existingLog) {
+              const { error } = await supabase.from('attendance_logs').delete().eq('id', existingLog.id);
+              if (error) throw error;
+              toast({ title: "Dihapus", description: "Status absensi direset." });
+              fetchData();
+          }
+          return;
+      }
+
+      // 🔥 FIX 2: Pakai format toISOString() untuk menyesuaikan dengan tipe data Timestamp di Database
       if (existingLog) {
-        // Update log
         const { error } = await supabase.from('attendance_logs')
-            .update({ status: status, scan_time: today.toLocaleTimeString() })
+            .update({ status: status, scan_time: today.toISOString() })
             .eq('id', existingLog.id);
         if (error) throw error;
       } else {
-        // Insert log baru
         const { error } = await supabase.from('attendance_logs')
             .insert([{
                 teacher_id: teacherId,
                 activity_id: activityId,
                 status: status,
-                scan_time: today.toLocaleTimeString(),
+                scan_time: today.toISOString(),
                 keterangan: 'Verifikasi Piket',
                 created_at: today.toISOString()
             }]);
