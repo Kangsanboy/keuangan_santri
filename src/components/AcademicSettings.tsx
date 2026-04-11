@@ -13,13 +13,13 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   School, Moon, BookOpen, MapPin, Plus, Trash2, CalendarDays, Filter, 
-  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil, CheckCircle2, User, RefreshCw
+  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil, CheckCircle2, User, Lock
 } from "lucide-react";
 
 /* ================= TYPES ================= */
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
 interface Location { id: number; name: string; type: string; }
-interface Rombel { id: number; nama: string; kelas: number; kategori: string; } // 🔥 Tambah kategori
+interface Rombel { id: number; nama: string; kelas: number; kategori: string; } 
 interface Teacher { id: number; full_name: string; } 
 interface Device { 
   id: number; name: string; token: string; location_id: number; is_active: boolean;
@@ -42,7 +42,6 @@ const KELAS_LIST = [7, 8, 9, 10, 11, 12];
 const AcademicSettings = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("kbm");
 
   // DATA STATE
@@ -135,46 +134,6 @@ const AcademicSettings = () => {
   const selectedActivity = activities.find(a => String(a.id) === selectedEkskulId);
 
   /* ================= ACTIONS ================= */
-  const syncPrayerTimes = async () => {
-      setSyncing(true);
-      try {
-          const res = await fetch('https://api.aladhan.com/v1/timingsByCity?city=Bandung&country=Indonesia&method=11');
-          const { data } = await res.json();
-          const timings = data.timings;
-
-          const sholatSchedules = schedules.filter(s => s.activity?.category === 'sholat');
-          if (sholatSchedules.length === 0) throw new Error("Belum ada data jadwal sholat di sistem.");
-
-          const updatePromises = sholatSchedules.map(sch => {
-              let newTime = sch.start_time;
-              const name = sch.activity.name.toLowerCase();
-              
-              if (name.includes('subuh')) newTime = timings.Fajr;
-              else if (name.includes('dzuhur')) newTime = timings.Dhuhr;
-              else if (name.includes('ashar')) newTime = timings.Asr;
-              else if (name.includes('maghrib')) newTime = timings.Maghrib;
-              else if (name.includes('isya')) newTime = timings.Isha;
-
-              if (newTime !== sch.start_time) {
-                  return supabase.from('schedules').update({ start_time: newTime }).eq('id', sch.id);
-              }
-              return null;
-          }).filter(p => p !== null);
-
-          if (updatePromises.length > 0) {
-              await Promise.all(updatePromises);
-              toast({ title: "Sinkronisasi Berhasil", description: "Waktu sholat telah diupdate ke zona waktu Jabar.", className: "bg-green-600 text-white" });
-              fetchData();
-          } else {
-              toast({ title: "Sudah Sinkron", description: "Waktu sholat sudah yang paling terbaru." });
-          }
-      } catch (err: any) {
-          toast({ title: "Gagal Sync", description: err.message, variant: "destructive" });
-      } finally {
-          setSyncing(false);
-      }
-  };
-
   const handleDelete = async (table: string, id: number) => {
     if (!confirm("Hapus data ini?")) return;
     try {
@@ -203,7 +162,7 @@ const AcademicSettings = () => {
             else error = (await supabase.from('devices').insert([data])).error;
         }
         else if (dialogType === 'rombel') { 
-             // 🔥 Menyimpan kategori rombel
+             // Kategori rombel otomatis dikirim dari background
              const data = { nama: payload.name, kelas: parseInt(payload.kelas), kategori: payload.kategori || 'sekolah' };
              if(isEditMode) error = (await supabase.from('rombels').update(data).eq('id', payload.id)).error;
              else error = (await supabase.from('rombels').insert([data])).error;
@@ -220,15 +179,16 @@ const AcademicSettings = () => {
         } 
         else if (dialogType === 'schedule') {
              const isSholat = scheduleCategory === 'sholat';
+             const isEkskul = scheduleCategory === 'ekskul';
              const data = {
                 activity_id: parseInt(payload.activity_id),
                 location_id: parseInt(payload.location_id),
                 day_of_week: parseInt(payload.day_of_week),
                 start_time: payload.start_time,
                 end_time: payload.end_time,
-                // 🔥 Jika Sholat, kelas dan rombel otomatis dibiarkan null
-                kelas: (isSholat || !payload.kelas || payload.kelas === 'all') ? null : parseInt(payload.kelas),
-                rombel_id: (isSholat || !payload.rombel_id || payload.rombel_id === 'all') ? null : parseInt(payload.rombel_id),
+                // 🔥 Jika Sholat atau Ekskul, kelas dan rombel otomatis null
+                kelas: (isSholat || isEkskul || !payload.kelas || payload.kelas === 'all') ? null : parseInt(payload.kelas),
+                rombel_id: (isSholat || isEkskul || !payload.rombel_id || payload.rombel_id === 'all') ? null : parseInt(payload.rombel_id),
                 teacher_id: (payload.teacher_id && payload.teacher_id !== 'none') ? parseInt(payload.teacher_id) : null 
              };
              if(isEditMode) error = (await supabase.from('schedules').update(data).eq('id', payload.id)).error;
@@ -245,7 +205,6 @@ const AcademicSettings = () => {
     }
   };
 
-  // 🔥 UPDATE PARAMETER KATEGORI
   const openAdd = (type: "activity" | "location" | "schedule" | "device" | "rombel" | "member", category: "school" | "mengaji" | "sholat" | "ekskul" = "school") => {
       setDialogType(type);
       setScheduleCategory(category);
@@ -259,7 +218,6 @@ const AcademicSettings = () => {
       };
       else if (type === 'device') initialData = { token: "DEV_" + Math.floor(Math.random() * 10000) }; 
       else if (type === 'activity') initialData = { category: category === 'ekskul' ? 'ekskul' : 'pelajaran', tipe_ekskul: 'wajib' };
-      // 🔥 Otomatis nyesuain kategori rombel pas tombol tambah ditekan
       else if (type === 'rombel') initialData = { kelas: "7", kategori: category === 'mengaji' ? 'mengaji' : 'sekolah' }; 
       else if (type === 'member') {
           if (!selectedEkskulId) { toast({title: "Pilih Ekskul Dulu", description: "Silakan pilih kegiatan di sebelah kiri."}); return; }
@@ -278,7 +236,7 @@ const AcademicSettings = () => {
           activity_id: String(data.activity_id),
           location_id: String(data.location_id),
           day_of_week: String(data.day_of_week),
-          kategori: data.kategori || 'sekolah', // 🔥 Load kategori
+          kategori: data.kategori || 'sekolah',
           kelas: data.kelas ? String(data.kelas) : undefined,
           rombel_id: data.rombel_id ? String(data.rombel_id) : undefined,
           teacher_id: data.teacher_id ? String(data.teacher_id) : "none" 
@@ -294,7 +252,8 @@ const AcademicSettings = () => {
   
   const ekskulList = activities.filter(a => a.category === 'ekskul');
 
-  const ScheduleList = ({ data, showKelas = false }: { data: Schedule[], showKelas?: boolean }) => (
+  // 🔥 Komponen ScheduleList dikasih properti isReadOnly khusus buat Sholat
+  const ScheduleList = ({ data, showKelas = false, isReadOnly = false }: { data: Schedule[], showKelas?: boolean, isReadOnly?: boolean }) => (
     <div className="space-y-4">
         {[1, 2, 3, 4, 5, 6, 0].map((dayCode) => { 
             const dayItems = data.filter(s => s.day_of_week === dayCode);
@@ -316,14 +275,18 @@ const AcademicSettings = () => {
                                                     <User size={10} /> {sch.teacher.full_name}
                                                 </span>
                                             )}
-                                            {/* Untuk Sholat, ini otomatis tidak muncul karena sch.kelas null */}
                                             {showKelas && sch.kelas && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold flex items-center gap-1">Kls {sch.kelas} {sch.rombel?.nama ? `- ${sch.rombel.nama}` : ''}</span>)}
                                             {!showKelas && sch.rombel?.nama && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold">{sch.rombel.nama}</span>)}
                                             <span className="text-xs text-gray-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {sch.location?.name}</span>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="icon" onClick={() => openEdit('schedule', sch)} className="text-blue-400 hover:bg-blue-50"><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDelete('schedules', sch.id)} className="text-red-400 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button></div>
+                                {!isReadOnly && (
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button variant="ghost" size="icon" onClick={() => openEdit('schedule', sch)} className="text-blue-400 hover:bg-blue-50"><Pencil className="w-4 h-4" /></Button>
+                                        <Button variant="ghost" size="icon" onClick={() => handleDelete('schedules', sch.id)} className="text-red-400 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -370,21 +333,18 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader><CardTitle>Jadwal Pengajian Kitab / Tahfidz</CardTitle></CardHeader><CardContent><ScheduleList data={filteredMengaji} showKelas={true} /></CardContent></Card>
         </TabsContent>
 
-        {/* SHOLAT */}
+        {/* 🔥 SHOLAT (TOMBOL DIHAPUS, DIBUAT READONLY) */}
         <TabsContent value="sholat" className="mt-4 space-y-4">
             <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 flex flex-col md:flex-row gap-4 items-center justify-between">
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     <Filter className="text-indigo-400 w-5 h-5" />
                     <div className="space-y-1"><label className="text-xs font-bold text-indigo-700 uppercase">Filter Hari:</label><Select value={filterHari} onValueChange={setFilterHari}><SelectTrigger className="w-[200px] font-bold border-indigo-200 bg-white"><SelectValue placeholder="Semua Hari" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Hari</SelectItem>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div>
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    <Button onClick={syncPrayerTimes} disabled={syncing} variant="outline" className="border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50 shadow-sm w-full md:w-auto">
-                        <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Menyinkronkan...' : 'Sync Waktu Sholat'}
-                    </Button>
-                    <Button onClick={() => openAdd('schedule', 'sholat')} className="bg-indigo-600 hover:bg-indigo-700 shadow-md w-full md:w-auto"><Plus className="w-4 h-4 mr-2" /> Tambah Jadwal</Button>
+                <div className="text-xs font-bold text-indigo-600 bg-indigo-100 px-4 py-2.5 rounded-lg border border-indigo-200 flex items-center gap-2">
+                   <Lock className="w-4 h-4" /> 5 Waktu Sholat Otomatis
                 </div>
             </div>
-            <Card className="border-t-4 border-t-indigo-600 shadow-sm"><CardHeader><CardTitle>Jadwal Sholat Berjamaah</CardTitle></CardHeader><CardContent><ScheduleList data={filteredSholat} showKelas={false} /></CardContent></Card>
+            <Card className="border-t-4 border-t-indigo-600 shadow-sm"><CardHeader><CardTitle>Jadwal Sholat Berjamaah</CardTitle></CardHeader><CardContent><ScheduleList data={filteredSholat} showKelas={false} isReadOnly={true} /></CardContent></Card>
         </TabsContent>
 
         {/* EKSKUL */}
@@ -393,7 +353,7 @@ const AcademicSettings = () => {
                 <div className="flex items-center gap-3 w-full md:w-auto"><Filter className="text-orange-400 w-5 h-5" /><div className="space-y-1"><label className="text-xs font-bold text-orange-700 uppercase">Filter Hari:</label><Select value={filterHari} onValueChange={setFilterHari}><SelectTrigger className="w-[200px] font-bold border-orange-200 bg-white"><SelectValue placeholder="Semua Hari" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Hari</SelectItem>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div></div>
                 <Button onClick={() => openAdd('schedule', 'ekskul')} className="bg-orange-500 hover:bg-orange-600 shadow-md w-full md:w-auto"><Plus className="w-4 h-4 mr-2" /> Tambah Jadwal Ekskul</Button>
             </div>
-            <Card className="border-t-4 border-t-orange-500 shadow-sm"><CardHeader><CardTitle>Jadwal Ekstrakulikuler</CardTitle></CardHeader><CardContent><ScheduleList data={filteredEkskul} showKelas={true} /></CardContent></Card>
+            <Card className="border-t-4 border-t-orange-500 shadow-sm"><CardHeader><CardTitle>Jadwal Ekstrakurikuler</CardTitle></CardHeader><CardContent><ScheduleList data={filteredEkskul} showKelas={false} /></CardContent></Card>
         </TabsContent>
         
         {/* TAB ANGGOTA */}
@@ -452,7 +412,7 @@ const AcademicSettings = () => {
             </div>
         </TabsContent>
 
-        {/* 🔥 MASTER DATA DENGAN 5 CARD */}
+        {/* MASTER DATA DENGAN 5 CARD */}
         <TabsContent value="activities" className="mt-4 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 
@@ -484,7 +444,19 @@ const AcademicSettings = () => {
                 {dialogType === 'activity' && (
                     <>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama Kegiatan</label><Input placeholder="Contoh: Matematika / Pencak Silat" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Kategori Utama</label><Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}><SelectTrigger><SelectValue placeholder="Pilih Kategori" /></SelectTrigger><SelectContent><SelectItem value="pelajaran">Pelajaran (KBM)</SelectItem><SelectItem value="mengaji">Mengaji Kitab/Tahfidz</SelectItem><SelectItem value="sholat">Sholat Jamaah</SelectItem><SelectItem value="ekskul">Ekstrakurikuler</SelectItem><SelectItem value="umum">Umum Lainnya</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Kategori Utama</label>
+                            <Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}>
+                                <SelectTrigger><SelectValue placeholder="Pilih Kategori" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="pelajaran">Pelajaran (KBM)</SelectItem>
+                                    <SelectItem value="mengaji">Mengaji Kitab/Tahfidz</SelectItem>
+                                    {/* 🔥 OPSI SHOLAT JAMAAH DIHILANGKAN DARI MASTER */}
+                                    <SelectItem value="ekskul">Ekstrakurikuler</SelectItem>
+                                    <SelectItem value="umum">Umum Lainnya</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                         {formData.category === 'ekskul' && <div className="space-y-2"><label className="text-sm font-medium text-orange-600">Sifat Ekskul</label><Select value={formData.tipe_ekskul} onValueChange={(v) => setFormData({...formData, tipe_ekskul: v})}><SelectTrigger><SelectValue placeholder="Pilih Tipe" /></SelectTrigger><SelectContent><SelectItem value="wajib">Wajib (Seluruh Santri Otomatis)</SelectItem><SelectItem value="pilihan">Pilihan (Sesuai Minat)</SelectItem></SelectContent></Select></div>}
                     </>
                 )}
@@ -513,16 +485,7 @@ const AcademicSettings = () => {
 
                 {dialogType === 'rombel' && (
                     <>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Kategori Rombel</label>
-                            <Select value={formData.kategori || 'sekolah'} onValueChange={(v) => setFormData({...formData, kategori: v})}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="sekolah">Rombel Sekolah Formal</SelectItem>
-                                    <SelectItem value="mengaji">Rombel Diniyah / Mengaji</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        {/* 🔥 PILIHAN KATEGORI ROMBEL (SEKOLAH/MENGAJI) DIHILANGKAN, SISTEM OTOMATIS TAHU DARI TOMBOL MANA YANG DIKLIK */}
                         <div className="space-y-2"><label className="text-sm font-medium">Kelas Tingkat</label><Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}><SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger><SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama / Kode Rombel</label><Input placeholder="Contoh: A, B, Ula, Wustho" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
                     </>
@@ -530,7 +493,8 @@ const AcademicSettings = () => {
 
                 {dialogType === 'schedule' && (
                     <>
-                        {scheduleCategory !== 'sholat' && (
+                        {/* 🔥 ISIAN KELAS & ROMBEL HANYA MUNCUL JIKA BUKAN SHOLAT DAN BUKAN EKSKUL */}
+                        {scheduleCategory !== 'sholat' && scheduleCategory !== 'ekskul' && (
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-blue-700">Untuk Kelas</label>
@@ -542,7 +506,6 @@ const AcademicSettings = () => {
                                         <SelectTrigger><SelectValue placeholder="Semua Rombel" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">Semua Rombel</SelectItem>
-                                            {/* 🔥 Filter rombel otomatis sesuai kategori (sekolah / mengaji) */}
                                             {rombels.filter(r => String(r.kelas) === String(formData.kelas) && r.kategori === (scheduleCategory === 'mengaji' ? 'mengaji' : 'sekolah')).map(r => (<SelectItem key={r.id} value={String(r.id)}>Rombel {r.nama}</SelectItem>))}
                                         </SelectContent>
                                     </Select>
