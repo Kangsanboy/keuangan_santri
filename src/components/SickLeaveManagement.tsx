@@ -25,7 +25,7 @@ interface Santri {
 interface HealthLog {
   id: number;
   santri_id: string;
-  status: 'Sakit' | 'Sakit Pulang' | 'Sembuh';
+  status: 'Sakit' | 'Pulang' | 'Sembuh'; // 🔥 KEMBALI JADI 'Pulang' BIAR DATABASE AMAN
   start_date: string;
   end_date?: string;
   keterangan?: string;
@@ -143,11 +143,12 @@ const SickLeaveManagement = () => {
     try {
       const { error } = await supabase
         .from('student_health_logs')
-        .update({ status: 'Sakit Pulang' })
+        .update({ status: 'Pulang' }) // 🔥 SIMPAN KE DATABASE SEBAGAI 'Pulang'
         .eq('id', id);
 
       if (error) throw error;
       toast({ title: "Diperbarui", description: `${nama} telah ditandai Sakit Pulang.`, className: "bg-blue-600 text-white" });
+      fetchData(); // Refresh data
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -162,6 +163,7 @@ const SickLeaveManagement = () => {
 
       if (error) throw error;
       toast({ title: "Alhamdulillah", description: `${nama} telah sembuh.`, className: "bg-green-600 text-white" });
+      fetchData(); // Refresh data
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -173,6 +175,7 @@ const SickLeaveManagement = () => {
           const { error } = await supabase.from('student_health_logs').delete().eq('id', id);
           if (error) throw error;
           toast({ title: "Terhapus", description: "Data berhasil dihapus." });
+          fetchData(); // Refresh data
       } catch (err: any) {
           toast({ title: "Gagal", description: err.message, variant: "destructive" });
       }
@@ -184,7 +187,7 @@ const SickLeaveManagement = () => {
           "No": i + 1,
           "Nama Santri": l.santri?.nama_lengkap || "-",
           "Kelas": `${l.santri?.kelas} ${l.santri?.rombel?.nama || ''}`,
-          "Status": l.status,
+          "Status": l.status === 'Pulang' ? 'Sakit Pulang' : l.status, // 🔥 Di Excel ubah jadi Sakit Pulang
           "Tanggal Mulai": new Date(l.start_date).toLocaleDateString('id-ID'),
           "Keterangan": l.keterangan || "-"
       }));
@@ -225,7 +228,7 @@ const SickLeaveManagement = () => {
   const historyLogs = allLogs.filter(l => l.status === 'Sembuh');
 
   const totalSakit = activeLogs.filter(l => l.status === 'Sakit').length;
-  const totalPulang = activeLogs.filter(l => l.status === 'Sakit Pulang').length;
+  const totalPulang = activeLogs.filter(l => l.status === 'Pulang').length; // 🔥 Hitung dari 'Pulang'
 
   const LogTable = ({ data, isHistory }: { data: HealthLog[], isHistory: boolean }) => (
     <div className="overflow-x-auto pb-4">
@@ -250,8 +253,9 @@ const SickLeaveManagement = () => {
                             <td className="px-4 py-3 font-bold text-gray-800">{log.santri?.nama_lengkap || "Tanpa Nama"}</td>
                             <td className="px-4 py-3 text-center"><Badge variant="secondary" className="text-[10px]">{log.santri?.kelas} {log.santri?.rombel?.nama}</Badge></td>
                             <td className="px-4 py-3">
-                                <Badge className={`${log.status === 'Sakit' ? 'bg-red-100 text-red-700 hover:bg-red-200' : (log.status === 'Sakit Pulang' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-green-100 text-green-700')}`}>
-                                    {log.status}
+                                {/* 🔥 Render tulisan 'Sakit Pulang' di tabel meskipun di DB cuma 'Pulang' */}
+                                <Badge className={`${log.status === 'Sakit' ? 'bg-red-100 text-red-700 hover:bg-red-200' : (log.status === 'Pulang' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-green-100 text-green-700')}`}>
+                                    {log.status === 'Pulang' ? 'Sakit Pulang' : log.status} 
                                 </Badge>
                             </td>
                             <td className="px-4 py-3 text-gray-600 text-xs">
