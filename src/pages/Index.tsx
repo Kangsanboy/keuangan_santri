@@ -51,16 +51,23 @@ const Index = () => {
   
   const [targetAbsensiTab, setTargetAbsensiTab] = useState<string>("kbm");
 
-  /* ================= STATE DATA ================= */
+  /* ================= STATE DATA & FILTER KEUANGAN ================= */
+  // Filter Export Excel
+  const [exportKelas, setExportKelas] = useState<string>("all");
+  const [exportGender, setExportGender] = useState<string>("all");
   const [exportMonth, setExportMonth] = useState(new Date().getMonth());
   const [exportYear, setExportYear] = useState(new Date().getFullYear());
+  
+  // Filter Tanggal Riwayat
+  const [historyDate, setHistoryDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [riwayatTrx, setRiwayatTrx] = useState<TransaksiItem[]>([]);
+
   const [rekapSaldo, setRekapSaldo] = useState<RekapSaldo[]>([]);
   const [totalMasuk, setTotalMasuk] = useState(0);
   const [totalKeluar, setTotalKeluar] = useState(0);
   const [masuk7Hari, setMasuk7Hari] = useState(0);
   const [keluar7Hari, setKeluar7Hari] = useState(0);
   const [keluarHariIni, setKeluarHariIni] = useState(0);
-  const [trxHariIni, setTrxHariIni] = useState<TransaksiItem[]>([]);
   const [absensiLogs, setAbsensiLogs] = useState<any[]>([]); 
   
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -74,7 +81,6 @@ const Index = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  /* ================= LOGIC: TOMBOL BACK HP ================= */
   useEffect(() => { window.history.replaceState({ menu: 'dashboard', detailId: null }, ''); }, []);
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -98,7 +104,6 @@ const Index = () => {
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
-  /* ================= LOGIC: CEK ROLE ================= */
   useEffect(() => {
     const checkUserRole = async () => {
         if (!user) return;
@@ -113,7 +118,7 @@ const Index = () => {
     checkUserRole();
   }, [user, navigate]);
 
-  /* ================= FETCH DATA ================= */
+  /* ================= FETCH DATA KEUANGAN & RIWAYAT ================= */
   const fetchKeuangan = useCallback(async () => {
     if (userRole === 'pending') return; 
     
@@ -122,6 +127,7 @@ const Index = () => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(now.getDate() - 6);
 
+    // Hitung akumulasi masuk, keluar 7 hari dll
     const { data } = await supabase.from("transactions_2025_12_01_21_34")
         .select("amount, type, transaction_date")
         .order('transaction_date', { ascending: false }); 
@@ -138,19 +144,27 @@ const Index = () => {
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7);
     }
     
+    // Hitung pengeluaran khusus hari ini
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
-      .eq("transaction_date", todayStr)
-      .order("created_at", { ascending: false });
+      .select(`amount, type`)
+      .eq("transaction_date", todayStr);
       
     if (detailHariIni) {
-        setTrxHariIni(detailHariIni as any);
-        const pengeluaranHariIni = detailHariIni
-            .filter(d => d.type === 'expense')
-            .reduce((acc, curr) => acc + curr.amount, 0);
+        const pengeluaranHariIni = detailHariIni.filter(d => d.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
         setKeluarHariIni(pengeluaranHariIni);
     }
   }, [userRole]);
+
+  // 🔥 FUNGSI KHUSUS RIWAYAT BERDASARKAN FILTER TANGGAL
+  const fetchRiwayatTransaksi = useCallback(async () => {
+      if (userRole === 'pending') return;
+      const { data } = await supabase.from("transactions_2025_12_01_21_34")
+        .select(`id, amount, type, description, transaction_date, created_at, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
+        .eq("transaction_date", historyDate)
+        .order("created_at", { ascending: false });
+      
+      if (data) setRiwayatTrx(data as any[]);
+  }, [userRole, historyDate]);
 
   const fetchRekapSaldo = useCallback(async () => {
     if (userRole === 'pending') return;
@@ -182,10 +196,21 @@ const Index = () => {
     if (data) setAbsensiLogs(data);
   }, [userRole]);
 
-  useEffect(() => { if (user) { fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni(); } }, [user, userRole, fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni]);
+  useEffect(() => { 
+      if (user) { 
+          fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni(); fetchRiwayatTransaksi(); 
+      } 
+  }, [user, userRole, historyDate, fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni, fetchRiwayatTransaksi]);
   
-  /* AUTO REFRESH */
+  /* 🔥 AUTO REFRESH FIX (Nangkep sinyal dari TransactionForm) */
   useEffect(() => {
+    const handleRefreshEvent = () => { 
+        fetchKeuangan(); 
+        fetchRekapSaldo(); 
+        fetchRiwayatTransaksi(); // Langsung perbarui tabel riwayat!
+    };
+    window.addEventListener("refresh-keuangan", handleRefreshEvent); 
+    
     const calculateTimeToMidnight = () => {
         const now = new Date(); const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0); 
@@ -194,42 +219,65 @@ const Index = () => {
     const scheduleRefresh = () => {
         const timeToWait = calculateTimeToMidnight();
         const timerId = setTimeout(() => {
-            fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni();
+            handleRefreshEvent(); fetchAbsensiHariIni();
             toast({ title: "Pergantian Hari 🕛", description: "Data reset.", duration: 5000 });
             scheduleRefresh();
         }, timeToWait);
         return timerId;
     };
-    const timer = scheduleRefresh(); return () => clearTimeout(timer);
-  }, [fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni, toast]);
+    const timer = scheduleRefresh(); 
+    
+    return () => { 
+        clearTimeout(timer);
+        window.removeEventListener("refresh-keuangan", handleRefreshEvent); 
+    };
+  }, [fetchKeuangan, fetchRekapSaldo, fetchRiwayatTransaksi, fetchAbsensiHariIni, toast]);
 
   /* ACTIONS */
   const handleDeleteTransaction = async (id: string) => {
     if (!window.confirm("Hapus transaksi ini?")) return;
     try {
         const { error } = await supabase.from('transactions_2025_12_01_21_34').delete().eq('id', id);
-        if (error) throw error; toast({ title: "Dihapus", description: "Transaksi dihapus." }); fetchKeuangan(); fetchRekapSaldo();
+        if (error) throw error; toast({ title: "Dihapus", description: "Transaksi dihapus." }); 
+        fetchKeuangan(); fetchRekapSaldo(); fetchRiwayatTransaksi();
     } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
+  // 🔥 FITUR EXCEL UPDATE: Bisa Filter Kelas & Gender
   const exportExcelBulanan = async () => { 
     const bulan = exportMonth; const tahun = exportYear; const namaBulan = monthsList[bulan];
     const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
     const lastDay = new Date(tahun, bulan + 1, 0).getDate(); const akhir = `${tahun}-${String(bulan + 1).padStart(2, "0")}-${lastDay}`;
-    const { data, error } = await supabase.from("transactions_2025_12_01_21_34")
-      .select(`transaction_date, type, amount, description, santri:santri_id ( nama_lengkap, kelas ), merchant:merchant_id(full_name)`)
+    
+    let dbQuery = supabase.from("transactions_2025_12_01_21_34")
+      .select(`transaction_date, type, amount, description, santri:santri_id!inner ( nama_lengkap, kelas, gender ), merchant:merchant_id(full_name)`)
       .gte("transaction_date", awal).lte("transaction_date", akhir).order("transaction_date");
-    if (error || !data) return;
+    
+    // Terapkan Filter
+    if (exportKelas !== 'all') dbQuery = dbQuery.eq('santri.kelas', parseInt(exportKelas));
+    if (exportGender !== 'all') dbQuery = dbQuery.eq('santri.gender', exportGender);
+      
+    const { data, error } = await dbQuery;
+    if (error || !data) return toast({title: "Gagal", description: error?.message || "Data tidak ditemukan", variant: "destructive"});
+    if (data.length === 0) return toast({title: "Kosong", description: "Tidak ada transaksi di filter ini.", variant: "destructive"});
+
     const rows = data.map((d: any) => ({ 
         Tanggal: d.transaction_date, 
         Santri: d.santri?.nama_lengkap || "-", 
         Kelas: d.santri?.kelas || "-", 
+        "Jenis Kelamin": d.santri?.gender === 'ikhwan' ? 'L' : 'P',
         Jenis: d.type === "income" ? "Pemasukan" : "Pengeluaran", 
         Nominal: d.amount, 
         Keterangan: d.description, 
         Kasir: d.merchant?.full_name || "-" 
     }));
-    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Laporan"); XLSX.writeFile(wb, `Laporan Keuangan ${namaBulan} ${tahun}.xlsx`);
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Laporan"); 
+    
+    let fileName = `Lap_Keuangan_${namaBulan}_${tahun}`;
+    if (exportKelas !== 'all') fileName += `_Kls${exportKelas}`;
+    if (exportGender !== 'all') fileName += `_${exportGender}`;
+    
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
   };
 
   const handleOpenKelas = (kelas: number) => { setSelectedKelasSantri(kelas); navigateTo("santri", null); };
@@ -263,7 +311,6 @@ const Index = () => {
       ].filter(x => x.value > 0);
   };
 
-  // 🔥 PERUBAHAN: Komponen Pie Chart Dashboard dibikin sama kayak Saldo (border hijau melengkung)
   const DashboardChartCard = ({ title, data, tabName }: { title: string, data: any[], tabName: string }) => (
       <Card 
           className="border-2 border-green-400/80 rounded-2xl bg-white shadow-sm cursor-pointer group relative overflow-hidden active:scale-95 transition-transform hover:border-green-500 hover:shadow-md"
@@ -272,7 +319,6 @@ const Index = () => {
               handleMenuClick("absensi");
           }}
       >
-          {/* Elemen Dekorasi di Pojok Kanan Atas (Sama dengan Kotak Saldo) */}
           <div className="absolute top-0 right-0 w-12 h-12 bg-green-50 rounded-bl-full -mr-6 -mt-6 z-0 group-hover:bg-green-100 transition-colors"></div>
           
           <CardHeader className="pb-2 relative z-10 border-b border-gray-100 bg-transparent px-3 pt-3">
@@ -436,7 +482,6 @@ const Index = () => {
                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                    <div className="text-center space-y-2 pb-4 border-b border-gray-200"><h1 className="text-xl md:text-3xl font-bold text-green-700 uppercase tracking-wide px-2">DASHBOARD PUSAT</h1><p className="text-gray-500 max-w-3xl mx-auto text-xs md:text-base leading-relaxed px-4">Ringkasan data pesantren secara real-time.</p></div>
                    
-                   {/* 🔥 PERUBAHAN: GRAFIK ABSENSI DI ATAS, TANPA CONTAINER PUTIH, JUDUL DI TENGAH 🔥 */}
                    <div className="space-y-4 mb-8 mt-2">
                        <h3 className="text-center font-extrabold text-gray-800 text-sm md:text-lg tracking-widest uppercase">MONITOR ABSENSI SANTRI</h3>
                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -486,13 +531,65 @@ const Index = () => {
              {activeMenu === "keuangan" && hasAdminAccess && (
                  <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                     <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
-                    <Card className="border-green-200 bg-white shadow-sm overflow-hidden"><CardHeader className="bg-green-50/50 border-b border-green-100 pb-3 p-4"><div className="flex items-center gap-2 text-green-800"><FileSpreadsheet className="w-5 h-5" /><CardTitle className="text-base md:text-lg">Laporan Bulanan</CardTitle></div></CardHeader><CardContent className="p-4"><div className="flex flex-col gap-3"><div className="flex gap-2"><div className="flex-1"><label className="text-xs font-medium text-gray-600">Bulan</label><select value={exportMonth} onChange={(e) => setExportMonth(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-md text-sm">{monthsList.map((m, idx) => (<option key={idx} value={idx}>{m}</option>))}</select></div><div className="w-24"><label className="text-xs font-medium text-gray-600">Tahun</label><select value={exportYear} onChange={(e) => setExportYear(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-md text-sm">{yearsList.map((y) => (<option key={y} value={y}>{y}</option>))}</select></div></div><Button onClick={exportExcelBulanan} className="bg-green-700 hover:bg-green-800 shadow-md w-full"><FileSpreadsheet className="mr-2 h-4 w-4" />Unduh Excel</Button></div></CardContent></Card>
-                    <div className="bg-white rounded-xl shadow-sm border p-1 relative"><div className="absolute top-0 right-0 p-4 z-10 hidden md:block"><span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1"><CalendarDays size={12}/> Mode Input Tanggal</span></div><TransactionForm /></div>
+                    
+                    {/* 🔥 FITUR FILTER EXCEL BARU (KELAS & GENDER) */}
                     <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
-                       <CardHeader className="bg-gray-50/50 border-b border-green-100 pb-3 p-4"><div className="flex items-center gap-2 text-gray-800"><History className="w-5 h-5 text-green-600" /><CardTitle className="text-base md:text-lg">Riwayat Transaksi Hari Ini</CardTitle></div></CardHeader>
-                       <CardContent className="p-0">{trxHariIni.length === 0 ? (<div className="p-8 text-center text-gray-500 text-sm">Belum ada transaksi di tanggal ini.</div>) : (
-                         <div className="divide-y divide-gray-100">
-                           {trxHariIni.map((trx, idx) => (
+                        <CardHeader className="bg-green-50/50 border-b border-green-100 pb-3 p-4">
+                            <div className="flex items-center gap-2 text-green-800"><FileSpreadsheet className="w-5 h-5" /><CardTitle className="text-base md:text-lg">Laporan & Unduh Data</CardTitle></div>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                            <div className="flex flex-col gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-medium text-gray-600">Pilih Kelas</label>
+                                        <select value={exportKelas} onChange={(e) => setExportKelas(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md text-sm outline-none">
+                                            <option value="all">Semua Kelas</option>
+                                            {[7, 8, 9, 10, 11, 12].map(k => <option key={k} value={String(k)}>Kelas {k}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-medium text-gray-600">Pilih Gender</label>
+                                        <select value={exportGender} onChange={(e) => setExportGender(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md text-sm outline-none">
+                                            <option value="all">Semua Gender</option>
+                                            <option value="ikhwan">Ikhwan</option>
+                                            <option value="akhwat">Akhwat</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-medium text-gray-600">Bulan</label>
+                                        <select value={exportMonth} onChange={(e) => setExportMonth(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-md text-sm outline-none">
+                                            {monthsList.map((m, idx) => (<option key={idx} value={idx}>{m}</option>))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-medium text-gray-600">Tahun</label>
+                                        <select value={exportYear} onChange={(e) => setExportYear(parseInt(e.target.value))} className="w-full p-2 border border-gray-300 rounded-md text-sm outline-none">
+                                            {yearsList.map((y) => (<option key={y} value={y}>{y}</option>))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <Button onClick={exportExcelBulanan} className="bg-green-700 hover:bg-green-800 shadow-md w-full">
+                                    <FileSpreadsheet className="mr-2 h-4 w-4" />Unduh Excel Spesifik
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <div className="bg-white rounded-xl shadow-sm border p-1 relative"><div className="absolute top-0 right-0 p-4 z-10 hidden md:block"><span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1"><CalendarDays size={12}/> Mode Input Cepat</span></div><TransactionForm /></div>
+                    
+                    <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
+                       {/* 🔥 FITUR FILTER TANGGAL DI RIWAYAT */}
+                       <CardHeader className="bg-gray-50/50 border-b border-green-100 pb-3 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                           <div className="flex items-center gap-2 text-gray-800"><History className="w-5 h-5 text-green-600" /><CardTitle className="text-base md:text-lg">Riwayat Transaksi</CardTitle></div>
+                           <div className="flex items-center gap-2 bg-white px-2 py-1 rounded border shadow-sm">
+                               <CalendarDays className="w-4 h-4 text-gray-400" />
+                               <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="text-sm font-bold text-gray-700 outline-none" />
+                           </div>
+                       </CardHeader>
+                       
+                       <CardContent className="p-0">{riwayatTrx.length === 0 ? (<div className="p-8 text-center text-gray-500 text-sm italic">Belum ada transaksi di tanggal ini.</div>) : (
+                         <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
+                           {riwayatTrx.map((trx, idx) => (
                              <div key={idx} className="p-4 flex items-center justify-between hover:bg-green-50/30 transition-colors">
                                  <div className="flex items-center gap-3">
                                      {trx.type === 'income' ? <ArrowUpCircle className="text-green-600 w-8 h-8 opacity-80" /> : <ArrowDownCircle className="text-red-500 w-8 h-8 opacity-80" />}
