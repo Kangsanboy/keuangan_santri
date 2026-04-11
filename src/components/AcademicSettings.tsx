@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   School, Moon, BookOpen, MapPin, Plus, Trash2, CalendarDays, Filter, 
-  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil, CheckCircle2, User, Lock
+  Database, Cpu, Wifi, Users, UserPlus, Medal, Pencil, CheckCircle2, User, Lock, RefreshCw
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -42,6 +42,7 @@ const KELAS_LIST = [7, 8, 9, 10, 11, 12];
 const AcademicSettings = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState("kbm");
 
   // DATA STATE
@@ -133,7 +134,66 @@ const AcademicSettings = () => {
 
   const selectedActivity = activities.find(a => String(a.id) === selectedEkskulId);
 
-  /* ================= ACTIONS ================= */
+  /* ================= FUNGSI AUTO-INJECT JADWAL SHOLAT ================= */
+  const syncPrayerTimes = async () => {
+      setSyncing(true);
+      try {
+          const res = await fetch('https://api.aladhan.com/v1/timingsByCity?city=Bandung&country=Indonesia&method=11');
+          const { data } = await res.json();
+          const timings = data.timings;
+
+          const prayerNames = ['Subuh', 'Dzuhur', 'Ashar', 'Maghrib', 'Isya'];
+          const prayerApiKeys = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+
+          // 1. Amankan Lokasi (Bikin Masjid kalau belum ada)
+          let defaultLocId = locations.find(l => l.type === 'mosque')?.id || locations[0]?.id;
+          if (!defaultLocId) {
+              const { data: newLoc } = await supabase.from('locations').insert([{ name: 'Masjid Utama', type: 'mosque' }]).select().single();
+              if (newLoc) defaultLocId = newLoc.id;
+          }
+
+          // 2. Amankan Tabel Kegiatan (activities) - Pastikan 5 Waktu ada di DB biar bisa dipakai menu Absen
+          const { data: existingActs } = await supabase.from('activities').select('*').eq('category', 'sholat');
+          let sholatActs = existingActs || [];
+
+          for (let i = 0; i < prayerNames.length; i++) {
+              const pName = prayerNames[i];
+              if (!sholatActs.find(a => a.name.toLowerCase().includes(pName.toLowerCase()))) {
+                  const { data: newAct } = await supabase.from('activities').insert([{ name: `Sholat ${pName}`, category: 'sholat' }]).select().single();
+                  if (newAct) sholatActs.push(newAct);
+              }
+          }
+
+          // 3. Amankan Tabel Jadwal (schedules) - Bikin jadwal untuk 7 Hari penuh (0 sampai 6)
+          for (let day = 0; day <= 6; day++) {
+              for (let i = 0; i < prayerNames.length; i++) {
+                  const act = sholatActs.find(a => a.name.toLowerCase().includes(prayerNames[i].toLowerCase()));
+                  if (!act) continue;
+
+                  const startTime = timings[prayerApiKeys[i]];
+                  const { data: existingSch } = await supabase.from('schedules').select('id').eq('activity_id', act.id).eq('day_of_week', day).maybeSingle();
+
+                  if (existingSch) {
+                      await supabase.from('schedules').update({ start_time: startTime, end_time: startTime }).eq('id', existingSch.id);
+                  } else {
+                      await supabase.from('schedules').insert([{
+                          activity_id: act.id, day_of_week: day, start_time: startTime, end_time: startTime,
+                          location_id: defaultLocId, is_active: true
+                      }]);
+                  }
+              }
+          }
+
+          toast({ title: "Jadwal Dipatenkan!", description: "Waktu Sholat Jabar otomatis ter-generate dan tersimpan.", className: "bg-green-600 text-white" });
+          fetchData();
+      } catch (err: any) {
+          toast({ title: "Gagal Sinkronisasi", description: err.message, variant: "destructive" });
+      } finally {
+          setSyncing(false);
+      }
+  };
+
+  /* ================= ACTIONS NORMAL ================= */
   const handleDelete = async (table: string, id: number) => {
     if (!confirm("Hapus data ini?")) return;
     try {
@@ -162,7 +222,6 @@ const AcademicSettings = () => {
             else error = (await supabase.from('devices').insert([data])).error;
         }
         else if (dialogType === 'rombel') { 
-             // Kategori rombel otomatis dikirim dari background
              const data = { nama: payload.name, kelas: parseInt(payload.kelas), kategori: payload.kategori || 'sekolah' };
              if(isEditMode) error = (await supabase.from('rombels').update(data).eq('id', payload.id)).error;
              else error = (await supabase.from('rombels').insert([data])).error;
@@ -178,7 +237,6 @@ const AcademicSettings = () => {
              else error = (await supabase.from('locations').insert([data])).error;
         } 
         else if (dialogType === 'schedule') {
-             const isSholat = scheduleCategory === 'sholat';
              const isEkskul = scheduleCategory === 'ekskul';
              const data = {
                 activity_id: parseInt(payload.activity_id),
@@ -186,9 +244,8 @@ const AcademicSettings = () => {
                 day_of_week: parseInt(payload.day_of_week),
                 start_time: payload.start_time,
                 end_time: payload.end_time,
-                // 🔥 Jika Sholat atau Ekskul, kelas dan rombel otomatis null
-                kelas: (isSholat || isEkskul || !payload.kelas || payload.kelas === 'all') ? null : parseInt(payload.kelas),
-                rombel_id: (isSholat || isEkskul || !payload.rombel_id || payload.rombel_id === 'all') ? null : parseInt(payload.rombel_id),
+                kelas: (isEkskul || !payload.kelas || payload.kelas === 'all') ? null : parseInt(payload.kelas),
+                rombel_id: (isEkskul || !payload.rombel_id || payload.rombel_id === 'all') ? null : parseInt(payload.rombel_id),
                 teacher_id: (payload.teacher_id && payload.teacher_id !== 'none') ? parseInt(payload.teacher_id) : null 
              };
              if(isEditMode) error = (await supabase.from('schedules').update(data).eq('id', payload.id)).error;
@@ -247,13 +304,10 @@ const AcademicSettings = () => {
   // FILTER LOGIC UNTUK TAB JADWAL
   const filteredSchool = filterKelas === 'all' ? schedules.filter(s => s.activity?.category === 'pelajaran') : schedules.filter(s => s.activity?.category === 'pelajaran' && String(s.kelas) === filterKelas);
   const filteredMengaji = filterHari === 'all' ? schedules.filter(s => s.activity?.category === 'mengaji') : schedules.filter(s => s.activity?.category === 'mengaji' && String(s.day_of_week) === filterHari);
-  const filteredSholat = filterHari === 'all' ? schedules.filter(s => s.activity?.category === 'sholat') : schedules.filter(s => s.activity?.category === 'sholat' && String(s.day_of_week) === filterHari);
   const filteredEkskul = filterHari === 'all' ? schedules.filter(s => s.activity?.category === 'ekskul') : schedules.filter(s => s.activity?.category === 'ekskul' && String(s.day_of_week) === filterHari);
-  
   const ekskulList = activities.filter(a => a.category === 'ekskul');
 
-  // 🔥 Komponen ScheduleList dikasih properti isReadOnly khusus buat Sholat
-  const ScheduleList = ({ data, showKelas = false, isReadOnly = false }: { data: Schedule[], showKelas?: boolean, isReadOnly?: boolean }) => (
+  const ScheduleList = ({ data, showKelas = false }: { data: Schedule[], showKelas?: boolean }) => (
     <div className="space-y-4">
         {[1, 2, 3, 4, 5, 6, 0].map((dayCode) => { 
             const dayItems = data.filter(s => s.day_of_week === dayCode);
@@ -270,23 +324,17 @@ const AcademicSettings = () => {
                                     <div>
                                         <p className="font-bold text-gray-800 flex items-center gap-2">{sch.activity?.name}{sch.activity?.category === 'ekskul' && sch.activity?.tipe_ekskul && (<span className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${sch.activity.tipe_ekskul === 'wajib' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>{sch.activity.tipe_ekskul}</span>)}</p>
                                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            {sch.teacher && (
-                                                <span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 rounded flex items-center gap-1 border border-indigo-100">
-                                                    <User size={10} /> {sch.teacher.full_name}
-                                                </span>
-                                            )}
+                                            {sch.teacher && (<span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 rounded flex items-center gap-1 border border-indigo-100"><User size={10} /> {sch.teacher.full_name}</span>)}
                                             {showKelas && sch.kelas && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold flex items-center gap-1">Kls {sch.kelas} {sch.rombel?.nama ? `- ${sch.rombel.nama}` : ''}</span>)}
                                             {!showKelas && sch.rombel?.nama && (<span className="text-xs bg-gray-200 px-1.5 rounded text-gray-700 font-bold">{sch.rombel.nama}</span>)}
                                             <span className="text-xs text-gray-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {sch.location?.name}</span>
                                         </div>
                                     </div>
                                 </div>
-                                {!isReadOnly && (
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button variant="ghost" size="icon" onClick={() => openEdit('schedule', sch)} className="text-blue-400 hover:bg-blue-50"><Pencil className="w-4 h-4" /></Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleDelete('schedules', sch.id)} className="text-red-400 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
-                                    </div>
-                                )}
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button variant="ghost" size="icon" onClick={() => openEdit('schedule', sch)} className="text-blue-400 hover:bg-blue-50"><Pencil className="w-4 h-4" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDelete('schedules', sch.id)} className="text-red-400 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -295,6 +343,37 @@ const AcademicSettings = () => {
         })}
     </div>
   );
+
+  // 🔥 TAMPILAN KHUSUS SHOLAT (MANDIRI & PATEN)
+  const renderPatenSholat = () => {
+      // Ambil 1 set jadwal sholat aja (misal hari senin aja karena jamnya sama tiap hari)
+      const sholatSchedules = schedules.filter(s => s.activity?.category === 'sholat' && s.day_of_week === 1); 
+      
+      const prayerOrder = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'];
+      const sortedSholat = sholatSchedules.sort((a, b) => {
+          const indexA = prayerOrder.findIndex(p => a.activity.name.toLowerCase().includes(p));
+          const indexB = prayerOrder.findIndex(p => b.activity.name.toLowerCase().includes(p));
+          return indexA - indexB;
+      });
+
+      return (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+              {sortedSholat.length === 0 ? (
+                  <div className="col-span-5 text-center p-8 text-gray-400 border-2 border-dashed rounded-xl bg-gray-50">
+                      Jadwal sholat belum ter-generate. Klik tombol <strong>"Generate & Sync Otomatis"</strong> di atas.
+                  </div>
+              ) : (
+                  sortedSholat.map(sch => (
+                      <div key={sch.id} className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center shadow-sm hover:shadow-md hover:-translate-y-1 transition-all">
+                          <h4 className="font-bold text-indigo-800 uppercase mb-2">{sch.activity.name}</h4>
+                          <div className="text-2xl md:text-3xl font-black text-indigo-600">{sch.start_time.slice(0,5)}</div>
+                          <div className="text-[10px] text-indigo-400 mt-2 font-bold uppercase tracking-widest bg-indigo-100/50 inline-block px-2 py-0.5 rounded-full">Otomatis / Paten</div>
+                      </div>
+                  ))
+              )}
+          </div>
+      )
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20">
@@ -333,18 +412,22 @@ const AcademicSettings = () => {
             <Card className="border-t-4 border-t-green-600 shadow-sm"><CardHeader><CardTitle>Jadwal Pengajian Kitab / Tahfidz</CardTitle></CardHeader><CardContent><ScheduleList data={filteredMengaji} showKelas={true} /></CardContent></Card>
         </TabsContent>
 
-        {/* 🔥 SHOLAT (TOMBOL DIHAPUS, DIBUAT READONLY) */}
+        {/* SHOLAT (PATEN & MANDIRI) */}
         <TabsContent value="sholat" className="mt-4 space-y-4">
             <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 flex flex-col md:flex-row gap-4 items-center justify-between">
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <Filter className="text-indigo-400 w-5 h-5" />
-                    <div className="space-y-1"><label className="text-xs font-bold text-indigo-700 uppercase">Filter Hari:</label><Select value={filterHari} onValueChange={setFilterHari}><SelectTrigger className="w-[200px] font-bold border-indigo-200 bg-white"><SelectValue placeholder="Semua Hari" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Hari</SelectItem>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div>
+                <div className="text-sm font-bold text-indigo-800 flex items-center gap-2">
+                   <Lock className="w-5 h-5" /> 5 Waktu Sholat (Paten & Mandiri)
                 </div>
-                <div className="text-xs font-bold text-indigo-600 bg-indigo-100 px-4 py-2.5 rounded-lg border border-indigo-200 flex items-center gap-2">
-                   <Lock className="w-4 h-4" /> 5 Waktu Sholat Otomatis
-                </div>
+                <Button onClick={syncPrayerTimes} disabled={syncing} className="bg-indigo-600 hover:bg-indigo-700 shadow-md w-full md:w-auto">
+                    <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Memproses...' : 'Generate & Sync Otomatis'}
+                </Button>
             </div>
-            <Card className="border-t-4 border-t-indigo-600 shadow-sm"><CardHeader><CardTitle>Jadwal Sholat Berjamaah</CardTitle></CardHeader><CardContent><ScheduleList data={filteredSholat} showKelas={false} isReadOnly={true} /></CardContent></Card>
+            <Card className="border-t-4 border-t-indigo-600 shadow-sm">
+                <CardHeader><CardTitle>Waktu Sholat Real-time Jabar</CardTitle></CardHeader>
+                <CardContent className="pb-8">
+                    {renderPatenSholat()}
+                </CardContent>
+            </Card>
         </TabsContent>
 
         {/* EKSKUL */}
@@ -412,7 +495,7 @@ const AcademicSettings = () => {
             </div>
         </TabsContent>
 
-        {/* MASTER DATA DENGAN 5 CARD */}
+        {/* MASTER DATA */}
         <TabsContent value="activities" className="mt-4 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 
@@ -426,7 +509,7 @@ const AcademicSettings = () => {
                 <Card className="border-l-4 border-l-green-500"><CardHeader className="flex flex-row items-center justify-between pb-2 bg-green-50/30"><div><CardTitle className="text-lg flex items-center gap-2"><BookOpen className="text-green-600 w-5 h-5"/> Rombel Mengaji</CardTitle></div><Button onClick={() => openAdd('rombel', 'mengaji')} variant="outline" size="sm" className="border-green-200 text-green-700 bg-white"><Plus className="w-4 h-4 mr-1" /> Tambah</Button></CardHeader><CardContent className="pt-4 max-h-[300px] overflow-y-auto">{KELAS_LIST.map((k) => {const rombelKelas = rombels.filter(r => r.kelas === k && r.kategori === 'mengaji'); if (rombelKelas.length === 0) return null; return (<div key={k} className="mb-3"><div className="text-xs font-bold text-gray-500 uppercase mb-1">Kelas {k}</div><div className="space-y-1">{rombelKelas.map(r => (<div key={r.id} className="flex justify-between items-center p-2 bg-gray-50 rounded border hover:bg-green-50"><span className="text-sm font-bold">Rombel {r.nama}</span><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => openEdit('rombel', r)}><Pencil size={10}/></Button><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleDelete('rombels', r.id)}><Trash2 size={10} className="text-red-400"/></Button></div></div>))}</div></div>)})}{rombels.filter(r => r.kategori === 'mengaji').length === 0 && <p className="text-xs text-gray-400 text-center py-4">Belum ada rombel mengaji.</p>}</CardContent></Card>
                 
                 {/* MAPEL & UMUM */}
-                <Card className="border-l-4 border-l-indigo-500"><CardHeader className="flex flex-row items-center justify-between pb-2 bg-indigo-50/30"><div><CardTitle className="text-lg flex items-center gap-2"><Database className="text-indigo-600 w-5 h-5"/> Mapel & Kegiatan</CardTitle></div><Button onClick={() => openAdd('activity')} variant="outline" size="sm" className="border-indigo-200 text-indigo-700 bg-white"><Plus className="w-4 h-4 mr-1" /> Tambah</Button></CardHeader><CardContent className="pt-4 max-h-[300px] overflow-y-auto">{activities.filter(a => a.category !== 'ekskul').map((act) => (<div key={act.id} className="flex justify-between items-center p-2 hover:bg-gray-50 border-b last:border-0"><div><div className="text-sm font-bold">{act.name}</div><div className="flex gap-1 mt-1"><span className="text-[10px] bg-gray-100 px-1 rounded uppercase">{act.category}</span></div></div><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit('activity', act)}><Pencil size={12}/></Button><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete('activities', act.id)}><Trash2 size={12} className="text-red-400"/></Button></div></div>))}</CardContent></Card>
+                <Card className="border-l-4 border-l-indigo-500"><CardHeader className="flex flex-row items-center justify-between pb-2 bg-indigo-50/30"><div><CardTitle className="text-lg flex items-center gap-2"><Database className="text-indigo-600 w-5 h-5"/> Mapel & Kegiatan</CardTitle></div><Button onClick={() => openAdd('activity')} variant="outline" size="sm" className="border-indigo-200 text-indigo-700 bg-white"><Plus className="w-4 h-4 mr-1" /> Tambah</Button></CardHeader><CardContent className="pt-4 max-h-[300px] overflow-y-auto">{activities.filter(a => a.category !== 'ekskul' && a.category !== 'sholat').map((act) => (<div key={act.id} className="flex justify-between items-center p-2 hover:bg-gray-50 border-b last:border-0"><div><div className="text-sm font-bold">{act.name}</div><div className="flex gap-1 mt-1"><span className="text-[10px] bg-gray-100 px-1 rounded uppercase">{act.category}</span></div></div><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit('activity', act)}><Pencil size={12}/></Button><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete('activities', act.id)}><Trash2 size={12} className="text-red-400"/></Button></div></div>))}</CardContent></Card>
 
                 {/* MASTER EKSKUL */}
                 <Card className="border-l-4 border-l-orange-500"><CardHeader className="flex flex-row items-center justify-between pb-2 bg-orange-50/30"><div><CardTitle className="text-lg flex items-center gap-2"><Medal className="text-orange-600 w-5 h-5"/> Master Ekskul</CardTitle></div><Button onClick={() => openAdd('activity', 'ekskul')} variant="outline" size="sm" className="border-orange-200 text-orange-700 bg-white"><Plus className="w-4 h-4 mr-1" /> Tambah</Button></CardHeader><CardContent className="pt-4 max-h-[300px] overflow-y-auto">{activities.filter(a => a.category === 'ekskul').map((act) => (<div key={act.id} className="flex justify-between items-center p-2 hover:bg-gray-50 border-b last:border-0"><div><div className="text-sm font-bold">{act.name}</div><div className="flex gap-1 mt-1"><span className={`text-[10px] px-1.5 rounded uppercase font-bold text-white ${act.tipe_ekskul === 'wajib' ? 'bg-red-400' : 'bg-blue-400'}`}>{act.tipe_ekskul}</span></div></div><div className="flex gap-1"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit('activity', act)}><Pencil size={12}/></Button><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDelete('activities', act.id)}><Trash2 size={12} className="text-red-400"/></Button></div></div>))}{activities.filter(a => a.category === 'ekskul').length === 0 && <p className="text-xs text-gray-400 text-center py-4">Belum ada data ekskul.</p>}</CardContent></Card>
@@ -451,7 +534,6 @@ const AcademicSettings = () => {
                                 <SelectContent>
                                     <SelectItem value="pelajaran">Pelajaran (KBM)</SelectItem>
                                     <SelectItem value="mengaji">Mengaji Kitab/Tahfidz</SelectItem>
-                                    {/* 🔥 OPSI SHOLAT JAMAAH DIHILANGKAN DARI MASTER */}
                                     <SelectItem value="ekskul">Ekstrakurikuler</SelectItem>
                                     <SelectItem value="umum">Umum Lainnya</SelectItem>
                                 </SelectContent>
@@ -485,7 +567,6 @@ const AcademicSettings = () => {
 
                 {dialogType === 'rombel' && (
                     <>
-                        {/* 🔥 PILIHAN KATEGORI ROMBEL (SEKOLAH/MENGAJI) DIHILANGKAN, SISTEM OTOMATIS TAHU DARI TOMBOL MANA YANG DIKLIK */}
                         <div className="space-y-2"><label className="text-sm font-medium">Kelas Tingkat</label><Select value={String(formData.kelas || '')} onValueChange={(v) => setFormData({...formData, kelas: v})}><SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger><SelectContent>{KELAS_LIST.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Nama / Kode Rombel</label><Input placeholder="Contoh: A, B, Ula, Wustho" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
                     </>
@@ -493,8 +574,7 @@ const AcademicSettings = () => {
 
                 {dialogType === 'schedule' && (
                     <>
-                        {/* 🔥 ISIAN KELAS & ROMBEL HANYA MUNCUL JIKA BUKAN SHOLAT DAN BUKAN EKSKUL */}
-                        {scheduleCategory !== 'sholat' && scheduleCategory !== 'ekskul' && (
+                        {scheduleCategory !== 'ekskul' && (
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-blue-700">Untuk Kelas</label>
@@ -518,17 +598,15 @@ const AcademicSettings = () => {
                             <Select value={String(formData.activity_id || '')} onValueChange={(v) => setFormData({...formData, activity_id: v})}>
                                 <SelectTrigger><SelectValue placeholder="Cari..." /></SelectTrigger>
                                 <SelectContent className="max-h-[200px]">
-                                    {activities.filter(a => scheduleCategory === 'school' ? a.category === 'pelajaran' : (scheduleCategory === 'mengaji' ? a.category === 'mengaji' : (scheduleCategory === 'sholat' ? a.category === 'sholat' : a.category === 'ekskul'))).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                                    {activities.filter(a => scheduleCategory === 'school' ? a.category === 'pelajaran' : (scheduleCategory === 'mengaji' ? a.category === 'mengaji' : a.category === 'ekskul')).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
                         
-                        {scheduleCategory !== 'sholat' && (
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium flex items-center gap-1 text-indigo-700"><User size={14} /> Guru Pengampu</label>
-                                <Select value={String(formData.teacher_id || 'none')} onValueChange={(v) => setFormData({...formData, teacher_id: v})}><SelectTrigger className="bg-indigo-50 border-indigo-200"><SelectValue placeholder="Pilih Guru..." /></SelectTrigger><SelectContent className="max-h-[200px]"><SelectItem value="none">Tanpa Guru / Mandiri</SelectItem>{teachers.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select>
-                            </div>
-                        )}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-1 text-indigo-700"><User size={14} /> Guru Pengampu</label>
+                            <Select value={String(formData.teacher_id || 'none')} onValueChange={(v) => setFormData({...formData, teacher_id: v})}><SelectTrigger className="bg-indigo-50 border-indigo-200"><SelectValue placeholder="Pilih Guru..." /></SelectTrigger><SelectContent className="max-h-[200px]"><SelectItem value="none">Tanpa Guru / Mandiri</SelectItem>{teachers.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select>
+                        </div>
 
                         <div className="space-y-2"><label className="text-sm font-medium">Bertempat di Ruangan</label><Select value={String(formData.location_id || '')} onValueChange={(v) => setFormData({...formData, location_id: v})}><SelectTrigger><SelectValue placeholder="Pilih Lokasi Belajar" /></SelectTrigger><SelectContent className="max-h-[200px]">{locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><label className="text-sm font-medium">Hari</label><Select value={String(formData.day_of_week)} onValueChange={(v) => setFormData({...formData, day_of_week: v})}><SelectTrigger><SelectValue placeholder="Pilih Hari" /></SelectTrigger><SelectContent>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent></Select></div>
