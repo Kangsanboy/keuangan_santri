@@ -14,6 +14,8 @@ import AttendanceMonitoring from "@/components/AttendanceMonitoring";
 import FinanceChart from "@/components/FinanceChart";
 import ClassManagement from "@/components/ClassManagement";
 import PiketManagement from "@/components/PiketManagement";
+import ViolationManagement from "@/components/ViolationManagement";
+import { Scale } from "lucide-react"; // Ambil icon timbangan/hukum
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,7 +45,7 @@ const Index = () => {
   const navigate = useNavigate();
   
   /* ================= STATE ================= */
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan" | "piket">("dashboard");
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "keuangan" | "santri" | "manajemen_kelas" | "pengguna" | "monitoring_warung" | "akademik" | "absensi" | "guru" | "kesehatan" | "piket" | "pelanggaran">("dashboard");
   const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768); 
   const [selectedKelasSantri, setSelectedKelasSantri] = useState<number | null>(null);
   const [detailSantriId, setDetailSantriId] = useState<string | null>(null);
@@ -406,6 +408,7 @@ const Index = () => {
            
            <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi</button>
            <button onClick={() => handleMenuClick("kesehatan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "kesehatan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Activity className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Kesehatan</button>
+           <button onClick={() => handleMenuClick("pelanggaran")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pelanggaran" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Scale className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Pelanggaran</button>
            
            {isSuperAdmin && (
               <button onClick={() => handleMenuClick("akademik")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "akademik" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><CalendarClock className="mr-3 h-5 w-5 flex-shrink-0" />Atur Jadwal & Kegiatan</button>
@@ -628,6 +631,7 @@ const Index = () => {
              {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
              {activeMenu === "absensi" && <AttendanceMonitoring initialTab={targetAbsensiTab} />}
              {activeMenu === "kesehatan" && <SickLeaveManagement />}
+             {activeMenu === "pelanggaran" && <ViolationManagement />}
              {activeMenu === "piket" && hasAdminAccess && <PiketManagement />}
           </div>
         </main>
