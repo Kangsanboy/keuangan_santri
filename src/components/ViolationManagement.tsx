@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Scale, AlertTriangle, ShieldAlert, CheckCircle2, User, FileText, 
-  Gavel, Plus, Trash2, CalendarDays, Search
+  Gavel, Plus, Trash2
 } from "lucide-react";
 
 /* ================= TYPES ================= */
@@ -227,30 +227,65 @@ const ViolationManagement = () => {
               </Card>
           </TabsContent>
 
-          {/* TAB MASTER UNDANG-UNDANG */}
+          {/* 🔥 TAB MASTER UNDANG-UNDANG (REVISI TAMPILAN PROFESIONAL) */}
           <TabsContent value="master" className="space-y-4">
-              <div className="flex justify-end mb-2"><Button onClick={() => setIsRuleOpen(true)} className="bg-gray-800 hover:bg-gray-900"><Plus className="w-4 h-4 mr-2"/> Tambah Undang-Undang</Button></div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex justify-end mb-2">
+                  <Button onClick={() => setIsRuleOpen(true)} className="bg-gray-800 hover:bg-gray-900 shadow-md">
+                      <Plus className="w-4 h-4 mr-2"/> Tambah Undang-Undang
+                  </Button>
+              </div>
+              
+              <div className="space-y-6">
                   {['Ringan', 'Sedang', 'Berat'].map(kat => {
                       const rulesCat = rules.filter(r => r.kategori === kat);
+                      const borderColor = kat === 'Ringan' ? 'border-t-yellow-400' : (kat === 'Sedang' ? 'border-t-orange-500' : 'border-t-red-600');
+                      const headerBg = kat === 'Ringan' ? 'bg-yellow-50/30' : (kat === 'Sedang' ? 'bg-orange-50/30' : 'bg-red-50/30');
+                      const titleColor = kat === 'Ringan' ? 'text-yellow-700' : (kat === 'Sedang' ? 'text-orange-700' : 'text-red-700');
+                      
                       return (
-                          <Card key={kat} className={`border-t-4 shadow-sm ${kat === 'Ringan' ? 'border-t-yellow-400' : (kat==='Sedang' ? 'border-t-orange-500' : 'border-t-red-600')}`}>
-                              <CardHeader className="pb-2 bg-gray-50/50"><CardTitle className="text-lg flex justify-between items-center">{kat} <Badge variant="secondary">{rulesCat.length}</Badge></CardTitle></CardHeader>
+                          <Card key={kat} className={`border-t-4 shadow-sm ${borderColor}`}>
+                              <CardHeader className={`pb-3 ${headerBg} border-b border-gray-100`}>
+                                  <CardTitle className={`text-xl font-black text-center uppercase tracking-widest ${titleColor} flex items-center justify-center gap-2`}>
+                                      {kat} <Badge variant="secondary" className="ml-2 bg-white shadow-sm">{rulesCat.length}</Badge>
+                                  </CardTitle>
+                              </CardHeader>
                               <CardContent className="p-0">
-                                  <div className="divide-y max-h-[500px] overflow-y-auto">
-                                      {rulesCat.length===0 && <div className="p-4 text-center text-xs text-gray-400">Kosong</div>}
-                                      {rulesCat.map(r => (
-                                          <div key={r.id} className="p-4 hover:bg-gray-50 group">
-                                              <div className="flex justify-between items-start gap-2">
-                                                  <div>
-                                                      <p className="font-bold text-gray-800 text-sm leading-tight mb-1">{r.pelanggaran}</p>
-                                                      <Badge variant="outline" className={`text-[9px] mb-2 ${r.gender_berlaku==='semua'?'bg-gray-100 text-gray-600':(r.gender_berlaku==='ikhwan'?'bg-blue-100 text-blue-700':'bg-pink-100 text-pink-700')}`}>Berlaku: {r.gender_berlaku.toUpperCase()}</Badge>
-                                                      <p className="text-xs text-gray-500 flex items-start gap-1 bg-gray-100 p-2 rounded border border-gray-200"><Gavel className="w-3 h-3 mt-0.5 shrink-0"/> {r.default_hukuman}</p>
-                                                  </div>
-                                                  <Button variant="ghost" size="icon" onClick={() => deleteRule(r.id)} className="h-6 w-6 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={14}/></Button>
-                                              </div>
-                                          </div>
-                                      ))}
+                                  <div className="overflow-x-auto">
+                                      <table className="w-full text-sm text-left">
+                                          <thead className="bg-gray-50 text-gray-500 uppercase text-xs border-b border-gray-200">
+                                              <tr>
+                                                  <th className="p-3 w-12 text-center font-bold">No</th>
+                                                  <th className="p-3 font-bold">Deskripsi Pelanggaran</th>
+                                                  <th className="p-3 font-bold">Hukuman / Tindakan Default</th>
+                                                  <th className="p-3 text-center font-bold">Berlaku Untuk</th>
+                                                  <th className="p-3 text-center w-24 font-bold">Aksi</th>
+                                              </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-gray-100 bg-white">
+                                              {rulesCat.length === 0 && (
+                                                  <tr>
+                                                      <td colSpan={5} className="p-6 text-center text-xs text-gray-400 italic">Belum ada data undang-undang kategori ini.</td>
+                                                  </tr>
+                                              )}
+                                              {rulesCat.map((r, idx) => (
+                                                  <tr key={r.id} className="hover:bg-gray-50 transition-colors group">
+                                                      <td className="p-3 text-center text-gray-400 font-medium">{idx + 1}</td>
+                                                      <td className="p-3 font-bold text-gray-800">{r.pelanggaran}</td>
+                                                      <td className="p-3 text-gray-600 text-xs italic"><Gavel className="w-3 h-3 inline mr-1 text-gray-400"/> {r.default_hukuman}</td>
+                                                      <td className="p-3 text-center">
+                                                          <Badge variant="outline" className={`text-[10px] uppercase font-bold tracking-wider ${r.gender_berlaku==='semua' ? 'bg-gray-100 text-gray-600' : (r.gender_berlaku==='ikhwan' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-pink-50 text-pink-700 border-pink-200')}`}>
+                                                              {r.gender_berlaku}
+                                                          </Badge>
+                                                      </td>
+                                                      <td className="p-3 text-center">
+                                                          <Button variant="ghost" size="icon" onClick={() => deleteRule(r.id)} className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 opacity-50 group-hover:opacity-100 transition-all">
+                                                              <Trash2 size={16}/>
+                                                          </Button>
+                                                      </td>
+                                                  </tr>
+                                              ))}
+                                          </tbody>
+                                      </table>
                                   </div>
                               </CardContent>
                           </Card>
