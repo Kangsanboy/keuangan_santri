@@ -10,8 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   DoorOpen, LogOut, LogIn, Clock, ShieldCheck, MapPin, 
-  FileText, History, Plus, AlertTriangle, CheckCircle2, User, CreditCard, CalendarDays
+  FileText, History, Plus, AlertTriangle, CheckCircle2, User, CreditCard, CalendarDays,
+  Download, FileSpreadsheet // 🔥 Import Icon Baru
 } from "lucide-react";
+import * as XLSX from "xlsx"; // 🔥 Import Library Excel
 
 interface Santri { id: string; nama_lengkap: string; kelas: number; gender: string; nisn?: string; rfid_card_id?: string; rombel?: any; }
 interface Permit {
@@ -44,6 +46,11 @@ const PermitManagement = () => {
       tanggal_kembali: new Date().toISOString().split('T')[0],
       waktu_mulai: '08:00', waktu_selesai: '12:00'
   });
+
+  // 🔥 STATE UNTUK EXCEL
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [exportKelas, setExportKelas] = useState("all");
+  const [exportGender, setExportGender] = useState("all");
 
   const getRombel = (rombelData: any) => {
       if (!rombelData) return 'A'; 
@@ -182,6 +189,51 @@ const PermitManagement = () => {
       } catch (err: any) { toast({title: "Gagal Menyimpan", description: err.message, variant: "destructive"}); }
   };
 
+  // 🔥 FUNGSI DOWNLOAD EXCEL
+  const handleExportPerpulangan = () => {
+      let filteredData = historyPerpulangan;
+
+      // Filter Kelas
+      if (exportKelas !== 'all') {
+          filteredData = filteredData.filter(p => String(p.santri?.kelas) === exportKelas);
+      }
+      
+      // Filter Gender
+      if (exportGender !== 'all') {
+          filteredData = filteredData.filter(p => {
+              const sGender = p.santri?.gender?.toLowerCase() || '';
+              if (exportGender === 'ikhwan') return sGender === 'ikhwan' || sGender === 'l';
+              if (exportGender === 'akhwat') return sGender === 'akhwat' || sGender === 'p';
+              return true;
+          });
+      }
+
+      if (filteredData.length === 0) {
+          return toast({ title: "Data Kosong", description: "Tidak ada riwayat untuk filter tersebut.", variant: "destructive" });
+      }
+
+      const rows = filteredData.map((p, i) => ({
+          "No": i + 1,
+          "Nama Santri": p.santri?.nama_lengkap || "-",
+          "Kelas": `${p.santri?.kelas} - ${getRombel(p.santri?.rombel)}`,
+          "Jenis Kelamin": p.santri?.gender === 'P' || p.santri?.gender === 'akhwat' ? 'Akhwat' : 'Ikhwan',
+          "Tanggal Keluar": new Date(p.tanggal_izin).toLocaleDateString('id-ID'),
+          "Batas Kembali": p.tanggal_kembali ? new Date(p.tanggal_kembali).toLocaleDateString('id-ID') : '-',
+          "Waktu Aktual Keluar": p.waktu_keluar_aktual ? new Date(p.waktu_keluar_aktual).toLocaleString('id-ID') : '-',
+          "Waktu Aktual Kembali": p.waktu_kembali_aktual ? new Date(p.waktu_kembali_aktual).toLocaleString('id-ID') : '-',
+          "Tujuan / Alasan": p.alasan,
+          "Status Kepulangan": p.status
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Riwayat Pulang");
+
+      const fileName = `Rekap_Pulang_${exportKelas === 'all' ? 'SemuaKelas' : 'Kelas'+exportKelas}_${exportGender === 'all' ? 'Semua' : exportGender}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      setIsExportOpen(false); // Tutup dialog setelah berhasil download
+  };
+
   const getStatusColor = (status: string) => {
       if(status === 'Menunggu Keluar') return 'bg-yellow-100 text-yellow-700 border-yellow-300';
       if(status === 'Sedang Keluar') return 'bg-blue-100 text-blue-700 border-blue-300';
@@ -217,7 +269,6 @@ const PermitManagement = () => {
       </div>
   );
 
-  // Variabel untuk misahin data tab
   const activePerizinan = permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
   const historyPerizinan = permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
   
@@ -248,7 +299,6 @@ const PermitManagement = () => {
                   <CardContent className="p-4">{renderTable(activePerizinan)}</CardContent>
               </Card>
 
-              {/* 🔥 KARTU RIWAYAT PERIZINAN DIMASUKKAN KEMBALI */}
               <Card className="border-t-4 border-t-gray-500 shadow-sm">
                   <CardHeader className="bg-gray-50/50 pb-3 border-b"><CardTitle className="text-gray-800 flex items-center gap-2 text-sm"><History className="w-5 h-5"/> Riwayat Selesai & Terlambat <Badge className="bg-gray-600">{historyPerizinan.length}</Badge></CardTitle></CardHeader>
                   <CardContent className="p-4">{renderTable(historyPerizinan)}</CardContent>
@@ -263,14 +313,24 @@ const PermitManagement = () => {
                   <CardContent className="p-4">{renderTable(activePerpulangan)}</CardContent>
               </Card>
 
-              {/* 🔥 KARTU RIWAYAT PERPULANGAN DIMASUKKAN KEMBALI */}
               <Card className="border-t-4 border-t-gray-500 shadow-sm">
-                  <CardHeader className="bg-gray-50/50 pb-3 border-b"><CardTitle className="text-gray-800 flex items-center gap-2 text-sm"><History className="w-5 h-5"/> Riwayat Selesai & Terlambat <Badge className="bg-gray-600">{historyPerpulangan.length}</Badge></CardTitle></CardHeader>
+                  {/* 🔥 TOMBOL EXPORT DITAMBAHKAN DI SINI */}
+                  <CardHeader className="bg-gray-50/50 pb-3 border-b flex flex-row items-center justify-between">
+                      <CardTitle className="text-gray-800 flex items-center gap-2 text-sm">
+                          <History className="w-5 h-5"/> Riwayat Selesai & Terlambat <Badge className="bg-gray-600">{historyPerpulangan.length}</Badge>
+                      </CardTitle>
+                      {historyPerpulangan.length > 0 && (
+                          <Button variant="outline" size="sm" onClick={() => setIsExportOpen(true)} className="h-8 text-xs border-green-500 text-green-700 hover:bg-green-50">
+                              <Download className="w-3 h-3 mr-1" /> Export
+                          </Button>
+                      )}
+                  </CardHeader>
                   <CardContent className="p-4">{renderTable(historyPerpulangan)}</CardContent>
               </Card>
           </TabsContent>
       </Tabs>
 
+      {/* DIALOG FORM SURAT */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
           <DialogContent className={`max-w-xl border-t-4 ${activeTab === 'perizinan' ? 'border-t-blue-600' : 'border-t-indigo-600'}`}>
               <DialogHeader><DialogTitle className={`flex items-center gap-2 ${activeTab === 'perizinan' ? 'text-blue-800' : 'text-indigo-800'}`}><FileText/> {activeTab === 'perizinan' ? 'Input Izin Keluar' : 'Input Pulang Kampung'}</DialogTitle></DialogHeader>
@@ -297,6 +357,51 @@ const PermitManagement = () => {
               <DialogFooter><Button variant="ghost" onClick={()=>setIsFormOpen(false)}>Batal</Button><Button onClick={handleSubmitForm} className={activeTab === 'perizinan' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}>Terbitkan Tiket</Button></DialogFooter>
           </DialogContent>
       </Dialog>
+
+      {/* 🔥 DIALOG BARU KHUSUS UNTUK EXPORT EXCEL PERPULANGAN */}
+      <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
+          <DialogContent className="max-w-sm border-t-4 border-t-green-500">
+              <DialogHeader>
+                  <DialogTitle className="flex items-center justify-center gap-2 text-green-800 font-bold text-lg">
+                      <FileSpreadsheet className="w-5 h-5"/> EXPORT RIWAYAT PULANG
+                  </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                  <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase text-gray-500">Filter Kelas</label>
+                      <Select value={exportKelas} onValueChange={setExportKelas}>
+                          <SelectTrigger className="h-10">
+                              <SelectValue placeholder="Pilih Kelas" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="all">Semua Kelas</SelectItem>
+                              {CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}
+                          </SelectContent>
+                      </Select>
+                  </div>
+                  <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase text-gray-500">Filter Gender</label>
+                      <Select value={exportGender} onValueChange={setExportGender}>
+                          <SelectTrigger className="h-10">
+                              <SelectValue placeholder="Pilih Gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="all">Semua Gender</SelectItem>
+                              <SelectItem value="ikhwan">Ikhwan (Laki-laki)</SelectItem>
+                              <SelectItem value="akhwat">Akhwat (Perempuan)</SelectItem>
+                          </SelectContent>
+                      </Select>
+                  </div>
+              </div>
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                  <Button variant="ghost" onClick={() => setIsExportOpen(false)}>Batal</Button>
+                  <Button onClick={handleExportPerpulangan} className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto shadow-md">
+                      <Download className="w-4 h-4 mr-2" /> Download Rekapan
+                  </Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
+
     </div>
   );
 };
