@@ -56,11 +56,13 @@ const PermitManagement = () => {
   const fetchData = async () => {
       setLoading(true);
       try {
-          const { data: pData } = await supabase.from('student_permits').select(`
+          const { data: pData, error: pErr } = await supabase.from('student_permits').select(`
               *,
               santri:santri_id(id, nama_lengkap, kelas, gender, nisn, rfid_card_id, rombel),
               teacher:penanggung_jawab_id(full_name)
           `).order('created_at', { ascending: false });
+          
+          if (pErr) throw pErr;
           if (pData) setPermits(pData as any);
 
           const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, gender, nisn, rfid_card_id, rombel').eq('status', 'aktif');
@@ -69,7 +71,11 @@ const PermitManagement = () => {
           const { data: tData } = await supabase.from('teachers').select('id, full_name').eq('is_active', true);
           if (tData) setTeachers(tData);
 
-      } catch (err: any) { console.error(err); } finally { setLoading(false); }
+      } catch (err: any) { 
+          toast({title: "Gagal Menarik Data", description: err.message, variant: "destructive"});
+      } finally { 
+          setLoading(false); 
+      }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -88,7 +94,7 @@ const PermitManagement = () => {
       if (!tapInput) return;
 
       const code = tapInput.trim();
-      setTapInput(""); // Reset input biar siap nerima scan berikutnya
+      setTapInput(""); 
 
       // 1. Cari Santri
       const santri = santris.find(s => s.rfid_card_id === code || s.nisn === code || s.id === code);
@@ -97,7 +103,7 @@ const PermitManagement = () => {
           return toast({title: "Akses Ditolak", description: "Kartu / QR tidak terdaftar di sistem.", variant: "destructive"});
       }
 
-      // 2. Cari Tiket Izin Aktif (Prioritaskan yang Sedang Keluar dulu, baru yang Menunggu)
+      // 2. Cari Tiket Izin Aktif 
       let activePermit = permits.find(p => p.santri_id === santri.id && p.status === 'Sedang Keluar');
       if (!activePermit) {
           activePermit = permits.find(p => p.santri_id === santri.id && p.status === 'Menunggu Keluar');
@@ -113,7 +119,6 @@ const PermitManagement = () => {
           const nowIso = new Date().toISOString();
           
           if (activePermit.status === 'Menunggu Keluar') {
-              // TAPPING PERTAMA (KELUAR)
               const { error } = await supabase.from('student_permits')
                   .update({ status: 'Sedang Keluar', waktu_keluar_aktual: nowIso })
                   .eq('id', activePermit.id);
@@ -123,12 +128,12 @@ const PermitManagement = () => {
               toast({title: "Berhasil Keluar", description: `Hati-hati di jalan, ${santri.nama_lengkap}.`, className: "bg-blue-600 text-white font-bold"});
               
           } else if (activePermit.status === 'Sedang Keluar') {
-              // TAPPING KEDUA (KEMBALI)
-              const limitTimeStr = `${activePermit.tanggal_izin}T${activePermit.waktu_selesai}:00`;
+              // 🔥 Perbaikan Format Waktu 
+              const cleanTime = activePermit.waktu_selesai.length === 5 ? `${activePermit.waktu_selesai}:00` : activePermit.waktu_selesai;
+              const limitTimeStr = `${activePermit.tanggal_izin}T${cleanTime}`;
               const limitTime = new Date(limitTimeStr).getTime();
               const actualTime = new Date(nowIso).getTime();
               
-              // Cek apakah telat
               const isLate = actualTime > limitTime;
               const newStatus = isLate ? 'Terlambat' : 'Sudah Kembali';
 
@@ -157,15 +162,27 @@ const PermitManagement = () => {
           if (!formData.santri_id || !formData.alasan || !formData.penanggung_jawab_id) {
               return toast({title: "Lengkapi Data", variant: "destructive"});
           }
-          const { error } = await supabase.from('student_permits').insert([formData]);
+          
+          // 🔥 Konversi ke Integer biar Supabase nggak nolak
+          const payload = {
+              ...formData,
+              penanggung_jawab_id: parseInt(formData.penanggung_jawab_id)
+          };
+
+          const { error } = await supabase.from('student_permits').insert([payload]);
           if (error) throw error;
           
           toast({title: "Surat Diterbitkan", description: "Santri sekarang bisa tapping di resepsionis.", className: "bg-green-600 text-white"});
           setIsFormOpen(false); 
-          setFormData({...formData, santri_id: '', alasan: ''}); setFormKelas(""); setFormGender("");
+          setFormData({
+              kategori: 'Perizinan', santri_id: '', alasan: '',
+              tanggal_izin: new Date().toISOString().split('T')[0],
+              waktu_mulai: '08:00', waktu_selesai: '12:00', penanggung_jawab_id: ''
+          }); 
+          setFormKelas(""); setFormGender("");
           fetchData();
       } catch (err: any) {
-          toast({title: "Gagal", description: err.message, variant: "destructive"});
+          toast({title: "Gagal Menyimpan", description: err.message, variant: "destructive"});
       }
   };
 
@@ -192,7 +209,7 @@ const PermitManagement = () => {
                               <p className="text-[10px] text-gray-500 mt-0.5">Kls {p.santri?.kelas}-{getRombel(p.santri?.rombel)} • {p.teacher?.full_name}</p>
                           </td>
                           <td className="p-3">
-                              <p className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded inline-block">{p.waktu_mulai.slice(0,5)} - {p.waktu_selesai.slice(0,5)}</p>
+                              <p className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded inline-block">{p.waktu_mulai?.slice(0,5)} - {p.waktu_selesai?.slice(0,5)}</p>
                               <p className="text-[10px] text-gray-400 mt-1">{new Date(p.tanggal_izin).toLocaleDateString('id-ID')}</p>
                           </td>
                           <td className="p-3 text-xs font-mono">
