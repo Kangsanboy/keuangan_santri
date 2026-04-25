@@ -287,13 +287,21 @@ const Index = () => {
   const handleSelectSantri = (id: string) => { navigateTo("santri", id); }
   const handleBackFromDetail = () => { window.history.back(); }
 
-  /* ================= LOGIC GRAFIK DASHBOARD ================= */
+  // 🔥 PERBAIKAN LOGIKA PENGELOMPOKKAN KEGIATAN DI DASHBOARD
   const getActivityType = (log: any) => {
       const cat = log.activity?.category?.toLowerCase() || '';
       const name = log.activity?.name?.toLowerCase() || '';
+      
+      // Prioritas 1: Baca langsung dari kategori di database dulu
       if (cat === 'pelajaran') return 'kbm';
-      if (cat === 'sholat' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
-      if (cat === 'mengaji' || name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
+      if (cat === 'mengaji') return 'mengaji';
+      if (cat === 'sholat') return 'sholat';
+      if (cat === 'ekskul') return 'ekskul';
+      
+      // Prioritas 2: Cadangan tebak-tebakan dari nama (kalau kategorinya kosong/umum)
+      if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
+      if (name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
+      
       return 'ekskul'; 
   };
 
