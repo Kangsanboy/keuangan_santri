@@ -72,16 +72,23 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [members, setMembers] = useState<ActivityMember[]>([]);
   
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
-  
-  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
-  const [filterKelas, setFilterKelas] = useState("all");
   const [logFilterKelas, setLogFilterKelas] = useState("all");
+  
+  // 🔥 FORM MANUAL SANTRI BARU (DENGAN KATEGORI, KEGIATAN & ROMBEL)
+  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formCategory, setFormCategory] = useState("");
+  const [formActivityId, setFormActivityId] = useState("");
   const [formKelas, setFormKelas] = useState("");
+  const [formRombel, setFormRombel] = useState("");
   const [formGender, setFormGender] = useState("");
   const [formSantriId, setFormSantriId] = useState("");
-  const [formTeacherId, setFormTeacherId] = useState("");
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
+
+  // 🔥 FORM MANUAL GURU
+  const [formGuruCategory, setFormGuruCategory] = useState("");
+  const [formGuruActivityId, setFormGuruActivityId] = useState("");
+  const [formTeacherId, setFormTeacherId] = useState("");
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment"); 
@@ -110,6 +117,16 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       if (typeof rombelData === 'string') return rombelData;
       if (typeof rombelData === 'object' && rombelData.nama) return rombelData.nama;
       return 'A';
+  };
+
+  const getUniqueRombels = (kelas: string) => {
+      if (!kelas) return [];
+      const rSet = new Set<string>();
+      santriList.filter(s => String(s.kelas) === kelas).forEach(s => {
+          rSet.add(getRombel(s.rombel));
+          if (s.rombel_mengaji) rSet.add(getRombel(s.rombel_mengaji));
+      });
+      return Array.from(rSet).sort();
   };
 
   useEffect(() => {
@@ -311,18 +328,15 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       return logDateLocal === dateFilter;
   });
 
-  // 🔥 PERBAIKAN LOGIKA PENGELOMPOKKAN KEGIATAN
   const getActivityType = (log: AttendanceLog) => {
       const cat = log.activity?.category?.toLowerCase() || '';
       const name = log.activity?.name?.toLowerCase() || '';
       
-      // Prioritas 1: Baca langsung dari kategori di database
       if (cat === 'pelajaran') return 'kbm';
       if (cat === 'mengaji') return 'mengaji';
       if (cat === 'sholat') return 'sholat';
       if (cat === 'ekskul') return 'ekskul';
       
-      // Prioritas 2: Cadangan kalau kategorinya umum / kosong (Biar nggak salah tebak)
       if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
       if (name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
       
@@ -353,6 +367,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       ].filter(x => x.value > 0);
   };
 
+  // 🔥 FUNGSI SUBMIT MANUAL YANG SUDAH DIPERBARUI DENGAN ACTIVITY_ID
   const handleSubmitPermission = async (type: 'santri' | 'guru') => {
       try {
           const selectedDateTime = new Date(formDate);
@@ -363,22 +378,26 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
           const payload: any = { 
               status: formStatus, 
               scan_time: isoString, 
-              activity_id: null, location_id: null, keterangan: formKet 
+              created_at: isoString,
+              keterangan: formKet || 'Manual Input'
           };
           
           if (type === 'santri') {
               if (!formSantriId) return toast({title: "Pilih Santri", variant: "destructive"});
               payload.santri_id = formSantriId;
+              payload.activity_id = formActivityId ? parseInt(formActivityId) : null;
           } else {
               if (!formTeacherId) return toast({title: "Pilih Guru", variant: "destructive"});
               payload.teacher_id = parseInt(formTeacherId);
+              payload.activity_id = formGuruActivityId ? parseInt(formGuruActivityId) : null;
           }
 
           const { error } = await supabase.from('attendance_logs').insert([payload]);
           if (error) throw error;
           
-          toast({ title: "Berhasil", description: "Data izin/sakit tersimpan.", className: "bg-green-600 text-white" });
-          fetchData(); setFormSantriId(""); setFormTeacherId(""); setFormKet("");
+          toast({ title: "Berhasil", description: "Data absensi manual tersimpan.", className: "bg-green-600 text-white" });
+          fetchData(); 
+          setFormSantriId(""); setFormTeacherId(""); setFormKet("");
       } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
@@ -1014,6 +1033,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
+      {/* DIALOG SCANNER QR MENGAJI */}
       <Dialog open={isScannerOpen} onOpenChange={(open) => {
           setIsScannerOpen(open);
           if (!open && lastScanned.current) lastScanned.current = null;
@@ -1026,6 +1046,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
               </DialogHeader>
               <div className="py-2 relative">
                   
+                  {/* Container Kamera */}
                   <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-gray-900 min-h-[250px]"></div>
                   
                   <Button
@@ -1093,15 +1114,49 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                 </Tabs>
             </div>
 
+            {/* 🔥 FORM MANUAL SANTRI YANG SUDAH DIPERBARUI */}
             <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
                 <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Manual Sakit / Izin / Pulang (Santri)</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formGender}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} ({s.kelas}-{getRombel(s.rombel)})</SelectItem>))}</SelectContent></Select></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem><SelectItem value="Pulang" className="text-purple-600 font-bold">Pulang</SelectItem></SelectContent></Select></div>
-                    <div className="md:col-span-6 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('santri')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                <CardContent className="space-y-3">
+                    
+                    {/* Baris 1: Waktu & Kegiatan */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase">Kategori Kegiatan</label>
+                            <Select value={formCategory} onValueChange={(v) => { setFormCategory(v); setFormActivityId(""); }}>
+                                <SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Kategori..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="pelajaran">KBM Sekolah</SelectItem>
+                                    <SelectItem value="mengaji">Mengaji</SelectItem>
+                                    <SelectItem value="sholat">Sholat Jamaah</SelectItem>
+                                    <SelectItem value="ekskul">Ekstrakurikuler</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase">Detail Kegiatan</label>
+                            <Select value={formActivityId} onValueChange={setFormActivityId} disabled={!formCategory}>
+                                <SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Kegiatan..." /></SelectTrigger>
+                                <SelectContent className="max-h-[200px]">{activities.filter(a => a.category === formCategory).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {/* Baris 2: Filter Kelas */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kelas</label><Select value={formKelas} onValueChange={(v) => { setFormKelas(v); setFormRombel(""); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Kelas..." /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Rombel</label><Select value={formRombel} onValueChange={(v) => { setFormRombel(v); setFormSantriId(""); }} disabled={!formKelas}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Rombel..." /></SelectTrigger><SelectContent>{getUniqueRombels(formKelas).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Gender</label><Select value={formGender} onValueChange={(v) => { setFormGender(v); setFormSantriId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Gender..." /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
+                    </div>
+
+                    {/* Baris 3: Eksekusi */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="md:col-span-4 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Santri</label><Select value={formSantriId} onValueChange={setFormSantriId} disabled={!formKelas || !formRombel || !formGender}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Cari Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{santriList.filter(s => String(s.kelas) === formKelas && (getRombel(s.rombel) === formRombel || getRombel(s.rombel_mengaji) === formRombel) && (s.gender === formGender || (formGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>))}</SelectContent></Select></div>
+                        <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-bold uppercase">Status Kehadiran</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem><SelectItem value="Pulang" className="text-purple-600 font-bold">Pulang</SelectItem></SelectContent></Select></div>
+                        <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-bold uppercase">Keterangan Opsional</label><Input placeholder="Cth: Izin berobat..." value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
+                        <div className="md:col-span-2"><Button onClick={() => handleSubmitPermission('santri')} className="bg-purple-600 hover:bg-purple-700 text-white w-full shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -1162,13 +1217,21 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                     </Tabs>
                 </div>
 
+                {/* 🔥 FORM MANUAL GURU YANG SUDAH DIPERBARUI */}
                 <Card className="border-l-4 border-l-purple-500 bg-purple-50/30 shadow-sm">
                     <CardHeader className="pb-2"><CardTitle className="text-sm text-purple-800 uppercase font-bold">Input Manual Sakit / Izin / Pulang (Guru)</CardTitle></CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
-                        <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Guru</label><Select value={formTeacherId} onValueChange={setFormTeacherId}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{teacherList.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select></div>
-                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Status</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem><SelectItem value="Pulang" className="text-purple-600 font-bold">Pulang</SelectItem></SelectContent></Select></div>
-                        <div className="md:col-span-5 flex gap-2 mt-2"><Input placeholder="Keterangan (Opsional)" value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 text-sm w-full border-purple-200" /><Button onClick={() => handleSubmitPermission('guru')} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white w-32 shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                    <CardContent className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
+                            <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Kategori Kegiatan</label><Select value={formGuruCategory} onValueChange={(v) => { setFormGuruCategory(v); setFormGuruActivityId(""); }}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Semua Kategori (Opsional)" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kategori</SelectItem><SelectItem value="pelajaran">KBM Sekolah</SelectItem><SelectItem value="mengaji">Mengaji</SelectItem><SelectItem value="sholat">Sholat Jamaah</SelectItem><SelectItem value="ekskul">Ekstrakurikuler</SelectItem></SelectContent></Select></div>
+                            <div className="space-y-1"><label className="text-[10px] font-bold uppercase">Detail Kegiatan</label><Select value={formGuruActivityId} onValueChange={setFormGuruActivityId} disabled={!formGuruCategory || formGuruCategory === 'all'}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Kegiatan..." /></SelectTrigger><SelectContent className="max-h-[200px]">{activities.filter(a => formGuruCategory === 'all' || a.category === formGuruCategory).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent></Select></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            <div className="md:col-span-4 space-y-1"><label className="text-[10px] font-bold uppercase">Nama Guru</label><Select value={formTeacherId} onValueChange={setFormTeacherId}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[200px]">{teacherList.map(t => (<SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>))}</SelectContent></Select></div>
+                            <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-bold uppercase">Status Kehadiran</label><Select value={formStatus} onValueChange={setFormStatus}><SelectTrigger className="bg-white h-9 border-purple-200"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Izin">Izin</SelectItem><SelectItem value="Sakit">Sakit</SelectItem><SelectItem value="Pulang" className="text-purple-600 font-bold">Pulang</SelectItem></SelectContent></Select></div>
+                            <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-bold uppercase">Keterangan Opsional</label><Input placeholder="Cth: Sakit tipes..." value={formKet} onChange={e => setFormKet(e.target.value)} className="bg-white h-9 border-purple-200" /></div>
+                            <div className="md:col-span-2"><Button onClick={() => handleSubmitPermission('guru')} className="bg-purple-600 hover:bg-purple-700 text-white w-full shadow-md"><Save className="w-4 h-4 mr-2"/> Simpan</Button></div>
+                        </div>
                     </CardContent>
                 </Card>
 
