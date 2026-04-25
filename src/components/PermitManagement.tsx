@@ -217,6 +217,13 @@ const PermitManagement = () => {
       </div>
   );
 
+  // Variabel untuk misahin data tab
+  const activePerizinan = permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
+  const historyPerizinan = permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
+  
+  const activePerpulangan = permits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
+  const historyPerpulangan = permits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 max-w-6xl mx-auto">
       <div className="bg-gradient-to-r from-blue-800 to-indigo-700 rounded-2xl p-6 shadow-lg text-white flex flex-col md:flex-row justify-between items-center gap-6">
@@ -235,14 +242,32 @@ const PermitManagement = () => {
 
           <TabsContent value="perizinan" className="space-y-6">
               <div className="flex justify-end"><Button onClick={() => openForm("perizinan")} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md"><Plus className="w-4 h-4 mr-2"/> Buat Surat Perizinan</Button></div>
-              <Card className="border-t-4 border-t-yellow-500 shadow-sm"><CardHeader className="bg-yellow-50/50 pb-3 border-b"><CardTitle className="text-yellow-800 flex items-center gap-2 text-sm"><DoorOpen className="w-5 h-5"/> Sedang Berlangsung <Badge className="bg-yellow-600">{permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar')).length}</Badge></CardTitle></CardHeader>
-              <CardContent className="p-4">{renderTable(permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar')))}</CardContent></Card>
+              
+              <Card className="border-t-4 border-t-yellow-500 shadow-sm">
+                  <CardHeader className="bg-yellow-50/50 pb-3 border-b"><CardTitle className="text-yellow-800 flex items-center gap-2 text-sm"><DoorOpen className="w-5 h-5"/> Sedang Berlangsung <Badge className="bg-yellow-600">{activePerizinan.length}</Badge></CardTitle></CardHeader>
+                  <CardContent className="p-4">{renderTable(activePerizinan)}</CardContent>
+              </Card>
+
+              {/* 🔥 KARTU RIWAYAT PERIZINAN DIMASUKKAN KEMBALI */}
+              <Card className="border-t-4 border-t-gray-500 shadow-sm">
+                  <CardHeader className="bg-gray-50/50 pb-3 border-b"><CardTitle className="text-gray-800 flex items-center gap-2 text-sm"><History className="w-5 h-5"/> Riwayat Selesai & Terlambat <Badge className="bg-gray-600">{historyPerizinan.length}</Badge></CardTitle></CardHeader>
+                  <CardContent className="p-4">{renderTable(historyPerizinan)}</CardContent>
+              </Card>
           </TabsContent>
 
           <TabsContent value="perpulangan" className="space-y-6">
               <div className="flex justify-end"><Button onClick={() => openForm("perpulangan")} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"><Plus className="w-4 h-4 mr-2"/> Buat Surat Perpulangan</Button></div>
-              <Card className="border-t-4 border-t-orange-500 shadow-sm"><CardHeader className="bg-orange-50/50 pb-3 border-b"><CardTitle className="text-orange-800 flex items-center gap-2 text-sm"><MapPin className="w-5 h-5"/> Sedang Pulang Kampung <Badge className="bg-orange-600">{permits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar')).length}</Badge></CardTitle></CardHeader>
-              <CardContent className="p-4">{renderTable(permits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar')))}</CardContent></Card>
+              
+              <Card className="border-t-4 border-t-orange-500 shadow-sm">
+                  <CardHeader className="bg-orange-50/50 pb-3 border-b"><CardTitle className="text-orange-800 flex items-center gap-2 text-sm"><MapPin className="w-5 h-5"/> Sedang Pulang Kampung <Badge className="bg-orange-600">{activePerpulangan.length}</Badge></CardTitle></CardHeader>
+                  <CardContent className="p-4">{renderTable(activePerpulangan)}</CardContent>
+              </Card>
+
+              {/* 🔥 KARTU RIWAYAT PERPULANGAN DIMASUKKAN KEMBALI */}
+              <Card className="border-t-4 border-t-gray-500 shadow-sm">
+                  <CardHeader className="bg-gray-50/50 pb-3 border-b"><CardTitle className="text-gray-800 flex items-center gap-2 text-sm"><History className="w-5 h-5"/> Riwayat Selesai & Terlambat <Badge className="bg-gray-600">{historyPerpulangan.length}</Badge></CardTitle></CardHeader>
+                  <CardContent className="p-4">{renderTable(historyPerpulangan)}</CardContent>
+              </Card>
           </TabsContent>
       </Tabs>
 
