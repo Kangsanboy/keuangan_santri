@@ -8,17 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode"; // 🔥 GANTI JADI CORE ENGINE BIAR BISA CUSTOM UI
 import { 
   Calendar, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, QrCode
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, QrCode, RefreshCcw
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
 /* ================= TYPES ================= */
 interface Santri { 
   id: string; nama_lengkap: string; kelas: number; gender: string; 
-  nisn?: string; rfid_card_id?: string; // 🔥 KEMBALI PAKAI NISN
+  nisn?: string; rfid_card_id?: string; 
   rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any;
 }
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
@@ -28,7 +28,7 @@ interface Schedule { id: number; activity_id: number; teacher_id?: number; kelas
 interface AttendanceLog {
   id: string; scan_time: string; status: string; created_at: string;
   santri_id?: string; teacher_id?: number; activity_id?: number; location_id?: number;
-  santri?: { nama_lengkap: string; kelas: number; nisn?: string; gender: string; rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any; }; // 🔥 NISN
+  santri?: { nama_lengkap: string; kelas: number; nisn?: string; gender: string; rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any; }; 
   teacher?: { full_name: string; }; activity?: { name: string; category: string; tipe_ekskul?: string; }; location?: { name: string }; keterangan?: string;
 }
 
@@ -83,7 +83,10 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
 
+  // 🔥 STATE KAMERA BARU
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment"); // environment = belakang, user = depan
+  
   const lastScanned = useRef<{text: string, time: number} | null>(null);
   const scanDeps = useRef({ santriList, selectedMengajiClass, selectedMengajiSubject });
 
@@ -116,7 +119,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
     fetchRole();
   }, []);
 
-  /* ================= FETCH DATA (FIXED PAKE NISN) ================= */
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -124,7 +126,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
-      // 🔥 PASTIKAN DISINI PAKE 'nisn'
       const { data: logData, error: logErr } = await supabase.from('attendance_logs').select(`
           id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id, 
           santri:santri_id(nama_lengkap, kelas, nisn, gender, rombel, kelas_mengaji, rombel_mengaji), 
@@ -140,7 +141,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       if (schErr) throw schErr;
       if (schData) setSchedules(schData as any[]);
 
-      // 🔥 PASTIKAN DISINI JUGA PAKE 'nisn'
       const { data: sData, error: sErr } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nisn, rfid_card_id, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
       if (sErr) throw sErr;
       if (sData) setSantriList(sData as any);
@@ -175,87 +175,111 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
      setSelectedGuruEkskul(null);
   }, [guruTab]);
 
-  // 🔥 EFEK UNTUK JALANIN KAMERA SCANNER QR
+  // 🔥 CORE ENGINE SCANNER QR CODE DENGAN FITUR FLIP CAMERA
   useEffect(() => {
-    let scanner: Html5QrcodeScanner | null = null;
+    let isMounted = true;
+    let html5QrCode: Html5Qrcode | null = null;
 
     if (isScannerOpen) {
-        const timer = setTimeout(() => {
-            scanner = new Html5QrcodeScanner("reader", { fps: 5, qrbox: { width: 250, height: 250 } }, false);
-            
-            scanner.render(
-                async (decodedText) => {
-                    const nowTime = Date.now();
-                    if (lastScanned.current && lastScanned.current.text === decodedText && (nowTime - lastScanned.current.time) < 3000) {
-                        return; 
-                    }
-                    lastScanned.current = { text: decodedText, time: nowTime };
+        const startCamera = async () => {
+            // Kasih jeda dikit biar div modal beneran muncul di DOM
+            await new Promise(res => setTimeout(res, 200));
+            if (!isMounted) return;
 
-                    const { santriList: sList, selectedMengajiClass: mClass, selectedMengajiSubject: mSubj } = scanDeps.current;
-                    if (!mClass || !mSubj) return;
+            html5QrCode = new Html5Qrcode("reader");
 
-                    // Cocokkin Identitas Santri (Pakai NISN sekarang)
-                    const santri = sList.find(s => s.id === decodedText || s.nisn === decodedText || s.rfid_card_id === decodedText);
+            try {
+                // Langsung nembak start dengan facingMode (Otomatis minta izin ke browser)
+                await html5QrCode.start(
+                    { facingMode: facingMode }, 
+                    { fps: 5, qrbox: { width: 250, height: 250 } },
+                    async (decodedText) => {
+                        const nowTime = Date.now();
+                        if (lastScanned.current && lastScanned.current.text === decodedText && (nowTime - lastScanned.current.time) < 3000) {
+                            return; 
+                        }
+                        lastScanned.current = { text: decodedText, time: nowTime };
 
-                    if (!santri) {
-                        toast({title: "Tidak Dikenal", description: "QR Code ini tidak terdaftar di sistem.", variant: "destructive"});
-                        return;
-                    }
+                        const { santriList: sList, selectedMengajiClass: mClass, selectedMengajiSubject: mSubj } = scanDeps.current;
+                        if (!mClass || !mSubj) return;
 
-                    // Cocokkin Kelas Mengaji
-                    const isMatchClass = (santri.kelas_mengaji || santri.kelas) === mClass.kelas && getRombel(santri.rombel_mengaji || santri.rombel) === mClass.rombel;
+                        const santri = sList.find(s => s.id === decodedText || s.nisn === decodedText || s.rfid_card_id === decodedText);
 
-                    if (!isMatchClass) {
-                        toast({title: "Beda Kelas", description: `${santri.nama_lengkap} bukan santri di kelas ini.`, variant: "destructive"});
-                        return;
-                    }
+                        if (!santri) {
+                            toast({title: "Tidak Dikenal", description: "QR Code ini tidak terdaftar di sistem.", variant: "destructive"});
+                            return;
+                        }
 
-                    // Simpan / Update Absen Hadir
-                    try {
-                        const todayStr = new Date().toISOString().split('T')[0];
-                        
-                        const { data: existing } = await supabase.from('attendance_logs')
-                            .select('id, status')
-                            .eq('santri_id', santri.id)
-                            .eq('activity_id', mSubj.id)
-                            .gte('created_at', `${todayStr}T00:00:00`)
-                            .lte('created_at', `${todayStr}T23:59:59`)
-                            .maybeSingle();
+                        const isMatchClass = (santri.kelas_mengaji || santri.kelas) === mClass.kelas && getRombel(santri.rombel_mengaji || santri.rombel) === mClass.rombel;
 
-                        if (existing) {
-                            if (existing.status === 'Hadir') {
-                                toast({description: `${santri.nama_lengkap} sudah diabsen hadir.`});
+                        if (!isMatchClass) {
+                            toast({title: "Beda Kelas", description: `${santri.nama_lengkap} bukan santri di kelas ini.`, variant: "destructive"});
+                            return;
+                        }
+
+                        try {
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const { data: existing } = await supabase.from('attendance_logs')
+                                .select('id, status')
+                                .eq('santri_id', santri.id)
+                                .eq('activity_id', mSubj.id)
+                                .gte('created_at', `${todayStr}T00:00:00`)
+                                .lte('created_at', `${todayStr}T23:59:59`)
+                                .maybeSingle();
+
+                            if (existing) {
+                                if (existing.status === 'Hadir') {
+                                    toast({description: `${santri.nama_lengkap} sudah diabsen hadir.`});
+                                } else {
+                                    await supabase.from('attendance_logs').update({ status: 'Hadir', scan_time: new Date().toLocaleTimeString() }).eq('id', existing.id);
+                                    toast({title: "Diperbarui", description: `${santri.nama_lengkap} berhasil diabsen (Hadir).`, className: "bg-green-600 text-white"});
+                                    fetchData();
+                                }
                             } else {
-                                await supabase.from('attendance_logs').update({ status: 'Hadir', scan_time: new Date().toLocaleTimeString() }).eq('id', existing.id);
-                                toast({title: "Diperbarui", description: `${santri.nama_lengkap} berhasil diabsen (Hadir).`, className: "bg-green-600 text-white"});
+                                await supabase.from('attendance_logs').insert([{
+                                    santri_id: santri.id,
+                                    activity_id: mSubj.id,
+                                    status: 'Hadir',
+                                    scan_time: new Date().toLocaleTimeString(),
+                                    created_at: new Date().toISOString(),
+                                    keterangan: 'Scan QR Mengaji'
+                                }]);
+                                toast({title: "Hadir", description: `${santri.nama_lengkap} berhasil diabsen.`, className: "bg-green-600 text-white"});
                                 fetchData();
                             }
-                        } else {
-                            await supabase.from('attendance_logs').insert([{
-                                santri_id: santri.id,
-                                activity_id: mSubj.id,
-                                status: 'Hadir',
-                                scan_time: new Date().toLocaleTimeString(),
-                                created_at: new Date().toISOString(),
-                                keterangan: 'Scan QR Mengaji'
-                            }]);
-                            toast({title: "Hadir", description: `${santri.nama_lengkap} berhasil diabsen.`, className: "bg-green-600 text-white"});
-                            fetchData();
+                        } catch (e) {
+                            console.error(e);
                         }
-                    } catch (e) {
-                        console.error(e);
-                    }
-                },
-                (error) => { /* Abaikan error */ }
-            );
-        }, 200);
-
-        return () => {
-            clearTimeout(timer);
-            if (scanner) scanner.clear().catch(e => console.log(e));
+                    },
+                    (errorMessage) => { /* Abaikan error pencarian frame */ }
+                );
+            } catch (err: any) {
+                console.error("Camera start failed", err);
+                // Kalau error karena kamera tidak diizinkan
+                if (isMounted && isScannerOpen) {
+                    toast({ title: "Kamera Gagal", description: "Pastikan browser diberi izin mengakses kamera.", variant: "destructive" });
+                }
+            }
         };
+
+        startCamera();
     }
-  }, [isScannerOpen, toast]);
+
+    return () => {
+        isMounted = false;
+        if (html5QrCode) {
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => html5QrCode?.clear()).catch(console.error);
+            } else {
+                html5QrCode.clear();
+            }
+        }
+    };
+  }, [isScannerOpen, facingMode, toast]); // Re-run effect saat facingMode diganti!
+
+  const toggleCamera = () => {
+      setFacingMode(prev => prev === "environment" ? "user" : "environment");
+  };
 
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
 
@@ -371,7 +395,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                             <tr key={s.id} className="hover:bg-green-50/50 transition-colors">
                                 <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx+1}</td>
                                 <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{s.nama_lengkap}</td>
-                                {/* 🔥 NISN DIGUNAKAN DI SINI */}
                                 <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nisn || '-'}</td>
                                 {cols.map((c, i) => (<td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">{getStatus(s.id, c.key)}</td>))}
                             </tr>
@@ -556,7 +579,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       return (
           <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
               
-              {/* 🔥 TOMBOL SCAN QR DI SINI */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 bg-green-50 p-4 rounded-xl border-2 border-green-200 shadow-sm justify-between">
                   <div className="flex items-center gap-4">
                       <Button variant="outline" size="sm" onClick={() => setSelectedMengajiSubject(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
@@ -955,7 +977,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* DIALOG SCANNER QR MENGAJI */}
+      {/* DIALOG SCANNER QR MENGAJI DENGAN FITUR FLIP CAMERA */}
       <Dialog open={isScannerOpen} onOpenChange={(open) => {
           setIsScannerOpen(open);
           if (!open && lastScanned.current) lastScanned.current = null;
@@ -966,8 +988,22 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                       <QrCode className="w-5 h-5"/> Kamera Scanner Mengaji
                   </DialogTitle>
               </DialogHeader>
-              <div className="py-2">
-                  <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-white min-h-[250px]"></div>
+              <div className="py-2 relative">
+                  
+                  {/* Container Kamera */}
+                  <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-gray-900 min-h-[250px]"></div>
+                  
+                  {/* 🔥 TOMBOL FLIP CAMERA OVERLAY */}
+                  <Button
+                      size="icon"
+                      variant="secondary"
+                      className="absolute top-4 right-4 z-50 rounded-full shadow-lg bg-white/90 hover:bg-white text-blue-600 border border-blue-200"
+                      onClick={toggleCamera}
+                      title="Tukar Kamera Depan / Belakang"
+                  >
+                      <RefreshCcw className="w-5 h-5" />
+                  </Button>
+
                   <p className="text-xs text-gray-500 mt-4 leading-relaxed">
                       Arahkan kamera ke QR Code santri.<br/>
                       Sistem akan otomatis memverifikasi kelas dan mencatat "Hadir".
