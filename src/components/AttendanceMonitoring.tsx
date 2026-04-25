@@ -967,7 +967,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                   </DialogTitle>
               </DialogHeader>
               <div className="py-2">
-                  <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-black min-h-[250px]"></div>
+                  <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-white min-h-[250px]"></div>
                   <p className="text-xs text-gray-500 mt-4 leading-relaxed">
                       Arahkan kamera ke QR Code santri.<br/>
                       Sistem akan otomatis memverifikasi kelas dan mencatat "Hadir".
