@@ -17,7 +17,7 @@ interface Transaction {
 interface SantriProfile {
   id: string;
   nama_lengkap: string;
-  nis: string;
+  nisn: string;
   kelas: number;
   rombel: string;
   rfid_card_id: string;
@@ -43,7 +43,7 @@ const SantriDetail = ({ santriId, onBack }: SantriDetailProps) => {
       // 1. Ambil Profil Santri Lengkap
       const { data: santriData } = await supabase
         .from("santri_2025_12_01_21_34")
-        .select("id, nama_lengkap, nis, kelas, rombel, rfid_card_id")
+        .select("id, nama_lengkap, nisn, kelas, rombel, rfid_card_id")
         .eq("id", santriId)
         .single();
         
@@ -104,7 +104,7 @@ const SantriDetail = ({ santriId, onBack }: SantriDetailProps) => {
   };
 
   // 🔥 Tentukan ID yang dipakai untuk QR Code (Prioritas: RFID -> NIS -> ID Sistem)
-  const qrValue = profile?.rfid_card_id || profile?.nis || profile?.id || "unknown";
+  const qrValue = profile?.rfid_card_id || profile?.nisn || profile?.id || "unknown";
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
