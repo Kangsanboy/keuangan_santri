@@ -103,7 +103,7 @@ const SantriDetail = ({ santriId, onBack }: SantriDetailProps) => {
     XLSX.writeFile(wb, `Riwayat_${profile?.nama_lengkap || 'Santri'}.xlsx`);
   };
 
-  // 🔥 Tentukan ID yang dipakai untuk QR Code (Prioritas: RFID -> NIS -> ID Sistem)
+  // 🔥 Tentukan ID yang dipakai untuk QR Code (Prioritas: RFID -> NISN -> ID Sistem)
   const qrValue = profile?.rfid_card_id || profile?.nisn || profile?.id || "unknown";
 
   return (
@@ -158,8 +158,8 @@ const SantriDetail = ({ santriId, onBack }: SantriDetailProps) => {
                       
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 space-y-2 mt-2 text-sm text-gray-600 w-full">
                           <div className="flex items-center justify-between sm:justify-start sm:gap-4 border-b border-gray-200 pb-2">
-                              <span className="text-gray-400 font-medium w-20 text-left">NIS Santri</span>
-                              <span className="font-bold text-gray-800 font-mono tracking-wider">{profile?.nis || '-'}</span>
+                              <span className="text-gray-400 font-medium w-20 text-left">NISN Santri</span>
+                              <span className="font-bold text-gray-800 font-mono tracking-wider">{profile?.nisn || '-'}</span>
                           </div>
                           <div className="flex items-center justify-between sm:justify-start sm:gap-4 pt-1">
                               <span className="text-gray-400 font-medium w-20 text-left">Kartu RFID</span>
