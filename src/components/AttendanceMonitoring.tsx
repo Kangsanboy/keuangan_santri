@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Html5Qrcode } from "html5-qrcode"; // 🔥 GANTI JADI CORE ENGINE BIAR BISA CUSTOM UI
+import { Html5Qrcode } from "html5-qrcode"; 
 import { 
   Calendar, Save, User, MapPin, 
   CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, QrCode, RefreshCcw
@@ -83,9 +83,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
 
-  // 🔥 STATE KAMERA BARU
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment"); // environment = belakang, user = depan
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment"); 
   
   const lastScanned = useRef<{text: string, time: number} | null>(null);
   const scanDeps = useRef({ santriList, selectedMengajiClass, selectedMengajiSubject });
@@ -152,7 +151,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       if (actData) setActivities(actData);
 
     } catch (err: any) { 
-        console.error("Fetch Data Error:", err);
         toast({ title: "Gagal Menarik Data", description: err.message, variant: "destructive" });
     } finally { 
         setLoading(false); 
@@ -175,21 +173,19 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
      setSelectedGuruEkskul(null);
   }, [guruTab]);
 
-  // 🔥 CORE ENGINE SCANNER QR CODE DENGAN FITUR FLIP CAMERA
+  // 🔥 CORE ENGINE SCANNER DENGAN ERROR HANDLING YANG BENAR
   useEffect(() => {
     let isMounted = true;
     let html5QrCode: Html5Qrcode | null = null;
 
     if (isScannerOpen) {
         const startCamera = async () => {
-            // Kasih jeda dikit biar div modal beneran muncul di DOM
             await new Promise(res => setTimeout(res, 200));
             if (!isMounted) return;
 
             html5QrCode = new Html5Qrcode("reader");
 
             try {
-                // Langsung nembak start dengan facingMode (Otomatis minta izin ke browser)
                 await html5QrCode.start(
                     { facingMode: facingMode }, 
                     { fps: 5, qrbox: { width: 250, height: 250 } },
@@ -206,7 +202,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         const santri = sList.find(s => s.id === decodedText || s.nisn === decodedText || s.rfid_card_id === decodedText);
 
                         if (!santri) {
-                            toast({title: "Tidak Dikenal", description: "QR Code ini tidak terdaftar di sistem.", variant: "destructive"});
+                            toast({title: "Tidak Dikenal", description: "QR Code ini tidak terdaftar.", variant: "destructive"});
                             return;
                         }
 
@@ -218,7 +214,9 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         }
 
                         try {
-                            const todayStr = new Date().toISOString().split('T')[0];
+                            const nowIso = new Date().toISOString(); // 🔥 PENTING: Harus ISO Timestamp biar database gak ngomel
+                            const todayStr = nowIso.split('T')[0];
+                            
                             const { data: existing } = await supabase.from('attendance_logs')
                                 .select('id, status')
                                 .eq('santri_id', santri.id)
@@ -231,31 +229,38 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                                 if (existing.status === 'Hadir') {
                                     toast({description: `${santri.nama_lengkap} sudah diabsen hadir.`});
                                 } else {
-                                    await supabase.from('attendance_logs').update({ status: 'Hadir', scan_time: new Date().toLocaleTimeString() }).eq('id', existing.id);
+                                    // 🔥 Tambahin checking error biar ketahuan kalau gagal
+                                    const { error } = await supabase.from('attendance_logs')
+                                        .update({ status: 'Hadir', scan_time: nowIso })
+                                        .eq('id', existing.id);
+                                    if (error) throw error;
+
                                     toast({title: "Diperbarui", description: `${santri.nama_lengkap} berhasil diabsen (Hadir).`, className: "bg-green-600 text-white"});
                                     fetchData();
                                 }
                             } else {
-                                await supabase.from('attendance_logs').insert([{
+                                // 🔥 Tambahin checking error biar ketahuan kalau gagal
+                                const { error } = await supabase.from('attendance_logs').insert([{
                                     santri_id: santri.id,
                                     activity_id: mSubj.id,
                                     status: 'Hadir',
-                                    scan_time: new Date().toLocaleTimeString(),
-                                    created_at: new Date().toISOString(),
+                                    scan_time: nowIso,
+                                    created_at: nowIso,
                                     keterangan: 'Scan QR Mengaji'
                                 }]);
+                                if (error) throw error;
+
                                 toast({title: "Hadir", description: `${santri.nama_lengkap} berhasil diabsen.`, className: "bg-green-600 text-white"});
                                 fetchData();
                             }
-                        } catch (e) {
+                        } catch (e: any) {
                             console.error(e);
+                            toast({title: "Sistem Menolak", description: e.message || "Gagal menyimpan ke database", variant: "destructive"});
                         }
                     },
-                    (errorMessage) => { /* Abaikan error pencarian frame */ }
+                    (errorMessage) => {}
                 );
             } catch (err: any) {
-                console.error("Camera start failed", err);
-                // Kalau error karena kamera tidak diizinkan
                 if (isMounted && isScannerOpen) {
                     toast({ title: "Kamera Gagal", description: "Pastikan browser diberi izin mengakses kamera.", variant: "destructive" });
                 }
@@ -275,13 +280,17 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
             }
         }
     };
-  }, [isScannerOpen, facingMode, toast]); // Re-run effect saat facingMode diganti!
+  }, [isScannerOpen, facingMode, toast]);
 
   const toggleCamera = () => {
       setFacingMode(prev => prev === "environment" ? "user" : "environment");
   };
 
-  const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
+  // 🔥 Perbaikan pencocokan filter tanggal yang kebal perbedaan Zona Waktu
+  const dailyLogs = logs.filter(l => {
+      const logDateLocal = new Date(l.created_at || l.scan_time).toLocaleDateString('en-CA'); 
+      return logDateLocal === dateFilter;
+  });
 
   const getActivityType = (log: AttendanceLog) => {
       const cat = log.activity?.category?.toLowerCase() || '';
@@ -321,11 +330,12 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
           const selectedDateTime = new Date(formDate);
           const now = new Date();
           selectedDateTime.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+          const isoString = selectedDateTime.toISOString(); // 🔥 Harus ISO Timestamp
 
           const payload: any = { 
               status: formStatus, 
-              scan_time: selectedDateTime.toLocaleTimeString(), 
-              created_at: selectedDateTime.toISOString(), 
+              scan_time: isoString, 
+              created_at: isoString, 
               activity_id: null, location_id: null, keterangan: formKet 
           };
           
@@ -491,13 +501,14 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
       const classStudents = santriList.filter(s => s.kelas === selectedKbmClass.kelas && getRombel(s.rombel) === selectedKbmClass.rombel);
       const subjectLogs = logs.filter(l => l.activity_id === selectedKbmSubject.id && l.santri?.kelas === selectedKbmClass.kelas && getRombel(l.santri?.rombel) === selectedKbmClass.rombel);
-      const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
+      
+      const uniqueDates = Array.from(new Set(subjectLogs.map(l => new Date(l.created_at).toLocaleDateString('en-CA')))).sort();
       const meetingCount = Math.max(uniqueDates.length, 8);
       const columns = Array.from({length: meetingCount}, (_, i) => ({ key: uniqueDates[i] || `null-${i}`, label: `Per-${i+1}`, subLabel: uniqueDates[i] ? uniqueDates[i].slice(5) : '', tooltip: uniqueDates[i] || 'Belum ada data' }));
 
       const getStatus = (santriId: string, dateKey: string) => {
           if (dateKey.startsWith('null')) return "-";
-          const log = subjectLogs.find(l => l.santri_id === santriId && l.created_at.startsWith(dateKey));
+          const log = subjectLogs.find(l => l.santri_id === santriId && new Date(l.created_at).toLocaleDateString('en-CA') === dateKey);
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -569,7 +580,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
       const getStatus = (santriId: string, day: string) => {
           const targetDateStr = `${year}-${String(month+1).padStart(2,'0')}-${day.padStart(2,'0')}`;
-          const log = logs.find(l => l.santri_id === santriId && l.activity_id === selectedMengajiSubject.id && l.created_at.startsWith(targetDateStr));
+          const log = logs.find(l => l.santri_id === santriId && l.activity_id === selectedMengajiSubject.id && new Date(l.created_at).toLocaleDateString('en-CA') === targetDateStr);
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -585,7 +596,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                       <div><h3 className="font-extrabold text-green-900 text-lg">Ngaji {selectedMengajiSubject.name}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedMengajiClass.kelas}-{selectedMengajiClass.rombel} • Skala Bulanan</p></div>
                   </div>
                   
-                  {/* Hanya admin/guru yang bisa scan QR */}
                   {userRole !== 'viewer' && (
                       <Button onClick={() => setIsScannerOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md w-full sm:w-auto">
                           <QrCode className="w-4 h-4 mr-2" /> Scan QR Absen
@@ -663,8 +673,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
       const getStatus = (santriId: string, dayIndexStr: string) => {
           const cellDate = new Date(weekStart); cellDate.setDate(cellDate.getDate() + parseInt(dayIndexStr));
-          const dateStr = cellDate.toISOString().split('T')[0];
-          const log = logs.find(l => l.santri_id === santriId && l.activity_id === selectedSholatSubject.id && l.created_at.startsWith(dateStr));
+          const dateStr = cellDate.toLocaleDateString('en-CA');
+          const log = logs.find(l => l.santri_id === santriId && l.activity_id === selectedSholatSubject.id && new Date(l.created_at).toLocaleDateString('en-CA') === dateStr);
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -750,13 +760,13 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       }
 
       const subjectLogs = logs.filter(l => l.activity_id === selectedEkskul.id && classStudents.some(cs => cs.id === l.santri_id));
-      const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
+      const uniqueDates = Array.from(new Set(subjectLogs.map(l => new Date(l.created_at).toLocaleDateString('en-CA')))).sort();
       const meetingCount = Math.max(uniqueDates.length, 6);
       const columns = Array.from({length: meetingCount}, (_, i) => ({ key: uniqueDates[i] || `null-${i}`, label: `Per-${i+1}`, subLabel: uniqueDates[i] ? uniqueDates[i].slice(5) : '' }));
 
       const getStatus = (santriId: string, dateKey: string) => {
           if (dateKey.startsWith('null')) return "-";
-          const log = subjectLogs.find(l => l.santri_id === santriId && l.created_at.startsWith(dateKey));
+          const log = subjectLogs.find(l => l.santri_id === santriId && new Date(l.created_at).toLocaleDateString('en-CA') === dateKey);
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -801,13 +811,13 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
         const activeTeachers = teacherList.filter(t => scheduledTeacherIds.includes(t.id));
 
         const subjectLogs = logs.filter(l => l.activity_id === selectedGuruKbmSubject.id && l.teacher_id);
-        const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
+        const uniqueDates = Array.from(new Set(subjectLogs.map(l => new Date(l.created_at).toLocaleDateString('en-CA')))).sort();
         const meetingCount = Math.max(uniqueDates.length, 8);
         const columns = Array.from({length: meetingCount}, (_, i) => ({ key: uniqueDates[i] || `null-${i}`, label: `Per-${i+1}`, subLabel: uniqueDates[i] ? uniqueDates[i].slice(5) : '', tooltip: uniqueDates[i] || 'Belum ada data' }));
 
         const getStatus = (teacherId: number, dateKey: string) => {
             if (dateKey.startsWith('null')) return "-";
-            const log = subjectLogs.find(l => l.teacher_id === teacherId && l.created_at.startsWith(dateKey));
+            const log = subjectLogs.find(l => l.teacher_id === teacherId && new Date(l.created_at).toLocaleDateString('en-CA') === dateKey);
             return log ? getStatusIcon(log.status) : "-";
         };
 
@@ -850,7 +860,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
         const getStatus = (teacherId: number, day: string) => {
             const targetDateStr = `${year}-${String(month+1).padStart(2,'0')}-${day.padStart(2,'0')}`;
-            const log = logs.find(l => l.teacher_id === teacherId && l.activity_id === selectedGuruMengajiSubject.id && l.created_at.startsWith(targetDateStr));
+            const log = logs.find(l => l.teacher_id === teacherId && l.activity_id === selectedGuruMengajiSubject.id && new Date(l.created_at).toLocaleDateString('en-CA') === targetDateStr);
             return log ? getStatusIcon(log.status) : "-";
         };
 
@@ -904,8 +914,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
         const getStatus = (teacherId: number, dayIndexStr: string) => {
             const cellDate = new Date(weekStart); cellDate.setDate(cellDate.getDate() + parseInt(dayIndexStr));
-            const dateStr = cellDate.toISOString().split('T')[0];
-            const log = logs.find(l => l.teacher_id === teacherId && l.activity_id === selectedGuruSholatSubject.id && l.created_at.startsWith(dateStr));
+            const dateStr = cellDate.toLocaleDateString('en-CA');
+            const log = logs.find(l => l.teacher_id === teacherId && l.activity_id === selectedGuruSholatSubject.id && new Date(l.created_at).toLocaleDateString('en-CA') === dateStr);
             return log ? getStatusIcon(log.status) : "-";
         };
 
@@ -953,13 +963,13 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       const activeTeachers = teacherList.filter(t => scheduledTeacherIds.includes(t.id));
 
       const subjectLogs = logs.filter(l => l.activity_id === selectedGuruEkskul.id && l.teacher_id);
-      const uniqueDates = Array.from(new Set(subjectLogs.map(l => l.created_at.split('T')[0]))).sort();
+      const uniqueDates = Array.from(new Set(subjectLogs.map(l => new Date(l.created_at).toLocaleDateString('en-CA')))).sort();
       const meetingCount = Math.max(uniqueDates.length, 6);
       const columns = Array.from({length: meetingCount}, (_, i) => ({ key: uniqueDates[i] || `null-${i}`, label: `Per-${i+1}`, subLabel: uniqueDates[i] ? uniqueDates[i].slice(5) : '' }));
 
       const getStatus = (teacherId: number, dateKey: string) => {
           if (dateKey.startsWith('null')) return "-";
-          const log = subjectLogs.find(l => l.teacher_id === teacherId && l.created_at.startsWith(dateKey));
+          const log = subjectLogs.find(l => l.teacher_id === teacherId && new Date(l.created_at).toLocaleDateString('en-CA') === dateKey);
           return log ? getStatusIcon(log.status) : "-";
       };
 
@@ -1090,7 +1100,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                                         <div><p className="font-bold text-gray-800 text-sm">{log.santri?.nama_lengkap}</p><div className="flex gap-2 text-[10px] text-gray-500 mt-0.5"><span className="bg-gray-100 px-1.5 rounded font-bold border">Kls {log.santri?.kelas}-{getRombel(log.santri?.rombel)}</span><span>• {log.activity?.name || "Manual"}</span><span className="flex items-center gap-1"><MapPin size={10}/> {log.location?.name || "-"}</span></div></div>
                                     </div>
                                     <div className="text-right">
-                                        <span className="font-mono font-bold text-gray-700 block text-xs mb-1">{log.scan_time.slice(0,5)}</span>
+                                        {/* 🔥 PERBAIKAN WAKTU SCAN BIAR MUNCUL FULL */}
+                                        <span className="font-mono font-bold text-gray-700 block text-xs mb-1">{new Date(log.scan_time || log.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</span>
                                         <Badge variant="outline" className={`text-[9px] h-4 px-1 ${log.status === 'Hadir' ? 'text-green-600 border-green-200 bg-green-50' : (log.status === 'Pulang' ? 'text-purple-600 border-purple-200 bg-purple-50' : 'text-red-600 border-red-200 bg-red-50')}`}>{log.status}</Badge>
                                     </div>
                                 </div>
@@ -1145,7 +1156,10 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                             {dailyLogs.filter(l => l.teacher_id).length === 0 ? (
                                 <div className="p-6 text-center text-xs text-gray-400 italic">Belum ada absensi guru.</div>
                             ) : (
-                                dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right"><span className="font-mono font-bold block text-gray-700 text-xs mb-1">{log.scan_time.slice(0,5)}</span><Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Pulang' ? 'bg-purple-500 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'))}`}>{log.status}</Badge></div></div>))
+                                dailyLogs.filter(l => l.teacher_id).map((log) => (<div key={log.id} className="flex items-center justify-between p-3 px-4 hover:bg-teal-50/50 transition-colors"><div className="flex items-center gap-3"><div className="p-2 rounded-full bg-teal-100 text-teal-700 shadow-sm border border-teal-200"><User size={16}/></div><div><p className="font-bold text-gray-800 text-sm">{log.teacher?.full_name}</p><p className="text-[10px] text-gray-500 mt-0.5">{log.activity?.name || log.keterangan || "Kegiatan Umum"}</p></div></div><div className="text-right">
+                                    {/* 🔥 PERBAIKAN WAKTU SCAN BIAR MUNCUL FULL */}
+                                    <span className="font-mono font-bold block text-gray-700 text-xs mb-1">{new Date(log.scan_time || log.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</span>
+                                    <Badge className={`text-[9px] h-4 px-1 shadow-sm ${log.status === 'Hadir' ? 'bg-green-600 text-white' : (log.status === 'Pulang' ? 'bg-purple-500 text-white' : (log.status === 'Izin' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'))}`}>{log.status}</Badge></div></div>))
                             )}
                         </div>
                     </CardContent>
