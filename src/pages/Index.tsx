@@ -418,7 +418,10 @@ const Index = () => {
            
            <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi</button>
            <button onClick={() => handleMenuClick("kesehatan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "kesehatan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Activity className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Kesehatan</button>
+           
+           {(isSuperAdmin || isAdmin || isGuru) && (
            <button onClick={() => handleMenuClick("perizinan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "perizinan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><DoorOpen className="mr-3 h-5 w-5 flex-shrink-0" />Portal Perizinan</button>
+          )}
            <button onClick={() => handleMenuClick("pelanggaran")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "pelanggaran" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Scale className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Pelanggaran</button>
            
            {isSuperAdmin && (
