@@ -8,17 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Html5QrcodeScanner } from "html5-qrcode"; // 🔥 Import Scanner Kamera
+import { Html5QrcodeScanner } from "html5-qrcode";
 import { 
   Calendar, Save, User, MapPin, 
   CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, QrCode
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
+/* ================= TYPES ================= */
 interface Santri { 
-  id: string; nama_lengkap: string; kelas: number; gender: string; nisn: string;
+  id: string; nama_lengkap: string; kelas: number; gender: string; 
+  nisn?: string; rfid_card_id?: string; // 🔥 KEMBALI PAKAI NISN
   rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any;
-  nis?: string; rfid_card_id?: string; // 🔥 Tambah properti ini buat QR Code
 }
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
@@ -27,7 +28,7 @@ interface Schedule { id: number; activity_id: number; teacher_id?: number; kelas
 interface AttendanceLog {
   id: string; scan_time: string; status: string; created_at: string;
   santri_id?: string; teacher_id?: number; activity_id?: number; location_id?: number;
-  santri?: { nama_lengkap: string; kelas: number; nisn: string; gender: string; rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any; };
+  santri?: { nama_lengkap: string; kelas: number; nisn?: string; gender: string; rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any; }; // 🔥 NISN
   teacher?: { full_name: string; }; activity?: { name: string; category: string; tipe_ekskul?: string; }; location?: { name: string }; keterangan?: string;
 }
 
@@ -82,12 +83,10 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
 
-  // 🔥 STATE & REFS UNTUK SCANNER QR CODE
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const lastScanned = useRef<{text: string, time: number} | null>(null);
   const scanDeps = useRef({ santriList, selectedMengajiClass, selectedMengajiSubject });
 
-  // Update ref biar scanner selalu pakai data terbaru tanpa harus re-render komponen kamera
   useEffect(() => {
       scanDeps.current = { santriList, selectedMengajiClass, selectedMengajiSubject };
   }, [santriList, selectedMengajiClass, selectedMengajiSubject]);
@@ -117,6 +116,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
     fetchRole();
   }, []);
 
+  /* ================= FETCH DATA (FIXED PAKE NISN) ================= */
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -124,14 +124,25 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
-      const { data: logData } = await supabase.from('attendance_logs').select(`id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id, santri:santri_2025_12_01_21_34(nama_lengkap, kelas, nisn, gender, rombel, kelas_mengaji, rombel_mengaji), teacher:teachers(full_name), activity:activity_id(name, category, tipe_ekskul), location:location_id(name)`).gte('created_at', startOfMonth.toISOString()).lte('created_at', endOfMonth.toISOString() + 'T23:59:59');
+      // 🔥 PASTIKAN DISINI PAKE 'nisn'
+      const { data: logData, error: logErr } = await supabase.from('attendance_logs').select(`
+          id, scan_time, status, created_at, santri_id, teacher_id, activity_id, location_id, 
+          santri:santri_id(nama_lengkap, kelas, nisn, gender, rombel, kelas_mengaji, rombel_mengaji), 
+          teacher:teachers(full_name), 
+          activity:activity_id(name, category, tipe_ekskul), 
+          location:location_id(name)
+      `).gte('created_at', startOfMonth.toISOString()).lte('created_at', endOfMonth.toISOString() + 'T23:59:59');
+      
+      if (logErr) throw logErr;
       if (logData) setLogs(logData as any);
 
-      const { data: schData } = await supabase.from('schedules').select('id, activity_id, teacher_id, kelas, rombel_id, day_of_week, rombel:rombels(nama, kategori)');
+      const { data: schData, error: schErr } = await supabase.from('schedules').select('id, activity_id, teacher_id, kelas, rombel_id, day_of_week, rombel:rombels(nama, kategori)');
+      if (schErr) throw schErr;
       if (schData) setSchedules(schData as any[]);
 
-      // 🔥 Pastikan narik data NIS dan RFID juga buat dicocokkin pas Scan QR
-      const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nis, rfid_card_id, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
+      // 🔥 PASTIKAN DISINI JUGA PAKE 'nisn'
+      const { data: sData, error: sErr } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nisn, rfid_card_id, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
+      if (sErr) throw sErr;
       if (sData) setSantriList(sData as any);
 
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
@@ -140,7 +151,12 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       const { data: actData } = await supabase.from('activities').select('*').order('name');
       if (actData) setActivities(actData);
 
-    } catch (err: any) { } finally { setLoading(false); }
+    } catch (err: any) { 
+        console.error("Fetch Data Error:", err);
+        toast({ title: "Gagal Menarik Data", description: err.message, variant: "destructive" });
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   useEffect(() => { fetchData(); }, [dateFilter]);
@@ -164,32 +180,29 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
     let scanner: Html5QrcodeScanner | null = null;
 
     if (isScannerOpen) {
-        // Dikasih jeda dikit biar Modal/Dialog di React ke-render dulu
         const timer = setTimeout(() => {
             scanner = new Html5QrcodeScanner("reader", { fps: 5, qrbox: { width: 250, height: 250 } }, false);
             
             scanner.render(
                 async (decodedText) => {
                     const nowTime = Date.now();
-                    // Debounce: Cegah scan berkali-kali di waktu yang sama (jeda 3 detik)
                     if (lastScanned.current && lastScanned.current.text === decodedText && (nowTime - lastScanned.current.time) < 3000) {
                         return; 
                     }
                     lastScanned.current = { text: decodedText, time: nowTime };
 
-                    // Ambil referensi state terbaru
                     const { santriList: sList, selectedMengajiClass: mClass, selectedMengajiSubject: mSubj } = scanDeps.current;
                     if (!mClass || !mSubj) return;
 
-                    // 1. Cocokkin Identitas Santri (Bisa dari ID, NIS, atau RFID)
-                    const santri = sList.find(s => s.id === decodedText || s.nis === decodedText || s.rfid_card_id === decodedText);
+                    // Cocokkin Identitas Santri (Pakai NISN sekarang)
+                    const santri = sList.find(s => s.id === decodedText || s.nisn === decodedText || s.rfid_card_id === decodedText);
 
                     if (!santri) {
                         toast({title: "Tidak Dikenal", description: "QR Code ini tidak terdaftar di sistem.", variant: "destructive"});
                         return;
                     }
 
-                    // 2. Cocokkin Kelas Mengaji
+                    // Cocokkin Kelas Mengaji
                     const isMatchClass = (santri.kelas_mengaji || santri.kelas) === mClass.kelas && getRombel(santri.rombel_mengaji || santri.rombel) === mClass.rombel;
 
                     if (!isMatchClass) {
@@ -197,11 +210,10 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         return;
                     }
 
-                    // 3. Simpan / Update Absen Hadir
+                    // Simpan / Update Absen Hadir
                     try {
                         const todayStr = new Date().toISOString().split('T')[0];
                         
-                        // Cek langsung ke database biar realtime akurat
                         const { data: existing } = await supabase.from('attendance_logs')
                             .select('id, status')
                             .eq('santri_id', santri.id)
@@ -234,7 +246,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         console.error(e);
                     }
                 },
-                (error) => { /* Abaikan error background pencarian QR */ }
+                (error) => { /* Abaikan error */ }
             );
         }, 200);
 
@@ -343,7 +355,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         <tr>
                             <th className="p-3 text-center w-10 border-r border-green-100">No</th>
                             <th className="p-3 min-w-[200px] border-r border-green-100">Nama Lengkap</th>
-                            <th className="p-3 w-20 border-r border-green-100 text-center">NIS</th>
+                            <th className="p-3 w-20 border-r border-green-100 text-center">NISN</th>
                             {cols.map((c, i) => (
                                 <th key={i} className="p-3 text-center border-r border-green-100 text-xs bg-white" title={c.tooltip}>
                                     {c.label}
@@ -359,7 +371,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                             <tr key={s.id} className="hover:bg-green-50/50 transition-colors">
                                 <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx+1}</td>
                                 <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{s.nama_lengkap}</td>
-                                <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
+                                {/* 🔥 NISN DIGUNAKAN DI SINI */}
+                                <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nisn || '-'}</td>
                                 {cols.map((c, i) => (<td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">{getStatus(s.id, c.key)}</td>))}
                             </tr>
                         ))}
@@ -945,7 +958,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       {/* DIALOG SCANNER QR MENGAJI */}
       <Dialog open={isScannerOpen} onOpenChange={(open) => {
           setIsScannerOpen(open);
-          // Bersihin memory scan sebelumnya kalau dialog ditutup
           if (!open && lastScanned.current) lastScanned.current = null;
       }}>
           <DialogContent className="sm:max-w-md text-center border-t-4 border-t-blue-600">
