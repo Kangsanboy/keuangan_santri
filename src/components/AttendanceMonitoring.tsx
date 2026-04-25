@@ -89,15 +89,14 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const lastScanned = useRef<{text: string, time: number} | null>(null);
   const scanDeps = useRef({ santriList, selectedMengajiClass, selectedMengajiSubject });
 
-  // 🔥 FUNGSI GETARAN HP (HAPTIC FEEDBACK)
   const triggerVibration = (type: 'success' | 'error' | 'warning') => {
       if (typeof window !== 'undefined' && navigator.vibrate) {
           if (type === 'success') {
-              navigator.vibrate([100, 50, 100]); // Getar 2 kali cepat
+              navigator.vibrate([100, 50, 100]); 
           } else if (type === 'error') {
-              navigator.vibrate([300, 100, 300]); // Getar panjang & marah
+              navigator.vibrate([300, 100, 300]); 
           } else {
-              navigator.vibrate([50]); // Getar pendek
+              navigator.vibrate([50]); 
           }
       }
   };
@@ -186,7 +185,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
      setSelectedGuruEkskul(null);
   }, [guruTab]);
 
-  // 🔥 CORE ENGINE SCANNER DENGAN ALERT SADIS & GETARAN
   useEffect(() => {
     let isMounted = true;
     let html5QrCode: Html5Qrcode | null = null;
@@ -212,30 +210,25 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         const { santriList: sList, selectedMengajiClass: mClass, selectedMengajiSubject: mSubj } = scanDeps.current;
                         if (!mClass || !mSubj) return;
 
-                        // 1. Cek Apakah QR Dikenali
                         const santri = sList.find(s => s.id === decodedText || s.nisn === decodedText || s.rfid_card_id === decodedText);
 
                         if (!santri) {
-                            triggerVibration('error'); // Getar Error
+                            triggerVibration('error'); 
                             toast({title: "❌ Tidak Dikenal", description: "QR Code ini tidak terdaftar di sistem.", variant: "destructive"});
                             return;
                         }
 
-                        // 2. Cek Apakah Kelasnya Bener
                         const isMatchClass = (santri.kelas_mengaji || santri.kelas) === mClass.kelas && getRombel(santri.rombel_mengaji || santri.rombel) === mClass.rombel;
 
                         if (!isMatchClass) {
-                            triggerVibration('error'); // Getar Error
+                            triggerVibration('error'); 
                             toast({title: "❌ Beda Kelas", description: `${santri.nama_lengkap} bukan santri di kelas ini.`, variant: "destructive"});
                             return;
                         }
 
-                        // 3. Masukin ke Database
                         try {
                             const now = new Date();
                             const nowIso = now.toISOString();
-                            
-                            // Gunakan rentang waktu hari ini biar akurat
                             const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).toISOString();
                             const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
                             
@@ -260,30 +253,28 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                                     
                                     if (errUpdate) throw errUpdate;
 
-                                    triggerVibration('success'); // Getar Sukses
+                                    triggerVibration('success'); 
                                     toast({title: "✅ Diperbarui", description: `${santri.nama_lengkap} berhasil diabsen (Hadir).`, className: "bg-green-600 text-white font-bold"});
                                     fetchData();
                                 }
                             } else {
-                                // .select() buat mastiin data beneran balik dari database
                                 const { error: errInsert } = await supabase.from('attendance_logs').insert([{
                                     santri_id: santri.id,
                                     activity_id: mSubj.id,
                                     status: 'Hadir',
                                     scan_time: nowIso,
                                     keterangan: 'Scan QR Mengaji'
-                                    // created_at dibiarkan kosong biar Supabase pakai waktu default NOW()
                                 }]).select();
 
                                 if (errInsert) throw errInsert;
 
-                                triggerVibration('success'); // Getar Sukses
+                                triggerVibration('success'); 
                                 toast({title: "✅ Hadir Tercatat", description: `${santri.nama_lengkap} berhasil diabsen.`, className: "bg-green-600 text-white font-bold"});
                                 fetchData();
                             }
                         } catch (e: any) {
                             console.error(e);
-                            triggerVibration('error'); // Getar Error
+                            triggerVibration('error'); 
                             toast({title: "❌ Sistem Menolak", description: e.message || "Gagal menyimpan ke database", variant: "destructive"});
                         }
                     },
@@ -320,12 +311,21 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       return logDateLocal === dateFilter;
   });
 
+  // 🔥 PERBAIKAN LOGIKA PENGELOMPOKKAN KEGIATAN
   const getActivityType = (log: AttendanceLog) => {
       const cat = log.activity?.category?.toLowerCase() || '';
       const name = log.activity?.name?.toLowerCase() || '';
+      
+      // Prioritas 1: Baca langsung dari kategori di database
       if (cat === 'pelajaran') return 'kbm';
-      if (cat === 'sholat' || name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
-      if (cat === 'mengaji' || name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
+      if (cat === 'mengaji') return 'mengaji';
+      if (cat === 'sholat') return 'sholat';
+      if (cat === 'ekskul') return 'ekskul';
+      
+      // Prioritas 2: Cadangan kalau kategorinya umum / kosong (Biar nggak salah tebak)
+      if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
+      if (name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
+      
       return 'ekskul'; 
   };
 
@@ -363,7 +363,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
           const payload: any = { 
               status: formStatus, 
               scan_time: isoString, 
-              // Dihapus created_at nya biar database otomatis nentuin
               activity_id: null, location_id: null, keterangan: formKet 
           };
           
@@ -1015,7 +1014,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* DIALOG SCANNER QR MENGAJI DENGAN FITUR FLIP CAMERA */}
       <Dialog open={isScannerOpen} onOpenChange={(open) => {
           setIsScannerOpen(open);
           if (!open && lastScanned.current) lastScanned.current = null;
@@ -1028,10 +1026,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
               </DialogHeader>
               <div className="py-2 relative">
                   
-                  {/* Container Kamera */}
                   <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-gray-900 min-h-[250px]"></div>
                   
-                  {/* 🔥 TOMBOL FLIP CAMERA OVERLAY */}
                   <Button
                       size="icon"
                       variant="secondary"
