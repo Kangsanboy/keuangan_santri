@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,13 +10,15 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   DoorOpen, LogOut, LogIn, Clock, ShieldCheck, MapPin, 
-  FileText, History, Plus, AlertTriangle, CheckCircle2, User, CreditCard
+  FileText, History, Plus, AlertTriangle, CheckCircle2, User, CreditCard, CalendarDays
 } from "lucide-react";
 
 interface Santri { id: string; nama_lengkap: string; kelas: number; gender: string; nisn?: string; rfid_card_id?: string; rombel?: any; }
 interface Teacher { id: number; full_name: string; }
 interface Permit {
-  id: number; kategori: string; alasan: string; tanggal_izin: string; waktu_mulai: string; waktu_selesai: string;
+  id: number; kategori: string; alasan: string; 
+  tanggal_izin: string; tanggal_kembali?: string; 
+  waktu_mulai: string; waktu_selesai: string;
   waktu_keluar_aktual: string; waktu_kembali_aktual: string; status: string;
   santri_id: string; penanggung_jawab_id: number;
   santri?: Santri; teacher?: Teacher;
@@ -40,10 +42,13 @@ const PermitManagement = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formKelas, setFormKelas] = useState("");
   const [formGender, setFormGender] = useState("");
+  
+  // State untuk form dinamis (Tergantung tab yang aktif)
   const [formData, setFormData] = useState({
-      kategori: 'Perizinan', santri_id: '', alasan: '',
+      santri_id: '', alasan: '', penanggung_jawab_id: '',
       tanggal_izin: new Date().toISOString().split('T')[0],
-      waktu_mulai: '08:00', waktu_selesai: '12:00', penanggung_jawab_id: ''
+      tanggal_kembali: new Date().toISOString().split('T')[0],
+      waktu_mulai: '08:00', waktu_selesai: '12:00'
   });
 
   const getRombel = (rombelData: any) => {
@@ -80,7 +85,6 @@ const PermitManagement = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  // GETARAN IOT SIMULASI
   const triggerVibration = (type: 'success' | 'error') => {
       if (typeof window !== 'undefined' && navigator.vibrate) {
           if (type === 'success') navigator.vibrate([100, 50, 100]); 
@@ -111,7 +115,7 @@ const PermitManagement = () => {
 
       if (!activePermit) {
           triggerVibration('error');
-          return toast({title: "Pelanggaran", description: `${santri.nama_lengkap} belum dibuatkan surat izin oleh Pengasuh!`, variant: "destructive"});
+          return toast({title: "Pelanggaran", description: `${santri.nama_lengkap} belum dibuatkan tiket oleh Pengasuh!`, variant: "destructive"});
       }
 
       // 3. Eksekusi Tapping
@@ -128,13 +132,23 @@ const PermitManagement = () => {
               toast({title: "Berhasil Keluar", description: `Hati-hati di jalan, ${santri.nama_lengkap}.`, className: "bg-blue-600 text-white font-bold"});
               
           } else if (activePermit.status === 'Sedang Keluar') {
-              // 🔥 Perbaikan Format Waktu 
-              const cleanTime = activePermit.waktu_selesai.length === 5 ? `${activePermit.waktu_selesai}:00` : activePermit.waktu_selesai;
-              const limitTimeStr = `${activePermit.tanggal_izin}T${cleanTime}`;
-              const limitTime = new Date(limitTimeStr).getTime();
-              const actualTime = new Date(nowIso).getTime();
               
-              const isLate = actualTime > limitTime;
+              const actualTime = new Date(nowIso).getTime();
+              let isLate = false;
+
+              // 🔥 LOGIKA KETERLAMBATAN DIPISAH (JAM VS TANGGAL)
+              if (activePermit.kategori === 'Perizinan') {
+                  const cleanTime = activePermit.waktu_selesai?.length === 5 ? `${activePermit.waktu_selesai}:00` : activePermit.waktu_selesai;
+                  const limitTimeStr = `${activePermit.tanggal_izin}T${cleanTime || '23:59:59'}`;
+                  const limitTime = new Date(limitTimeStr).getTime();
+                  isLate = actualTime > limitTime;
+              } else {
+                  // Perpulangan dihitung batasnya jam 23:59:59 di tanggal kembali
+                  const limitDateStr = `${activePermit.tanggal_kembali}T23:59:59`;
+                  const limitDate = new Date(limitDateStr).getTime();
+                  isLate = actualTime > limitDate;
+              }
+              
               const newStatus = isLate ? 'Terlambat' : 'Sudah Kembali';
 
               const { error } = await supabase.from('student_permits')
@@ -144,7 +158,7 @@ const PermitManagement = () => {
 
               if (isLate) {
                   triggerVibration('error');
-                  toast({title: "Terlambat Kembali", description: `${santri.nama_lengkap} terlambat dari jadwal! Status dicatat.`, variant: "destructive"});
+                  toast({title: "Terlambat Kembali", description: `${santri.nama_lengkap} terlambat dari batas waktu! Status dicatat.`, variant: "destructive"});
               } else {
                   triggerVibration('success');
                   toast({title: "Kembali Tepat Waktu", description: `Selamat datang kembali, ${santri.nama_lengkap}.`, className: "bg-green-600 text-white font-bold"});
@@ -156,30 +170,50 @@ const PermitManagement = () => {
       }
   };
 
-  /* ================= SISTEM FORM IZIN ================= */
+  /* ================= SISTEM FORM ================= */
+  const openForm = (type: string) => {
+      setActiveTab(type);
+      setFormData({
+          ...formData,
+          santri_id: '', alasan: '', penanggung_jawab_id: '',
+          tanggal_izin: new Date().toISOString().split('T')[0],
+          tanggal_kembali: new Date().toISOString().split('T')[0],
+          waktu_mulai: '08:00', waktu_selesai: '12:00'
+      });
+      setFormKelas(""); setFormGender("");
+      setIsFormOpen(true);
+  };
+
   const handleSubmitForm = async () => {
       try {
           if (!formData.santri_id || !formData.alasan || !formData.penanggung_jawab_id) {
               return toast({title: "Lengkapi Data", variant: "destructive"});
           }
           
-          // 🔥 Konversi ke Integer biar Supabase nggak nolak
-          const payload = {
-              ...formData,
-              penanggung_jawab_id: parseInt(formData.penanggung_jawab_id)
+          const payload: any = {
+              kategori: activeTab === 'perizinan' ? 'Perizinan' : 'Perpulangan',
+              santri_id: formData.santri_id,
+              alasan: formData.alasan,
+              tanggal_izin: formData.tanggal_izin,
+              penanggung_jawab_id: parseInt(formData.penanggung_jawab_id),
           };
+
+          // Masukkan data spesifik berdasarkan tipe
+          if (activeTab === 'perizinan') {
+              payload.waktu_mulai = formData.waktu_mulai;
+              payload.waktu_selesai = formData.waktu_selesai;
+              payload.tanggal_kembali = null; // Kosongkan kalau perizinan
+          } else {
+              payload.tanggal_kembali = formData.tanggal_kembali;
+              payload.waktu_mulai = '00:00'; // Default jam untuk perpulangan
+              payload.waktu_selesai = '23:59';
+          }
 
           const { error } = await supabase.from('student_permits').insert([payload]);
           if (error) throw error;
           
           toast({title: "Surat Diterbitkan", description: "Santri sekarang bisa tapping di resepsionis.", className: "bg-green-600 text-white"});
           setIsFormOpen(false); 
-          setFormData({
-              kategori: 'Perizinan', santri_id: '', alasan: '',
-              tanggal_izin: new Date().toISOString().split('T')[0],
-              waktu_mulai: '08:00', waktu_selesai: '12:00', penanggung_jawab_id: ''
-          }); 
-          setFormKelas(""); setFormGender("");
           fetchData();
       } catch (err: any) {
           toast({title: "Gagal Menyimpan", description: err.message, variant: "destructive"});
@@ -209,8 +243,18 @@ const PermitManagement = () => {
                               <p className="text-[10px] text-gray-500 mt-0.5">Kls {p.santri?.kelas}-{getRombel(p.santri?.rombel)} • {p.teacher?.full_name}</p>
                           </td>
                           <td className="p-3">
-                              <p className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded inline-block">{p.waktu_mulai?.slice(0,5)} - {p.waktu_selesai?.slice(0,5)}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">{new Date(p.tanggal_izin).toLocaleDateString('id-ID')}</p>
+                              {/* 🔥 RENDER DINAMIS TERGANTUNG KATEGORI */}
+                              {p.kategori === 'Perizinan' ? (
+                                  <>
+                                      <p className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded inline-block">{p.waktu_mulai?.slice(0,5)} - {p.waktu_selesai?.slice(0,5)}</p>
+                                      <p className="text-[10px] text-gray-400 mt-1">{new Date(p.tanggal_izin).toLocaleDateString('id-ID')}</p>
+                                  </>
+                              ) : (
+                                  <div className="flex flex-col gap-1">
+                                      <p className="text-xs font-bold text-gray-700 flex items-center gap-1"><LogOut size={12}/> {new Date(p.tanggal_izin).toLocaleDateString('id-ID')}</p>
+                                      <p className="text-xs font-bold text-red-600 flex items-center gap-1"><LogIn size={12}/> {p.tanggal_kembali ? new Date(p.tanggal_kembali).toLocaleDateString('id-ID') : '-'}</p>
+                                  </div>
+                              )}
                           </td>
                           <td className="p-3 text-xs font-mono">
                               <div className="flex items-center gap-1 text-blue-600 mb-1"><LogOut size={12}/> {p.waktu_keluar_aktual ? new Date(p.waktu_keluar_aktual).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '--:--'}</div>
@@ -240,15 +284,14 @@ const PermitManagement = () => {
               <h1 className="text-2xl md:text-3xl font-black flex items-center justify-center md:justify-start gap-2 drop-shadow-md">
                   <ShieldCheck className="w-8 h-8 text-blue-300" /> Portal Resepsionis
               </h1>
-              <p className="text-blue-100 mt-1 text-sm">Gerbang keluar masuk santri menggunakan RFID / QR.</p>
+              <p className="text-blue-100 mt-1 text-sm">Gerbang keluar masuk santri (Tap Kartu / RFID).</p>
           </div>
           
-          {/* MESIN TAPPING VIRTUAL */}
           <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm border border-white/20 w-full md:w-96 flex flex-col items-center">
               <label className="text-xs font-bold uppercase tracking-wider text-blue-200 mb-2 flex items-center gap-1"><CreditCard size={14}/> Tap Kartu / Scan Disini</label>
               <Input 
                   autoFocus
-                  placeholder="Arahkan Scanner & Scan..." 
+                  placeholder="Kursor harus disini..." 
                   value={tapInput}
                   onChange={(e) => setTapInput(e.target.value)}
                   onKeyDown={handleTapping}
@@ -257,20 +300,21 @@ const PermitManagement = () => {
           </div>
       </div>
 
-      <div className="flex justify-end">
-          <Button onClick={() => setIsFormOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md">
-              <Plus className="w-4 h-4 mr-2"/> Buat Surat Izin / Pulang
-          </Button>
-      </div>
-
       <Tabs defaultValue="perizinan" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full md:w-[400px] grid-cols-2 mb-4 bg-white shadow-sm border border-gray-200">
-              <TabsTrigger value="perizinan" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold">Perizinan (Keluar)</TabsTrigger>
-              <TabsTrigger value="perpulangan" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white font-bold">Perpulangan (Mudik)</TabsTrigger>
+          <TabsList className="grid w-full md:w-[400px] grid-cols-2 mb-6 bg-white shadow-sm border border-gray-200">
+              <TabsTrigger value="perizinan" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold">Perizinan</TabsTrigger>
+              <TabsTrigger value="perpulangan" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white font-bold">Perpulangan</TabsTrigger>
           </TabsList>
 
           {/* TAB PERIZINAN */}
           <TabsContent value="perizinan" className="space-y-6">
+              {/* TOMBOL BERADA DI DALAM TAB */}
+              <div className="flex justify-end">
+                  <Button onClick={() => openForm("perizinan")} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md">
+                      <Plus className="w-4 h-4 mr-2"/> Buat Surat Perizinan
+                  </Button>
+              </div>
+
               <Card className="border-t-4 border-t-yellow-500 shadow-sm">
                   <CardHeader className="bg-yellow-50/50 pb-3 border-b"><CardTitle className="text-yellow-800 flex items-center gap-2 text-sm"><DoorOpen className="w-5 h-5"/> Sedang Berlangsung (Izin Keluar) <Badge className="bg-yellow-600">{activePerizinan.length}</Badge></CardTitle></CardHeader>
                   <CardContent className="p-4">{renderTable(activePerizinan)}</CardContent>
@@ -284,6 +328,13 @@ const PermitManagement = () => {
 
           {/* TAB PERPULANGAN */}
           <TabsContent value="perpulangan" className="space-y-6">
+               {/* TOMBOL BERADA DI DALAM TAB */}
+               <div className="flex justify-end">
+                  <Button onClick={() => openForm("perpulangan")} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                      <Plus className="w-4 h-4 mr-2"/> Buat Surat Perpulangan
+                  </Button>
+              </div>
+
               <Card className="border-t-4 border-t-orange-500 shadow-sm">
                   <CardHeader className="bg-orange-50/50 pb-3 border-b"><CardTitle className="text-orange-800 flex items-center gap-2 text-sm"><MapPin className="w-5 h-5"/> Sedang Pulang Kampung <Badge className="bg-orange-600">{activePerpulangan.length}</Badge></CardTitle></CardHeader>
                   <CardContent className="p-4">{renderTable(activePerpulangan)}</CardContent>
@@ -296,31 +347,47 @@ const PermitManagement = () => {
           </TabsContent>
       </Tabs>
 
-      {/* DIALOG FORM BUAT SURAT IZIN */}
+      {/* DIALOG FORM DINAMIS (PERIZINAN / PERPULANGAN) */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogContent className="max-w-xl border-t-4 border-t-blue-600">
-              <DialogHeader><DialogTitle className="flex items-center gap-2 text-blue-800"><FileText/> Terbitkan Tiket Izin / Pulang</DialogTitle></DialogHeader>
+          <DialogContent className={`max-w-xl border-t-4 ${activeTab === 'perizinan' ? 'border-t-blue-600' : 'border-t-indigo-600'}`}>
+              <DialogHeader>
+                  <DialogTitle className={`flex items-center gap-2 ${activeTab === 'perizinan' ? 'text-blue-800' : 'text-indigo-800'}`}>
+                      <FileText/> {activeTab === 'perizinan' ? 'Terbitkan Tiket Izin Keluar' : 'Terbitkan Tiket Pulang Kampung'}
+                  </DialogTitle>
+              </DialogHeader>
               <div className="space-y-4 py-2">
-                  <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Kategori</label><Select value={formData.kategori} onValueChange={v=>setFormData({...formData, kategori:v})}><SelectTrigger className="h-9"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Perizinan">Izin Keluar Sebentar</SelectItem><SelectItem value="Perpulangan">Izin Pulang Kampung</SelectItem></SelectContent></Select></div>
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Penanggung Jawab (Pengasuh)</label><Select value={formData.penanggung_jawab_id} onValueChange={v=>setFormData({...formData, penanggung_jawab_id:v})}><SelectTrigger className="h-9"><SelectValue placeholder="Pilih..."/></SelectTrigger><SelectContent className="max-h-[150px]">{teachers.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="grid grid-cols-1 gap-3">
+                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Penanggung Jawab (Pengasuh)</label><Select value={formData.penanggung_jawab_id} onValueChange={v=>setFormData({...formData, penanggung_jawab_id:v})}><SelectTrigger className="h-9"><SelectValue placeholder="Pilih Pengasuh..."/></SelectTrigger><SelectContent className="max-h-[150px]">{teachers.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.full_name}</SelectItem>)}</SelectContent></Select></div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-y border-gray-100 py-3">
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Pilih Kelas</label><Select value={formKelas} onValueChange={(v)=>{setFormKelas(v); setFormData({...formData, santri_id:""});}}><SelectTrigger className="h-9"><SelectValue placeholder="-"/></SelectTrigger><SelectContent>{CLASSES.map(k=><SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Gender Filter</label><Select value={formGender} onValueChange={(v)=>{setFormGender(v); setFormData({...formData, santri_id:""});}}><SelectTrigger className="h-9"><SelectValue placeholder="-"/></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-blue-600">Pilih Santri</label><Select value={formData.santri_id} onValueChange={v=>setFormData({...formData, santri_id:v})} disabled={!formKelas || !formGender}><SelectTrigger className="h-9 border-blue-200"><SelectValue placeholder="Cari..."/></SelectTrigger><SelectContent className="max-h-[150px]">{santris.filter(s=>String(s.kelas)===formKelas && (s.gender===formGender || (formGender==='ikhwan'?s.gender==='L':s.gender==='P'))).map(s=><SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-y border-gray-100 py-3 bg-gray-50/50 px-2 rounded-lg">
+                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Filter Kelas</label><Select value={formKelas} onValueChange={(v)=>{setFormKelas(v); setFormData({...formData, santri_id:""});}}><SelectTrigger className="h-9 bg-white"><SelectValue placeholder="-"/></SelectTrigger><SelectContent>{CLASSES.map(k=><SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Filter Gender</label><Select value={formGender} onValueChange={(v)=>{setFormGender(v); setFormData({...formData, santri_id:""});}}><SelectTrigger className="h-9 bg-white"><SelectValue placeholder="-"/></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
+                      <div className="space-y-1"><label className={`text-[10px] font-bold uppercase ${activeTab === 'perizinan' ? 'text-blue-600' : 'text-indigo-600'}`}>Pilih Santri</label><Select value={formData.santri_id} onValueChange={v=>setFormData({...formData, santri_id:v})} disabled={!formKelas || !formGender}><SelectTrigger className={`h-9 bg-white border ${activeTab === 'perizinan' ? 'border-blue-300' : 'border-indigo-300'}`}><SelectValue placeholder="Cari Nama..."/></SelectTrigger><SelectContent className="max-h-[150px]">{santris.filter(s=>String(s.kelas)===formKelas && (s.gender===formGender || (formGender==='ikhwan'?s.gender==='L':s.gender==='P'))).map(s=><SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>)}</SelectContent></Select></div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Tanggal Izin</label><Input type="date" value={formData.tanggal_izin} onChange={e=>setFormData({...formData, tanggal_izin: e.target.value})} className="h-9"/></div>
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-blue-600">Jam Keluar</label><Input type="time" value={formData.waktu_mulai} onChange={e=>setFormData({...formData, waktu_mulai: e.target.value})} className="h-9 border-blue-200"/></div>
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-red-500">Batas Jam Kembali</label><Input type="time" value={formData.waktu_selesai} onChange={e=>setFormData({...formData, waktu_selesai: e.target.value})} className="h-9 border-red-200"/></div>
-                  </div>
+                  {/* 🔥 INPUT DINAMIS TERGANTUNG TAB AKTIF */}
+                  {activeTab === 'perizinan' ? (
+                      <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Tanggal Izin</label><Input type="date" value={formData.tanggal_izin} onChange={e=>setFormData({...formData, tanggal_izin: e.target.value})} className="h-9"/></div>
+                          <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-blue-600">Jam Keluar</label><Input type="time" value={formData.waktu_mulai} onChange={e=>setFormData({...formData, waktu_mulai: e.target.value})} className="h-9 border-blue-200"/></div>
+                          <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-red-500">Batas Kembali</label><Input type="time" value={formData.waktu_selesai} onChange={e=>setFormData({...formData, waktu_selesai: e.target.value})} className="h-9 border-red-200"/></div>
+                      </div>
+                  ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500 flex items-center gap-1"><LogOut size={12}/> Tanggal Pulang</label><Input type="date" value={formData.tanggal_izin} onChange={e=>setFormData({...formData, tanggal_izin: e.target.value})} className="h-9 border-gray-300"/></div>
+                          <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-red-500 flex items-center gap-1"><LogIn size={12}/> Batas Tgl Kembali</label><Input type="date" value={formData.tanggal_kembali} onChange={e=>setFormData({...formData, tanggal_kembali: e.target.value})} className="h-9 border-red-200"/></div>
+                      </div>
+                  )}
 
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Tujuan / Alasan</label><Input placeholder="Cth: Belanja kitab ke pasar..." value={formData.alasan} onChange={e=>setFormData({...formData, alasan: e.target.value})} className="h-9"/></div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Tujuan / Alasan</label><Input placeholder={activeTab === 'perizinan' ? "Cth: Beli sabun ke minimarket..." : "Cth: Acara pernikahan keluarga..."} value={formData.alasan} onChange={e=>setFormData({...formData, alasan: e.target.value})} className="h-9"/></div>
               </div>
-              <DialogFooter><Button variant="ghost" onClick={()=>setIsFormOpen(false)}>Batal</Button><Button onClick={handleSubmitForm} className="bg-blue-600 hover:bg-blue-700 text-white">Terbitkan Tiket</Button></DialogFooter>
+              <DialogFooter>
+                  <Button variant="ghost" onClick={()=>setIsFormOpen(false)}>Batal</Button>
+                  <Button onClick={handleSubmitForm} className={activeTab === 'perizinan' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}>
+                      Terbitkan Tiket
+                  </Button>
+              </DialogFooter>
           </DialogContent>
       </Dialog>
 
