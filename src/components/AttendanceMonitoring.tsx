@@ -1,21 +1,24 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Html5QrcodeScanner } from "html5-qrcode"; // 🔥 Import Scanner Kamera
 import { 
   Calendar, Save, User, MapPin, 
-  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, Sunrise
+  CheckCircle2, XCircle, Clock, FileSpreadsheet, Users, Trophy, BookOpen, GraduationCap, ArrowLeft, ArrowRight, Moon, QrCode
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
 interface Santri { 
   id: string; nama_lengkap: string; kelas: number; gender: string; nisn: string;
   rombel?: any; kelas_mengaji?: number; rombel_mengaji?: any;
+  nis?: string; rfid_card_id?: string; // 🔥 Tambah properti ini buat QR Code
 }
 interface Teacher { id: number; full_name: string; nip: string; gender: string; }
 interface Activity { id: number; name: string; category: string; tipe_ekskul?: string; }
@@ -67,11 +70,9 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [activities, setActivities] = useState<Activity[]>([]);
   const [members, setMembers] = useState<ActivityMember[]>([]);
   
-  // DateFilter tetap ada untuk patokan query (Hari Ini), tapi UI-nya dihapus
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
   
-  // Form State
-  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]); // TANGGAL INPUT MANUAL
+  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterKelas, setFilterKelas] = useState("all");
   const [logFilterKelas, setLogFilterKelas] = useState("all");
   const [formKelas, setFormKelas] = useState("");
@@ -80,6 +81,16 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   const [formTeacherId, setFormTeacherId] = useState("");
   const [formStatus, setFormStatus] = useState("Izin");
   const [formKet, setFormKet] = useState("");
+
+  // 🔥 STATE & REFS UNTUK SCANNER QR CODE
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const lastScanned = useRef<{text: string, time: number} | null>(null);
+  const scanDeps = useRef({ santriList, selectedMengajiClass, selectedMengajiSubject });
+
+  // Update ref biar scanner selalu pakai data terbaru tanpa harus re-render komponen kamera
+  useEffect(() => {
+      scanDeps.current = { santriList, selectedMengajiClass, selectedMengajiSubject };
+  }, [santriList, selectedMengajiClass, selectedMengajiSubject]);
 
   const getRombel = (rombelData: any) => {
       if (!rombelData) return 'A'; 
@@ -119,7 +130,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
       const { data: schData } = await supabase.from('schedules').select('id, activity_id, teacher_id, kelas, rombel_id, day_of_week, rombel:rombels(nama, kategori)');
       if (schData) setSchedules(schData as any[]);
 
-      const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nisn, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
+      // 🔥 Pastikan narik data NIS dan RFID juga buat dicocokkin pas Scan QR
+      const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, nis, rfid_card_id, gender, rombel, kelas_mengaji, rombel_mengaji').eq('status', 'aktif');
       if (sData) setSantriList(sData as any);
 
       const { data: tData } = await supabase.from('teachers').select('*').eq('is_active', true);
@@ -127,9 +139,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
       const { data: actData } = await supabase.from('activities').select('*').order('name');
       if (actData) setActivities(actData);
-
-      const { data: memData } = await supabase.from('activity_members').select('*');
-      if (memData) setMembers(memData);
 
     } catch (err: any) { } finally { setLoading(false); }
   };
@@ -149,6 +158,92 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
      setSelectedGuruSholatSubject(null); setSelectedGuruSholatWeek(0);
      setSelectedGuruEkskul(null);
   }, [guruTab]);
+
+  // 🔥 EFEK UNTUK JALANIN KAMERA SCANNER QR
+  useEffect(() => {
+    let scanner: Html5QrcodeScanner | null = null;
+
+    if (isScannerOpen) {
+        // Dikasih jeda dikit biar Modal/Dialog di React ke-render dulu
+        const timer = setTimeout(() => {
+            scanner = new Html5QrcodeScanner("reader", { fps: 5, qrbox: { width: 250, height: 250 } }, false);
+            
+            scanner.render(
+                async (decodedText) => {
+                    const nowTime = Date.now();
+                    // Debounce: Cegah scan berkali-kali di waktu yang sama (jeda 3 detik)
+                    if (lastScanned.current && lastScanned.current.text === decodedText && (nowTime - lastScanned.current.time) < 3000) {
+                        return; 
+                    }
+                    lastScanned.current = { text: decodedText, time: nowTime };
+
+                    // Ambil referensi state terbaru
+                    const { santriList: sList, selectedMengajiClass: mClass, selectedMengajiSubject: mSubj } = scanDeps.current;
+                    if (!mClass || !mSubj) return;
+
+                    // 1. Cocokkin Identitas Santri (Bisa dari ID, NIS, atau RFID)
+                    const santri = sList.find(s => s.id === decodedText || s.nis === decodedText || s.rfid_card_id === decodedText);
+
+                    if (!santri) {
+                        toast({title: "Tidak Dikenal", description: "QR Code ini tidak terdaftar di sistem.", variant: "destructive"});
+                        return;
+                    }
+
+                    // 2. Cocokkin Kelas Mengaji
+                    const isMatchClass = (santri.kelas_mengaji || santri.kelas) === mClass.kelas && getRombel(santri.rombel_mengaji || santri.rombel) === mClass.rombel;
+
+                    if (!isMatchClass) {
+                        toast({title: "Beda Kelas", description: `${santri.nama_lengkap} bukan santri di kelas ini.`, variant: "destructive"});
+                        return;
+                    }
+
+                    // 3. Simpan / Update Absen Hadir
+                    try {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        
+                        // Cek langsung ke database biar realtime akurat
+                        const { data: existing } = await supabase.from('attendance_logs')
+                            .select('id, status')
+                            .eq('santri_id', santri.id)
+                            .eq('activity_id', mSubj.id)
+                            .gte('created_at', `${todayStr}T00:00:00`)
+                            .lte('created_at', `${todayStr}T23:59:59`)
+                            .maybeSingle();
+
+                        if (existing) {
+                            if (existing.status === 'Hadir') {
+                                toast({description: `${santri.nama_lengkap} sudah diabsen hadir.`});
+                            } else {
+                                await supabase.from('attendance_logs').update({ status: 'Hadir', scan_time: new Date().toLocaleTimeString() }).eq('id', existing.id);
+                                toast({title: "Diperbarui", description: `${santri.nama_lengkap} berhasil diabsen (Hadir).`, className: "bg-green-600 text-white"});
+                                fetchData();
+                            }
+                        } else {
+                            await supabase.from('attendance_logs').insert([{
+                                santri_id: santri.id,
+                                activity_id: mSubj.id,
+                                status: 'Hadir',
+                                scan_time: new Date().toLocaleTimeString(),
+                                created_at: new Date().toISOString(),
+                                keterangan: 'Scan QR Mengaji'
+                            }]);
+                            toast({title: "Hadir", description: `${santri.nama_lengkap} berhasil diabsen.`, className: "bg-green-600 text-white"});
+                            fetchData();
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                },
+                (error) => { /* Abaikan error background pencarian QR */ }
+            );
+        }, 200);
+
+        return () => {
+            clearTimeout(timer);
+            if (scanner) scanner.clear().catch(e => console.log(e));
+        };
+    }
+  }, [isScannerOpen, toast]);
 
   const dailyLogs = logs.filter(l => l.created_at?.startsWith(dateFilter) || l.scan_time?.startsWith(dateFilter));
 
@@ -187,7 +282,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
   const handleSubmitPermission = async (type: 'santri' | 'guru') => {
       try {
-          // Gabungkan tanggal dari form dengan waktu saat ini
           const selectedDateTime = new Date(formDate);
           const now = new Date();
           selectedDateTime.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
@@ -196,9 +290,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
               status: formStatus, 
               scan_time: selectedDateTime.toLocaleTimeString(), 
               created_at: selectedDateTime.toISOString(), 
-              activity_id: null, 
-              location_id: null, 
-              keterangan: formKet 
+              activity_id: null, location_id: null, keterangan: formKet 
           };
           
           if (type === 'santri') {
@@ -213,11 +305,8 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
           if (error) throw error;
           
           toast({ title: "Berhasil", description: "Data izin/sakit tersimpan." });
-          fetchData(); 
-          setFormSantriId(""); setFormTeacherId(""); setFormKet("");
-      } catch (err: any) { 
-          toast({ title: "Gagal", description: err.message, variant: "destructive" }); 
-      }
+          fetchData(); setFormSantriId(""); setFormTeacherId(""); setFormKet("");
+      } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
   const ChartCard = ({ title, data }: { title: string, data: any[] }) => (
@@ -254,7 +343,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                         <tr>
                             <th className="p-3 text-center w-10 border-r border-green-100">No</th>
                             <th className="p-3 min-w-[200px] border-r border-green-100">Nama Lengkap</th>
-                            <th className="p-3 w-20 border-r border-green-100 text-center">NISN</th>
+                            <th className="p-3 w-20 border-r border-green-100 text-center">NIS</th>
                             {cols.map((c, i) => (
                                 <th key={i} className="p-3 text-center border-r border-green-100 text-xs bg-white" title={c.tooltip}>
                                     {c.label}
@@ -270,7 +359,7 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
                             <tr key={s.id} className="hover:bg-green-50/50 transition-colors">
                                 <td className="p-3 text-center border-r border-gray-100 text-gray-500 font-medium">{idx+1}</td>
                                 <td className="p-3 border-r border-gray-100 font-bold text-gray-800">{s.nama_lengkap}</td>
-                                <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nisn || '-'}</td>
+                                <td className="p-3 border-r border-gray-100 text-center text-gray-500 font-mono text-xs">{s.nis || '-'}</td>
                                 {cols.map((c, i) => (<td key={i} className="p-3 border-r border-gray-100 text-center bg-gray-50/20">{getStatus(s.id, c.key)}</td>))}
                             </tr>
                         ))}
@@ -453,10 +542,22 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
 
       return (
           <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex items-center gap-4 mb-4 bg-green-50 p-4 rounded-xl border-2 border-green-200 shadow-sm">
-                  <Button variant="outline" size="sm" onClick={() => setSelectedMengajiSubject(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
-                  <div><h3 className="font-extrabold text-green-900 text-lg">Ngaji {selectedMengajiSubject.name}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedMengajiClass.kelas}-{selectedMengajiClass.rombel} • Skala Bulanan</p></div>
+              
+              {/* 🔥 TOMBOL SCAN QR DI SINI */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4 bg-green-50 p-4 rounded-xl border-2 border-green-200 shadow-sm justify-between">
+                  <div className="flex items-center gap-4">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedMengajiSubject(null)} className="bg-white border-green-200 text-green-700"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali</Button>
+                      <div><h3 className="font-extrabold text-green-900 text-lg">Ngaji {selectedMengajiSubject.name}</h3><p className="text-xs font-bold text-green-700 mt-1">Kelas {selectedMengajiClass.kelas}-{selectedMengajiClass.rombel} • Skala Bulanan</p></div>
+                  </div>
+                  
+                  {/* Hanya admin/guru yang bisa scan QR */}
+                  {userRole !== 'viewer' && (
+                      <Button onClick={() => setIsScannerOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md w-full sm:w-auto">
+                          <QrCode className="w-4 h-4 mr-2" /> Scan QR Absen
+                      </Button>
+                  )}
               </div>
+
               {renderStudentTable(ikhwan, "Ikhwan", "bg-green-100 text-green-800 border-l-4 border-green-600", columns, getStatus)}
               {renderStudentTable(akhwat, "Akhwat", "bg-pink-100 text-pink-800 border-l-4 border-pink-500", columns, getStatus)}
           </div>
@@ -841,6 +942,31 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
+      {/* DIALOG SCANNER QR MENGAJI */}
+      <Dialog open={isScannerOpen} onOpenChange={(open) => {
+          setIsScannerOpen(open);
+          // Bersihin memory scan sebelumnya kalau dialog ditutup
+          if (!open && lastScanned.current) lastScanned.current = null;
+      }}>
+          <DialogContent className="sm:max-w-md text-center border-t-4 border-t-blue-600">
+              <DialogHeader>
+                  <DialogTitle className="flex items-center justify-center gap-2 text-blue-800">
+                      <QrCode className="w-5 h-5"/> Kamera Scanner Mengaji
+                  </DialogTitle>
+              </DialogHeader>
+              <div className="py-2">
+                  <div id="reader" className="w-full rounded-xl overflow-hidden border-2 border-blue-200 shadow-inner bg-black min-h-[250px]"></div>
+                  <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+                      Arahkan kamera ke QR Code santri.<br/>
+                      Sistem akan otomatis memverifikasi kelas dan mencatat "Hadir".
+                  </p>
+              </div>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsScannerOpen(false)} className="w-full hover:bg-gray-100">Tutup Kamera</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-green-100">
         <div>
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -848,7 +974,6 @@ const AttendanceMonitoring = ({ initialTab = "kbm" }: AttendanceMonitoringProps)
             </h1>
             <p className="text-xs text-gray-500">Pantau kehadiran secara detail per pertemuan, atau historis mingguan/bulanan.</p>
         </div>
-        {/* UI DateFilter di Atas Dihapus sesuai permintaan */}
       </div>
 
       <Tabs defaultValue="santri" value={activeTab} onValueChange={setActiveTab} className="w-full">
