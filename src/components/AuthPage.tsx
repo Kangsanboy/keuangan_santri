@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -6,43 +6,55 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, ArrowRight, Loader2, UserPlus, LogIn, GraduationCap, ArrowLeft, KeyRound } from "lucide-react";
+import { 
+  Database, ArrowRight, Loader2, UserPlus, LogIn, 
+  GraduationCap, ArrowLeft, KeyRound, Eye, EyeOff, ShieldCheck 
+} from "lucide-react";
 
 const AuthPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState(""); 
   const [loading, setLoading] = useState(false);
+  
+  // State untuk navigasi antar form
   const [isLogin, setIsLogin] = useState(true);
-  const [isForgotPassword, setIsForgotPassword] = useState(false); // 🔥 STATE LUPA SANDI
+  const [isForgotPassword, setIsForgotPassword] = useState(false); 
+  const [isUpdatePassword, setIsUpdatePassword] = useState(false); // 🔥 State Form Ganti Sandi Baru
+  
+  // State untuk tombol mata (Show/Hide Password)
+  const [showPassword, setShowPassword] = useState(false);
+  
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // 🔥 DETEKSI SINYAL DARI EMAIL RESET SANDI
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Kalau sistem mendeteksi ada orang yang masuk lewat link "Reset Password" di email
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsUpdatePassword(true);
+        setIsForgotPassword(false);
+        setIsLogin(false);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   // --- LOGIC LOGIN ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-
-      toast({
-        title: "Login Berhasil",
-        description: "Selamat datang di SIMATREN Al-Jawahir.",
-        className: "bg-green-50 border-green-200 text-green-800",
-      });
+      toast({ title: "Login Berhasil", description: "Selamat datang di SIMATREN Al-Jawahir.", className: "bg-green-50 border-green-200 text-green-800" });
       navigate("/");
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Gagal Masuk",
-        description: "Email belum diverifikasi atau kata sandi salah.",
-      });
+      toast({ variant: "destructive", title: "Gagal Masuk", description: "Email belum diverifikasi atau kata sandi salah." });
     } finally {
       setLoading(false);
     }
@@ -51,74 +63,31 @@ const AuthPage = () => {
   // --- LOGIC REGISTER ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!fullName.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Data Belum Lengkap",
-        description: "Nama lengkap wajib diisi.",
-      });
-      return;
-    }
-
+    if (!fullName.trim()) return toast({ variant: "destructive", title: "Data Belum Lengkap", description: "Nama lengkap wajib diisi." });
     setLoading(true);
-
     try {
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName, 
-            role: 'pending' // 🔥 Kasih default role pending biar aman
-          },
-        },
+        email, password, options: { data: { full_name: fullName, role: 'pending' } },
       });
-
       if (error) throw error;
-
-      // 🔥 ALERT VERIFIKASI WAJIB
-      toast({
-        title: "Pendaftaran Berhasil!",
-        description: "Silakan CEK KOTAK MASUK EMAIL Anda (atau folder Spam) untuk mengaktifkan akun sebelum bisa login.",
-        className: "bg-blue-600 text-white font-bold",
-        duration: 8000
-      });
-      
-      setIsLogin(true); 
-      setFullName("");
-      
+      toast({ title: "Pendaftaran Berhasil!", description: "Silakan CEK KOTAK MASUK EMAIL Anda (atau folder Spam) untuk mengaktifkan akun.", className: "bg-blue-600 text-white font-bold", duration: 8000 });
+      setIsLogin(true); setFullName(""); setPassword("");
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Gagal Mendaftar",
-        description: error.message,
-      });
+      toast({ variant: "destructive", title: "Gagal Mendaftar", description: error.message });
     } finally {
       setLoading(false);
     }
   };
 
-  // --- LOGIC LUPA SANDI ---
+  // --- LOGIC LUPA SANDI (KIRIM LINK) ---
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      return toast({ title: "Email Kosong", description: "Harap masukkan alamat email Anda terlebih dahulu.", variant: "destructive" });
-    }
-    
+    if (!email) return toast({ title: "Email Kosong", description: "Harap masukkan alamat email Anda terlebih dahulu.", variant: "destructive" });
     setLoading(true);
     try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin, 
-        });
-
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
         if (error) throw error;
-
-        toast({ 
-          title: "Link Reset Terkirim!", 
-          description: "Silakan cek kotak masuk Email Anda untuk mengatur ulang kata sandi.", 
-          className: "bg-green-600 text-white font-bold" 
-        });
+        toast({ title: "Link Reset Terkirim!", description: "Silakan cek kotak masuk Email Anda untuk mengatur ulang kata sandi.", className: "bg-green-600 text-white font-bold" });
         setIsForgotPassword(false); 
     } catch (err: any) {
         toast({ title: "Gagal Mengirim Link", description: err.message, variant: "destructive" });
@@ -127,58 +96,55 @@ const AuthPage = () => {
     }
   };
 
+  // --- 🔥 LOGIC SIMPAN SANDI BARU ---
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 6) return toast({ title: "Kata Sandi Lemah", description: "Kata sandi minimal harus 6 karakter.", variant: "destructive" });
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: password });
+      if (error) throw error;
+      
+      toast({ title: "Kata Sandi Diperbarui!", description: "Silakan masuk menggunakan kata sandi baru Anda.", className: "bg-green-600 text-white font-bold" });
+      
+      // Kembalikan ke form login setelah sukses
+      setPassword("");
+      setIsUpdatePassword(false);
+      setIsLogin(true);
+    } catch (err: any) {
+      toast({ title: "Gagal Mengubah Sandi", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- TAMPILAN ---
   return (
     <div className="min-h-screen flex w-full bg-green-900 lg:bg-gray-50 relative overflow-hidden">
       
-      {/* Background Blur Effects */}
       <div className="absolute top-0 left-0 w-full h-full opacity-30 lg:opacity-10 pointer-events-none z-0">
         <div className="absolute top-10 left-10 w-64 h-64 rounded-full bg-white blur-3xl"></div>
         <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-yellow-400 blur-3xl"></div>
       </div>
       
-      {/* Bagian Kiri - Branding & Info (Hanya Desktop) */}
+      {/* Bagian Kiri (Desktop) */}
       <div className="hidden lg:flex w-1/2 bg-green-900 relative flex-col justify-between p-12 text-white z-10">
         <div className="relative z-10 flex items-center gap-4">
           <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/20">
-            <img 
-              src="/logo mahad.png" 
-              alt="Logo Al-Jawahir" 
-              className="h-12 w-auto object-contain"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>';
-              }}
-            />
+            <img src="/logo mahad.png" alt="Logo Al-Jawahir" className="h-12 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>'; }} />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-wider font-serif">SIMATREN AL-JAWAHIR</h1>
-            <p className="text-green-200 text-sm tracking-widest uppercase">Sistem Informasi Pesantren</p>
-          </div>
+          <div><h1 className="text-2xl font-bold tracking-wider font-serif">SIMATREN AL-JAWAHIR</h1><p className="text-green-200 text-sm tracking-widest uppercase">Sistem Informasi Pesantren</p></div>
         </div>
-
         <div className="relative z-10 space-y-6 max-w-lg">
-          <h2 className="text-4xl font-bold leading-tight">
-            Transformasi Digital <span className="text-yellow-400">SIMATREN</span> Terpadu
-          </h2>
-          <p className="text-green-100 text-lg leading-relaxed opacity-90">
-            Platform digital terintegrasi untuk pengelolaan akademik, kesantrian, dan administrasi pondok pesantren secara efisien dan real-time.
-          </p>
+          <h2 className="text-4xl font-bold leading-tight">Transformasi Digital <span className="text-yellow-400">SIMATREN</span> Terpadu</h2>
+          <p className="text-green-100 text-lg leading-relaxed opacity-90">Platform digital terintegrasi untuk pengelolaan akademik, kesantrian, dan administrasi pondok pesantren secara efisien dan real-time.</p>
           <div className="flex gap-4 pt-4">
-            <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
-              <Database className="h-5 w-5 text-green-400" />
-              <span className="text-sm font-medium">Data Terintegrasi</span>
-            </div>
-            <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm">
-              <GraduationCap className="h-5 w-5 text-yellow-400" />
-              <span className="text-sm font-medium">Manajemen Akademik</span>
-            </div>
+            <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm"><Database className="h-5 w-5 text-green-400" /><span className="text-sm font-medium">Data Terintegrasi</span></div>
+            <div className="flex items-center gap-2 bg-green-800/50 px-4 py-2 rounded-full border border-green-700 backdrop-blur-sm"><GraduationCap className="h-5 w-5 text-yellow-400" /><span className="text-sm font-medium">Manajemen Akademik</span></div>
           </div>
         </div>
-
-        <div className="relative z-10 text-sm text-green-300/60">
-          &copy; {new Date().getFullYear()} Pondok Pesantren Salafiyah Al-Jawahir. All rights reserved.
-        </div>
+        <div className="relative z-10 text-sm text-green-300/60">&copy; {new Date().getFullYear()} Pondok Pesantren Salafiyah Al-Jawahir.</div>
       </div>
 
       {/* Bagian Kanan - Form Area */}
@@ -187,171 +153,141 @@ const AuthPage = () => {
         {/* Logo Mobile */}
         <div className="flex lg:hidden flex-col items-center justify-center gap-3 mb-6 w-full text-center mt-4">
            <div className="bg-white/10 p-3 rounded-2xl shadow-lg border border-white/20 backdrop-blur-md">
-            <img src="/logo mahad.png" alt="Logo" className="h-12 w-auto object-contain drop-shadow-lg" 
-              onError={(e) => e.currentTarget.style.display = 'none'}
-            />
+            <img src="/logo mahad.png" alt="Logo" className="h-12 w-auto object-contain drop-shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
           </div>
-          <div>
-            <h1 className="font-bold text-white text-3xl font-serif tracking-wider drop-shadow-md">SIMATREN</h1>
-            <p className="text-xs text-yellow-400 font-bold tracking-widest uppercase drop-shadow-md">Al-Jawahir</p>
-          </div>
+          <div><h1 className="font-bold text-white text-3xl font-serif tracking-wider drop-shadow-md">SIMATREN</h1><p className="text-xs text-yellow-400 font-bold tracking-widest uppercase drop-shadow-md">Al-Jawahir</p></div>
         </div>
 
         <Card className="w-full max-w-md border-none shadow-2xl lg:shadow-none bg-white/95 lg:bg-transparent backdrop-blur-md rounded-3xl lg:rounded-none">
           <CardContent className="p-8 lg:p-0 space-y-8">
             
-            {/* ================= MODE LUPA SANDI ================= */}
-            {isForgotPassword ? (
+            {/* ================= MODE GANTI SANDI BARU ================= */}
+            {isUpdatePassword ? (
+              <div className="animate-in fade-in zoom-in duration-500">
+                <div className="space-y-2 text-center lg:text-left pt-2 lg:pt-0 mb-6">
+                  <div className="mx-auto lg:mx-0 bg-green-100 p-3 rounded-full w-fit mb-4">
+                    <ShieldCheck className="w-8 h-8 text-green-600" />
+                  </div>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Buat Sandi Baru</h2>
+                  <p className="text-gray-500 text-sm lg:text-base">Silakan buat kata sandi baru untuk mengamankan kembali akun Anda.</p>
+                </div>
+                
+                <form onSubmit={handleUpdatePassword} className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword">Kata Sandi Baru</Label>
+                    <div className="relative">
+                      <Input 
+                        id="newPassword" 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="Minimal 6 karakter..." 
+                        className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white pr-10"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none">
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2 rounded-xl" disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Simpan Kata Sandi"}
+                  </Button>
+                </form>
+              </div>
+
+            ) : isForgotPassword ? (
+              /* ================= MODE LUPA SANDI (KIRIM LINK) ================= */
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="space-y-2 text-center lg:text-left pt-2 lg:pt-0 mb-6">
                   <div className="mx-auto lg:mx-0 bg-orange-100 p-3 rounded-full w-fit mb-4">
                     <KeyRound className="w-8 h-8 text-orange-600" />
                   </div>
                   <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Lupa Kata Sandi?</h2>
-                  <p className="text-gray-500 text-sm lg:text-base">
-                    Masukkan email Anda. Kami akan mengirimkan tautan untuk mengatur ulang kata sandi.
-                  </p>
+                  <p className="text-gray-500 text-sm lg:text-base">Masukkan email Anda. Kami akan mengirimkan tautan untuk mengatur ulang kata sandi.</p>
                 </div>
                 
                 <form onSubmit={handleResetPassword} className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="emailReset">Alamat Email Terdaftar</Label>
-                    <Input 
-                      id="emailReset" 
-                      type="email" 
-                      placeholder="nama@aljawahir.com" 
-                      className="h-12 border-gray-200 focus:border-orange-500 focus:ring-orange-500 bg-white"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
+                    <Input id="emailReset" type="email" placeholder="nama@aljawahir.com" className="h-12 border-gray-200 focus:border-orange-500 focus:ring-orange-500 bg-white" value={email} onChange={(e) => setEmail(e.target.value)} required />
                   </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2 rounded-xl"
-                    disabled={loading}
-                  >
+                  <Button type="submit" className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2 rounded-xl" disabled={loading}>
                     {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Kirim Tautan Reset"}
                   </Button>
                 </form>
 
                 <div className="text-center mt-8 pt-4 border-t border-gray-100">
-                  <button 
-                    type="button"
-                    onClick={() => setIsForgotPassword(false)}
-                    className="text-sm font-bold text-gray-500 hover:text-gray-800 transition-colors inline-flex items-center"
-                  >
+                  <button type="button" onClick={() => setIsForgotPassword(false)} className="text-sm font-bold text-gray-500 hover:text-gray-800 transition-colors inline-flex items-center">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Halaman Login
                   </button>
                 </div>
               </div>
+
             ) : (
               /* ================= MODE LOGIN / REGISTER ================= */
               <div className="animate-in fade-in slide-in-from-left-4 duration-500">
                 <div className="space-y-2 text-center lg:text-left pt-2 lg:pt-0">
-                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">
-                    {isLogin ? "PORTAL SIMATREN" : "Buat Akun Pengurus"}
-                  </h2>
-                  <p className="text-gray-500 text-sm lg:text-base">
-                    {isLogin 
-                      ? "Masukan kredensial Anda untuk mengakses sistem pesantren." 
-                      : "Daftarkan akun baru untuk staf atau pengurus pondok."}
-                  </p>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">{isLogin ? "PORTAL SIMATREN" : "Buat Akun Pengurus"}</h2>
+                  <p className="text-gray-500 text-sm lg:text-base">{isLogin ? "Masukan kredensial Anda untuk mengakses sistem pesantren." : "Daftarkan akun baru untuk staf atau pengurus pondok."}</p>
                 </div>
 
                 <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-5 mt-8">
-                  
                   {!isLogin && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                       <Label htmlFor="fullName">Nama Lengkap</Label>
-                      <Input 
-                        id="fullName" 
-                        type="text" 
-                        placeholder="Contoh: Ahmad Fulan" 
-                        className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        required={!isLogin}
-                      />
+                      <Input id="fullName" type="text" placeholder="Contoh: Ahmad Fulan" className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white" value={fullName} onChange={(e) => setFullName(e.target.value)} required={!isLogin} />
                     </div>
                   )}
 
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="nama@aljawahir.com" 
-                      className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
+                    <Input id="email" type="email" placeholder="nama@aljawahir.com" className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white" value={email} onChange={(e) => setEmail(e.target.value)} required />
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                        <Label htmlFor="password">Password</Label>
-                       {/* 🔥 TOMBOL LUPA SANDI */}
                        {isLogin && (
-                          <button 
-                            type="button" 
-                            onClick={() => setIsForgotPassword(true)}
-                            className="text-xs font-bold text-green-700 hover:text-green-900 hover:underline"
-                          >
-                            Lupa sandi?
-                          </button>
+                          <button type="button" onClick={() => setIsForgotPassword(true)} className="text-xs font-bold text-green-700 hover:text-green-900 hover:underline">Lupa sandi?</button>
                        )}
                     </div>
-                    <Input 
-                      id="password" 
-                      type="password" 
-                      placeholder="••••••••" 
-                      className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
+                    {/* 🔥 TOMBOL MATA SHOW/HIDE DITAMBAHKAN DI SINI */}
+                    <div className="relative">
+                      <Input 
+                        id="password" 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="••••••••" 
+                        className="h-12 border-gray-200 focus:border-green-500 focus:ring-green-500 bg-white pr-10"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowPassword(!showPassword)} 
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2 rounded-xl"
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    ) : (
-                      <>
-                        {isLogin ? "Masuk" : "Daftar Akun"} 
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </>
-                    )}
+                  <Button type="submit" className="w-full h-12 bg-green-900 hover:bg-green-800 text-white font-bold text-base transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 mt-2 rounded-xl" disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <>{isLogin ? "Masuk" : "Daftar Akun"} <ArrowRight className="ml-2 h-5 w-5" /></>}
                   </Button>
                 </form>
 
                 <div className="relative mt-8">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white lg:bg-gray-50 px-2 text-gray-500 font-bold">Atau</span>
-                  </div>
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-200" /></div>
+                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-white lg:bg-gray-50 px-2 text-gray-500 font-bold">Atau</span></div>
                 </div>
 
                 <div className="text-center mt-6 pb-2 lg:pb-0">
                   <p className="text-sm text-gray-600">
                     {isLogin ? "Belum memiliki akun staff? " : "Sudah memiliki akun? "}
-                    <button 
-                      type="button"
-                      onClick={() => setIsLogin(!isLogin)}
-                      className="ml-2 font-bold text-green-700 hover:text-green-800 hover:underline transition-colors inline-flex items-center"
-                    >
-                      {isLogin ? (
-                        <>Daftar Sekarang <UserPlus className="ml-1 h-4 w-4" /></>
-                      ) : (
-                        <>Masuk Disini <LogIn className="ml-1 h-4 w-4" /></>
-                      )}
+                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="ml-2 font-bold text-green-700 hover:text-green-800 hover:underline transition-colors inline-flex items-center">
+                      {isLogin ? <>Daftar Sekarang <UserPlus className="ml-1 h-4 w-4" /></> : <>Masuk Disini <LogIn className="ml-1 h-4 w-4" /></>}
                     </button>
                   </p>
                 </div>
