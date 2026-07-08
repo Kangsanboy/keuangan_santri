@@ -49,53 +49,49 @@ interface ClassSummary {
 const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagementProps) => {
   const { toast } = useToast();
   
-  const [activeKelas, setActiveKelas] = useState<number | null>(initialKelas ? parseInt(initialKelas) : null);
-  const [santris, setSantris] = useState<SantriSaldo[]>([]);
-  const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  const [activeTab, setActiveTab] = useState<"ikhwan" | "akhwat">("ikhwan");
+  // 1. TAMBAHKAN STATE UNTUK USER LOGIN
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [formData, setFormData] = useState<Partial<SantriSaldo>>({
-    gender: 'ikhwan', status: 'aktif', kelas: 7, rombel: 'A', rfid_card_id: ''
-  });
-
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-
-  const fetchSummaries = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.from('view_santri_saldo').select('kelas, saldo');
-      if (error) throw error;
-      if (data) {
-        const summaries: ClassSummary[] = [];
-        const classes = [7, 8, 9, 10, 11, 12]; 
-        classes.forEach(k => {
-          const filtered = data.filter(d => d.kelas === k);
-          const total = filtered.reduce((acc, curr) => acc + (curr.saldo || 0), 0);
-          summaries.push({ kelas: k, count: filtered.length, totalSaldo: total });
-        });
-        setClassSummaries(summaries);
+  // 2. FETCH USER SAAT MOUNT
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: user } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        setCurrentUser(user);
       }
-    } catch (error: any) { console.error("Error summary:", error); } finally { setLoading(false); }
-  };
+    };
+    getUser();
+  }, []);
+
+  // ... (State lainnya tetap sama)
 
   const fetchSantrisInClass = async () => {
     if (activeKelas === null) return;
     setLoading(true);
     try {
-      const { data: baseData, error } = await supabase.from('santri_2025_12_01_21_34')
+      // 3. LOGIKA FILTER PENGASUH
+      let query = supabase.from('santri_2025_12_01_21_34')
         .select('*')
         .eq('kelas', activeKelas)
         .order('rombel', { ascending: true }) 
         .order('nama_lengkap', { ascending: true });
+
+      // Jika yang login adalah pengasuh, filter berdasarkan kelas dan gender asuhannya
+      if (currentUser?.role === 'pengasuh') {
+        query = query
+          .eq('kelas', parseInt(currentUser.kelas_asuh))
+          .eq('gender', currentUser.gender_asuh);
+      }
         
+      const { data: baseData, error } = await query;
       if (error) throw error;
 
+      // ... (Bagian fetch saldo tetap sama)
       const { data: saldoData } = await supabase.from('view_santri_saldo')
         .select('id, saldo')
         .eq('kelas', activeKelas);
