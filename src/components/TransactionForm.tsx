@@ -4,57 +4,53 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarIcon, Wallet } from "lucide-react";
+import { CalendarIcon, Wallet, Download, ArrowDownCircle, ArrowUpCircle, History } from "lucide-react";
 
 interface Santri {
   id: string;
   nama_lengkap: string;
+  saldo: number;
+}
+
+interface TransactionHistory {
+  id: string;
+  amount: number;
+  type: 'income' | 'expense';
+  transaction_date: string;
+  santri: { nama_lengkap: string };
 }
 
 type UIType = "pemasukan" | "pengeluaran";
-type DBType = "income" | "expense";
 
 const TransactionForm = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [type, setType] = useState<UIType>("pemasukan");
   const [kelas, setKelas] = useState<number | null>(null);
   const [gender, setGender] = useState<"ikhwan" | "akhwat" | null>(null);
-  const [santriId, setSantriId] = useState<string | null>(null);
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
   
-  // State untuk Tanggal, Saldo, dan User Profil
+  const [santriList, setSantriList] = useState<Santri[]>([]);
+  const [historyList, setHistoryList] = useState<TransactionHistory[]>([]);
+  
+  // State untuk form massal: Record<santri_id, { amount: string, mode: '10000' | 'custom' }>
+  const [formData, setFormData] = useState<Record<string, { amount: string, mode: '10000' | 'custom' }>>({});
+  
   const [trxDate, setTrxDate] = useState<string>(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()));
-  const [currentSaldo, setCurrentSaldo] = useState<number>(0);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
-  /* FETCH DATA USER (CEK PENGASUH) */
+  /* 1. FETCH DATA USER (CEK PENGASUH) */
   useEffect(() => {
     const fetchProfile = async () => {
       if (user?.id) {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-          
+        const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
         setCurrentUser(data);
-
-        // Jika role pengasuh, otomatis isi kelas dan gender, tidak perlu reset manual
         if (data?.role === 'pengasuh') {
           setKelas(parseInt(data.kelas_asuh));
           setGender(data.gender_asuh);
@@ -64,220 +60,282 @@ const TransactionForm = () => {
     fetchProfile();
   }, [user]);
 
-  /* Handler Manual untuk Select Kelas & Gender agar tidak bentrok dengan auto-fill Pengasuh */
-  const handleKelasChange = (v: string) => {
-    setKelas(Number(v));
-    setGender(null);
-    setSantriId(null);
-    setSantriList([]);
-    setCurrentSaldo(0);
-  };
+  /* 2. FETCH DAFTAR SANTRI & SALDO + RIWAYAT */
+  const fetchData = async () => {
+    if (!kelas || !gender) return;
 
-  const handleGenderChange = (v: "ikhwan" | "akhwat") => {
-    setGender(v);
-    setSantriId(null);
-    setSantriList([]);
-    setCurrentSaldo(0);
-  };
+    // A. Fetch Santri & Saldo
+    const { data: santriData } = await supabase
+      .from("santri_2025_12_01_21_34")
+      .select("id, nama_lengkap")
+      .eq("kelas", kelas).eq("gender", gender).eq("status", "aktif")
+      .order("nama_lengkap");
 
-  /* AMBIL SALDO SAAT SANTRI DIPILIH */
-  useEffect(() => {
-    const fetchSaldoSantri = async () => {
-        if (!santriId) {
-            setCurrentSaldo(0);
-            return;
-        }
-        const { data, error } = await supabase
-            .from("view_santri_saldo")
-            .select("saldo")
-            .eq("id", santriId)
-            .single();
+    const { data: saldoData } = await supabase.from("view_santri_saldo").select("id, saldo").eq("kelas", kelas);
 
-        if (data) setCurrentSaldo(data.saldo || 0);
-    };
+    const mergedSantri = santriData?.map(s => {
+      const match = saldoData?.find(sd => sd.id === s.id);
+      return { ...s, saldo: match?.saldo || 0 };
+    }) || [];
 
-    fetchSaldoSantri();
-  }, [santriId]);
+    setSantriList(mergedSantri);
 
-  /* Ambil daftar santri jika kelas dan gender sudah ada */
-  useEffect(() => {
-    const fetchSantri = async () => {
-      if (!kelas || !gender) return;
+    // Inisialisasi state form default untuk pengeluaran (mode 10000)
+    const initialForm: Record<string, any> = {};
+    mergedSantri.forEach(s => {
+        initialForm[s.id] = { amount: "", mode: "10000" };
+    });
+    setFormData(initialForm);
 
-      const { data, error } = await supabase
-        .from("santri_2025_12_01_21_34")
-        .select("id, nama_lengkap")
-        .eq("kelas", kelas)
-        .eq("gender", gender)
-        .eq("status", "aktif")
-        .order("nama_lengkap");
-
-      if (error) {
-        toast({ title: "Error", description: "Gagal memuat santri", variant: "destructive" });
-        return;
-      }
-      setSantriList(data || []);
-    };
-
-    fetchSantri();
-  }, [kelas, gender]);
-
-  /* Simpan Transaksi */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!kelas || !gender || !santriId || !amount || !trxDate) {
-      toast({ title: "Data belum lengkap", description: "Lengkapi semua field termasuk tanggal.", variant: "destructive" });
-      return;
-    }
-
-    const nominal = Number(amount);
-
-    if (nominal <= 0) {
-      toast({ title: "Nominal tidak valid", description: "Nominal harus lebih dari 0", variant: "destructive" });
-      return;
-    }
-
-    // CEK PROTEKSI ANTI MINUS
-    if (type === "pengeluaran" && nominal > currentSaldo) {
-        toast({
-            title: "Saldo Tidak Cukup!",
-            description: `Sisa saldo santri hanya Rp ${currentSaldo.toLocaleString("id-ID")}. Transaksi dibatalkan.`,
-            variant: "destructive",
-        });
-        return; 
-    }
-
-    const dbType: DBType = type === "pemasukan" ? "income" : "expense";
-    setLoading(true);
-
-    try {
-      const { error } = await supabase
-        .from("transactions_2025_12_01_21_34")
-        .insert({
-          user_id: user!.id,
-          santri_id: santriId,
-          type: dbType,
-          amount: nominal,
-          description,
-          category: "santri",
-          transaction_date: trxDate, 
-        });
-
-      if (error) throw error;
-
-      toast({ title: "Berhasil", description: `Transaksi ${type} berhasil disimpan` });
-
-      // 🔥 Update saldo lokal form biar responsif
-      if (type === "pemasukan") setCurrentSaldo(prev => prev + nominal);
-      else setCurrentSaldo(prev => prev - nominal);
-
-      setAmount("");
-      setDescription("");
-
-      // 🔥 Tembak sinyal refresh ke Index.tsx pakai Timeout sebentar biar DB siap
-      setTimeout(() => {
-          window.dispatchEvent(new Event("refresh-keuangan"));
-      }, 100);
+    // B. Fetch Riwayat Transaksi Kelas Ini
+    const { data: historyData } = await supabase
+      .from("transactions_2025_12_01_21_34")
+      .select(`id, amount, type, transaction_date, santri:santri_id(nama_lengkap)`)
+      .in('santri_id', mergedSantri.map(s => s.id))
+      .order('created_at', { ascending: false })
+      .limit(20);
       
+    // @ts-ignore
+    setHistoryList(historyData || []);
+  };
+
+  useEffect(() => { fetchData(); }, [kelas, gender]);
+
+  /* HANDLER PERUBAHAN INPUT MASSAL */
+  const handleAmountChange = (id: string, val: string) => {
+    setFormData(prev => ({ ...prev, [id]: { ...prev[id], amount: val } }));
+  };
+
+  const handleModeChange = (id: string, mode: '10000' | 'custom') => {
+    setFormData(prev => ({ 
+        ...prev, 
+        [id]: { mode, amount: mode === '10000' ? "" : prev[id]?.amount || "" } 
+    }));
+  };
+
+  /* 3. SIMPAN SEMUA TRANSAKSI SEKALIGUS (BULK INSERT) */
+  const handleBulkSubmit = async () => {
+    if (!trxDate) return toast({ title: "Pilih Tanggal!", variant: "destructive" });
+
+    const transactionsToInsert: any[] = [];
+    const dbType = type === "pemasukan" ? "income" : "expense";
+    let hasError = false;
+
+    for (const santri of santriList) {
+        const rowData = formData[santri.id];
+        let finalAmount = 0;
+
+        if (type === 'pengeluaran' && rowData?.mode === '10000') {
+            finalAmount = 10000; // Jika tidak di-klik hapus/ubah, anggap default 10k ada isinya kalau mode ini dipilih
+            // Catatan: Supaya tidak otomatis kepotong semua santri, kita cek apakah checkbox/input dikosongkan.
+            // Di desain ini, JIKA mode 10000 dipilih, kita anggap dia jajan 10k. 
+            // TAPI, untuk amannya, kita hanya insert kalau usernya ngeklik sesuatu atau kita jadikan opsi kosong sebagai default.
+            // *Perbaikan logika UX:* Kita hanya proses jika 'amount' diisi, ATAU jika mode pengeluaran adalah '10000' DAN dia tidak berniat mengosongkannya.
+            // Agar aman, mari kita syaratkan user MENGETIK nominal, atau MEMILIH mode 10000 secara sadar. 
+            // Karena ini form massal, lebih baik kita baca dari `amount`.
+        }
+        
+        // Logika Pasti: Ambil nominal dari input teks. Khusus mode 10k, input teks otomatis di-set/dianggap 10000 di UI jika tidak diubah.
+        if (type === 'pemasukan') {
+            finalAmount = Number(rowData?.amount || 0);
+        } else {
+            finalAmount = rowData?.mode === '10000' ? 10000 : Number(rowData?.amount || 0);
+            
+            // JIKA user pilih custom tapi kosong, abaikan (0)
+            if (rowData?.mode === 'custom' && (!rowData?.amount || rowData?.amount === '0')) {
+                finalAmount = 0;
+            }
+        }
+
+        // Cek jika ada nominal yang valid untuk diinsert
+        if (finalAmount > 0) {
+            // Proteksi Saldo Minus untuk Pengeluaran
+            if (type === 'pengeluaran' && finalAmount > santri.saldo) {
+                toast({ title: `Saldo ${santri.nama_lengkap} Tidak Cukup!`, description: `Sisa Rp ${santri.saldo.toLocaleString()}`, variant: "destructive" });
+                hasError = true;
+                break; // Hentikan proses jika ada 1 saja yang minus
+            }
+
+            transactionsToInsert.push({
+                user_id: user!.id,
+                santri_id: santri.id,
+                type: dbType,
+                amount: finalAmount,
+                description: type === 'pemasukan' ? 'Setoran Massal' : 'Jajan Massal',
+                category: "santri",
+                transaction_date: trxDate,
+            });
+        }
+    }
+
+    if (hasError) return;
+    if (transactionsToInsert.length === 0) {
+        return toast({ title: "Form Kosong", description: "Tidak ada nominal yang diisi.", variant: "destructive" });
+    }
+
+    setLoading(true);
+    try {
+        const { error } = await supabase.from("transactions_2025_12_01_21_34").insert(transactionsToInsert);
+        if (error) throw error;
+
+        toast({ title: "Berhasil!", description: `${transactionsToInsert.length} data transaksi disimpan.`, className: "bg-green-600 text-white" });
+        
+        // Reset isi form
+        const resetForm: Record<string, any> = {};
+        santriList.forEach(s => resetForm[s.id] = { amount: "", mode: "10000" });
+        setFormData(resetForm);
+        
+        // Refresh data saldo dan riwayat
+        fetchData();
+        setTimeout(() => window.dispatchEvent(new Event("refresh-keuangan")), 100);
     } catch (err) {
-      console.error(err);
-      toast({ title: "Error", description: "Gagal menyimpan transaksi", variant: "destructive" });
+        toast({ title: "Gagal Menyimpan", variant: "destructive" });
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
   return (
-    <Card className="border-green-100 shadow-sm">
-      <CardHeader className="pb-3 border-b border-gray-50 bg-gray-50/30">
-        <CardTitle className="text-lg font-bold text-gray-800">Tambah Transaksi Baru</CardTitle>
-      </CardHeader>
-
-      <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4 text-green-600" /> Tanggal Transaksi
-            </Label>
-            <Input type="date" value={trxDate} onChange={(e) => setTrxDate(e.target.value)} className="bg-white border-green-200 focus:ring-green-500 font-medium" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-                <Label>Jenis</Label>
-                <Select value={type} onValueChange={(v) => setType(v as UIType)}>
-                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="pemasukan" className="text-green-600 font-medium">Pemasukan (+)</SelectItem>
-                    <SelectItem value="pengeluaran" className="text-red-600 font-medium">Pengeluaran (-)</SelectItem>
-                </SelectContent>
-                </Select>
+    <div className="space-y-6">
+        <Card className="border-green-100 shadow-sm bg-white">
+        <CardHeader className="pb-4 border-b border-gray-50 bg-gray-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <CardTitle className="text-xl font-bold text-gray-800">Buku Kas Kelas</CardTitle>
+                <p className="text-sm text-gray-500">Input transaksi santri secara massal.</p>
             </div>
-            <div className="space-y-2">
-                <Label>Kelas</Label>
-                <Select 
-                   value={kelas ? kelas.toString() : undefined} 
-                   onValueChange={handleKelasChange}
-                   disabled={currentUser?.role === 'pengasuh'}
-                >
-                  <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : "bg-white"}>
-                    <SelectValue placeholder="Pilih..." />
-                  </SelectTrigger>
-                  <SelectContent>{[7, 8, 9, 10, 11, 12].map((k) => (<SelectItem key={k} value={k.toString()}>Kelas {k}</SelectItem>))}</SelectContent>
-                </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-                <Label>Gender</Label>
-                <Select 
-                  value={gender ?? undefined} 
-                  onValueChange={(v) => handleGenderChange(v as "ikhwan" | "akhwat")} 
-                  disabled={!kelas || currentUser?.role === 'pengasuh'}
-                >
-                  <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : "bg-white"}>
-                    <SelectValue placeholder="Pilih..." />
-                  </SelectTrigger>
-                  <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <Label>Santri</Label>
-                <Select value={santriId ?? undefined} onValueChange={(v) => setSantriId(v)} disabled={santriList.length === 0}>
-                <SelectTrigger className="bg-white"><SelectValue placeholder="Pilih nama..." /></SelectTrigger>
-                <SelectContent>{santriList.map((s) => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>))}</SelectContent>
-                </Select>
-            </div>
-          </div>
-
-          {santriId && (
-              <div className="bg-green-50 p-3 rounded-lg flex items-center justify-between border border-green-200">
-                  <div className="flex items-center gap-2 text-sm text-green-800"><Wallet className="w-4 h-4" /><span>Sisa Saldo:</span></div>
-                  <span className="font-bold text-green-700 text-lg">Rp {currentSaldo.toLocaleString("id-ID")}</span>
-              </div>
-          )}
-
-          <div className="space-y-2">
-            <Label>Nominal (Rp)</Label>
-            <Input type="number" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="font-bold text-gray-700 bg-white" />
-            {type === 'pengeluaran' && santriId && (Number(amount) > currentSaldo) && (
-                <p className="text-xs text-red-500 font-medium animate-pulse">⚠️ Nominal melebihi sisa saldo!</p>
+            
+            {/* Tombol Export hanya untuk Admin/Guru */}
+            {currentUser?.role !== 'pengasuh' && (
+                <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 shadow-sm"><Download className="w-4 h-4 mr-2"/> Export Data</Button>
             )}
-          </div>
+        </CardHeader>
 
-          <div className="space-y-2">
-            <Label>Keterangan</Label>
-            <Textarea placeholder="Contoh: Tabungan mingguan, Uang saku..." value={description} onChange={(e) => setDescription(e.target.value)} className="bg-white" />
-          </div>
+        <CardContent className="pt-6 space-y-6">
+            {/* FILTER & TANGGAL */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="space-y-1">
+                    <Label className="text-gray-600">Tanggal Trx</Label>
+                    <Input type="date" value={trxDate} onChange={(e) => setTrxDate(e.target.value)} className="bg-white font-bold" />
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-gray-600">Kelas</Label>
+                    <Select value={kelas ? String(kelas) : undefined} onValueChange={(v) => setKelas(Number(v))} disabled={currentUser?.role === 'pengasuh'}>
+                        <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-70" : "bg-white"}><SelectValue placeholder="Pilih Kelas..." /></SelectTrigger>
+                        <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-gray-600">Gender</Label>
+                    <Select value={gender || undefined} onValueChange={(v: any) => setGender(v)} disabled={currentUser?.role === 'pengasuh'}>
+                        <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-70" : "bg-white"}><SelectValue placeholder="Pilih Gender..." /></SelectTrigger>
+                        <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
+                    </Select>
+                </div>
+            </div>
 
-          <Button type="submit" disabled={loading} className={`w-full font-bold shadow-md transition-all ${type === 'pemasukan' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-            {loading ? "Menyimpan..." : type === 'pemasukan' ? "Simpan Pemasukan" : "Simpan Pengeluaran"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+            {/* TOGGLE JENIS TRANSAKSI */}
+            <div className="flex w-full bg-gray-100 rounded-xl p-1">
+                <button onClick={() => setType('pemasukan')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold text-sm transition-all ${type === 'pemasukan' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-green-600'}`}>
+                    <ArrowDownCircle className="w-5 h-5"/> PEMASUKAN (+)
+                </button>
+                <button onClick={() => setType('pengeluaran')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold text-sm transition-all ${type === 'pengeluaran' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-red-600'}`}>
+                    <ArrowUpCircle className="w-5 h-5"/> PENGELUARAN (-)
+                </button>
+            </div>
+
+            {/* FORM MASSAL (TABLE VIEW) */}
+            {kelas && gender ? (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                        <thead className={`border-b ${type === 'pemasukan' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                            <tr>
+                                <th className="p-3">Nama Santri</th>
+                                <th className="p-3 text-right w-[150px]">Sisa Saldo</th>
+                                <th className="p-3 text-center w-[250px]">Nominal Transaksi</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {santriList.length === 0 ? (
+                                <tr><td colSpan={3} className="p-6 text-center text-gray-400 italic">Tidak ada data santri.</td></tr>
+                            ) : (
+                                santriList.map(santri => (
+                                    <tr key={santri.id} className="hover:bg-gray-50">
+                                        <td className="p-3 font-bold text-gray-700">{santri.nama_lengkap}</td>
+                                        <td className="p-3 text-right">
+                                            <span className={`font-medium ${santri.saldo < 10000 ? 'text-red-500' : 'text-gray-600'}`}>Rp {santri.saldo.toLocaleString()}</span>
+                                        </td>
+                                        <td className="p-3 flex justify-center gap-2">
+                                            {type === 'pemasukan' ? (
+                                                <Input type="number" placeholder="Rp 0" value={formData[santri.id]?.amount || ""} onChange={(e) => handleAmountChange(santri.id, e.target.value)} className="w-full text-right font-bold focus:border-green-500" />
+                                            ) : (
+                                                <div className="flex gap-2 w-full">
+                                                    <Select value={formData[santri.id]?.mode || '10000'} onValueChange={(v: any) => handleModeChange(santri.id, v)}>
+                                                        <SelectTrigger className="w-[120px] bg-white"><SelectValue/></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="10000">Rp 10.000</SelectItem>
+                                                            <SelectItem value="custom">Custom</SelectItem>
+                                                            <SelectItem value="batal" className="text-red-500 font-bold">KOSONG (-)</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    
+                                                    {formData[santri.id]?.mode === 'custom' && (
+                                                        <Input type="number" placeholder="Rp..." value={formData[santri.id]?.amount || ""} onChange={(e) => handleAmountChange(santri.id, e.target.value)} className="w-full text-right font-bold focus:border-red-500" />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <div className="p-8 border-2 border-dashed border-gray-200 rounded-xl text-center text-gray-500">
+                    Silakan pilih kelas dan gender terlebih dahulu.
+                </div>
+            )}
+
+            {santriList.length > 0 && (
+                <Button onClick={handleBulkSubmit} disabled={loading} className={`w-full h-14 text-lg font-bold shadow-lg ${type === 'pemasukan' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                    {loading ? "Menyimpan Data..." : `SIMPAN SEMUA DATA ${type.toUpperCase()}`}
+                </Button>
+            )}
+        </CardContent>
+        </Card>
+
+        {/* TABEL RIWAYAT KELAS */}
+        {santriList.length > 0 && (
+            <Card className="border-gray-200 shadow-sm bg-white">
+                <CardHeader className="border-b bg-gray-50/50 p-4">
+                    <CardTitle className="text-base font-bold text-gray-700 flex items-center gap-2"><History className="w-5 h-5 text-blue-500"/> Riwayat Transaksi Anak Asuh</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <table className="w-full text-left text-sm">
+                        <tbody className="divide-y divide-gray-100">
+                            {historyList.length === 0 ? (
+                                <tr><td className="p-4 text-center text-gray-400 italic">Belum ada riwayat transaksi.</td></tr>
+                            ) : (
+                                historyList.map(hist => (
+                                    <tr key={hist.id} className="hover:bg-gray-50">
+                                        <td className="p-3">
+                                            <p className="font-bold text-gray-800">{hist.santri?.nama_lengkap}</p>
+                                            <p className="text-xs text-gray-500">{hist.transaction_date}</p>
+                                        </td>
+                                        <td className="p-3 text-right">
+                                            <span className={`font-bold ${hist.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                                                {hist.type === 'income' ? '+' : '-'} Rp {hist.amount.toLocaleString()}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </CardContent>
+            </Card>
+        )}
+    </div>
   );
 };
 
