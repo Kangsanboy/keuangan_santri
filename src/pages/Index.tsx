@@ -16,8 +16,8 @@ import ClassManagement from "@/components/ClassManagement";
 import PiketManagement from "@/components/PiketManagement";
 import ViolationManagement from "@/components/ViolationManagement";
 import PermitManagement from "@/components/PermitManagement";
-import { DoorOpen } from "lucide-react"; // Boleh pakai DoorOpen atau ShieldCheck
-import { Scale } from "lucide-react"; // Ambil icon timbangan/hukum
+import { DoorOpen } from "lucide-react"; 
+import { Scale } from "lucide-react"; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -211,7 +211,7 @@ const Index = () => {
     const handleRefreshEvent = () => { 
         fetchKeuangan(); 
         fetchRekapSaldo(); 
-        fetchRiwayatTransaksi(); // Langsung perbarui tabel riwayat!
+        fetchRiwayatTransaksi(); 
     };
     window.addEventListener("refresh-keuangan", handleRefreshEvent); 
     
@@ -247,7 +247,6 @@ const Index = () => {
     } catch (err: any) { toast({ title: "Gagal", description: err.message, variant: "destructive" }); }
   };
 
-  // 🔥 FITUR EXCEL UPDATE: Bisa Filter Kelas & Gender
   const exportExcelBulanan = async () => { 
     const bulan = exportMonth; const tahun = exportYear; const namaBulan = monthsList[bulan];
     const awal = `${tahun}-${String(bulan + 1).padStart(2, "0")}-01`;
@@ -257,7 +256,6 @@ const Index = () => {
       .select(`transaction_date, type, amount, description, santri:santri_id!inner ( nama_lengkap, kelas, gender ), merchant:merchant_id(full_name)`)
       .gte("transaction_date", awal).lte("transaction_date", akhir).order("transaction_date");
     
-    // Terapkan Filter
     if (exportKelas !== 'all') dbQuery = dbQuery.eq('santri.kelas', parseInt(exportKelas));
     if (exportGender !== 'all') dbQuery = dbQuery.eq('santri.gender', exportGender);
       
@@ -289,18 +287,15 @@ const Index = () => {
   const handleSelectSantri = (id: string) => { navigateTo("santri", id); }
   const handleBackFromDetail = () => { window.history.back(); }
 
-  // 🔥 PERBAIKAN LOGIKA PENGELOMPOKKAN KEGIATAN DI DASHBOARD
   const getActivityType = (log: any) => {
       const cat = log.activity?.category?.toLowerCase() || '';
       const name = log.activity?.name?.toLowerCase() || '';
       
-      // Prioritas 1: Baca langsung dari kategori di database dulu
       if (cat === 'pelajaran') return 'kbm';
       if (cat === 'mengaji') return 'mengaji';
       if (cat === 'sholat') return 'sholat';
       if (cat === 'ekskul') return 'ekskul';
       
-      // Prioritas 2: Cadangan tebak-tebakan dari nama (kalau kategorinya kosong/umum)
       if (name.includes('ngaji') || name.includes('quran') || name.includes('tahfidz') || name.includes('kitab') || name.includes("ba'da")) return 'mengaji';
       if (name.includes('sholat') || name.includes('dzuhur') || name.includes('ashar') || name.includes('maghrib') || name.includes('isya') || name.includes('subuh')) return 'sholat';
       
@@ -410,7 +405,8 @@ const Index = () => {
            
            <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
 
-           {!isGuru && (
+           {/* 🔥 Sembunyikan Manajemen Kelas & Data Guru dari Guru & Pengasuh */}
+           {!isGuru && !isPengasuh && (
                <>
                    <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas</button>
                    <button onClick={() => handleMenuClick("guru")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "guru" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><User className="mr-3 h-5 w-5 flex-shrink-0" />Data Guru</button>
@@ -440,7 +436,8 @@ const Index = () => {
                </>
            )}
 
-           {hasAdminAccess && (
+           {/* 🔥 Sembunyikan bagian Sistem & Operasional dari Pengasuh */}
+           {(isAdmin || isSuperAdmin) && (
                <>
                   <div className="border-t border-green-800 my-4"></div>
                   <p className="px-4 text-xs font-semibold text-green-400 uppercase tracking-wider mb-2 opacity-80">Sistem & Operasional</p>
@@ -484,6 +481,8 @@ const Index = () => {
                           <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-green-200 shadow-sm"><ShieldAlert className="w-3 h-3" /> Admin</span>
                       ) : isGuru ? (
                           <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-blue-200 shadow-sm">Guru / Staf</span>
+                      ) : isPengasuh ? (
+                          <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-teal-200 shadow-sm">Pengasuh</span>
                       ) : (
                           <span className="inline-flex items-center gap-1 bg-gray-50 text-gray-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border border-gray-200 shadow-sm">Viewer</span>
                       )}
@@ -550,7 +549,8 @@ const Index = () => {
                  <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                     <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
                     
-                    {/* 🔥 FITUR FILTER EXCEL BARU (KELAS & GENDER) */}
+                    {/* 🔥 EXCEL HANYA UNTUK SELAIN PENGASUH */}
+                    {!isPengasuh && (
                     <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
                         <CardHeader className="bg-green-50/50 border-b border-green-100 pb-3 p-4">
                             <div className="flex items-center gap-2 text-green-800"><FileSpreadsheet className="w-5 h-5" /><CardTitle className="text-base md:text-lg">Laporan & Unduh Data</CardTitle></div>
@@ -592,13 +592,15 @@ const Index = () => {
                             </div>
                         </CardContent>
                     </Card>
+                    )}
 
                     <div className="bg-white rounded-xl shadow-sm border p-1 relative"><div className="absolute top-0 right-0 p-4 z-10 hidden md:block"><span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1"><CalendarDays size={12}/> Mode Input Cepat</span></div><TransactionForm /></div>
                     
+                    {/* Riwayat global disembunyikan untuk pengasuh karena sudah ada di TransactionForm */}
+                    {!isPengasuh && (
                     <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
-                       {/* 🔥 FITUR FILTER TANGGAL DI RIWAYAT */}
                        <CardHeader className="bg-gray-50/50 border-b border-green-100 pb-3 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                           <div className="flex items-center gap-2 text-gray-800"><History className="w-5 h-5 text-green-600" /><CardTitle className="text-base md:text-lg">Riwayat Transaksi</CardTitle></div>
+                           <div className="flex items-center gap-2 text-gray-800"><History className="w-5 h-5 text-green-600" /><CardTitle className="text-base md:text-lg">Riwayat Transaksi Global</CardTitle></div>
                            <div className="flex items-center gap-2 bg-white px-2 py-1 rounded border shadow-sm">
                                <CalendarDays className="w-4 h-4 text-gray-400" />
                                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="text-sm font-bold text-gray-700 outline-none" />
@@ -628,6 +630,7 @@ const Index = () => {
                          </div>
                        )}</CardContent>
                     </Card>
+                    )}
                  </div>
              )}
 
@@ -639,15 +642,15 @@ const Index = () => {
              )}
              
              {/* LAIN-LAIN */}
-             {activeMenu === "guru" && !isGuru && <div className="animate-in fade-in zoom-in duration-300"><TeacherManagement /></div>}
-             {activeMenu === "manajemen_kelas" && !isGuru && <ClassManagement />}
+             {activeMenu === "guru" && !isGuru && !isPengasuh && <div className="animate-in fade-in zoom-in duration-300"><TeacherManagement /></div>}
+             {activeMenu === "manajemen_kelas" && !isGuru && !isPengasuh && <ClassManagement />}
              {activeMenu === "pengguna" && isSuperAdmin && <UserManagement />}
              {activeMenu === "monitoring_warung" && isSuperAdmin && <WarungMonitoring />}
              {activeMenu === "akademik" && isSuperAdmin && <AcademicSettings />}
              {activeMenu === "absensi" && <AttendanceMonitoring initialTab={targetAbsensiTab} />}
              {activeMenu === "kesehatan" && <SickLeaveManagement />}
              {activeMenu === "pelanggaran" && <ViolationManagement />}
-             {activeMenu === "piket" && hasAdminAccess && <PiketManagement />}
+             {activeMenu === "piket" && (isAdmin || isSuperAdmin) && <PiketManagement />}
              {activeMenu === "perizinan" && <PermitManagement />}
           </div>
         </main>
