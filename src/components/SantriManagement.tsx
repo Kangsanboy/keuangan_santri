@@ -49,10 +49,27 @@ interface ClassSummary {
 const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagementProps) => {
   const { toast } = useToast();
   
-  // 1. TAMBAHKAN STATE UNTUK USER LOGIN
+  // STATE USER LOGIN
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // 2. FETCH USER SAAT MOUNT
+  const [activeKelas, setActiveKelas] = useState<number | null>(initialKelas ? parseInt(initialKelas) : null);
+  const [santris, setSantris] = useState<SantriSaldo[]>([]);
+  const [classSummaries, setClassSummaries] = useState<ClassSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  const [activeTab, setActiveTab] = useState<"ikhwan" | "akhwat">("ikhwan");
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [formData, setFormData] = useState<Partial<SantriSaldo>>({
+    gender: 'ikhwan', status: 'aktif', kelas: 7, rombel: 'A', rfid_card_id: ''
+  });
+
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+
+  // FETCH USER SAAT PERTAMA KALI LOAD
   useEffect(() => {
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -63,35 +80,56 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           .eq('id', session.user.id)
           .single();
         setCurrentUser(user);
+        
+        // OTOMATISASI PENGASUH
+        if (user?.role === 'pengasuh') {
+          setActiveKelas(parseInt(user.kelas_asuh));
+          setActiveTab(user.gender_asuh as "ikhwan" | "akhwat");
+        }
       }
     };
     getUser();
   }, []);
 
-  // ... (State lainnya tetap sama)
+  const fetchSummaries = async () => {
+    // Pengasuh tidak perlu load summary semua kelas
+    if (currentUser?.role === 'pengasuh') return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('view_santri_saldo').select('kelas, saldo');
+      if (error) throw error;
+      if (data) {
+        const summaries: ClassSummary[] = [];
+        const classes = [7, 8, 9, 10, 11, 12]; 
+        classes.forEach(k => {
+          const filtered = data.filter(d => d.kelas === k);
+          const total = filtered.reduce((acc, curr) => acc + (curr.saldo || 0), 0);
+          summaries.push({ kelas: k, count: filtered.length, totalSaldo: total });
+        });
+        setClassSummaries(summaries);
+      }
+    } catch (error: any) { console.error("Error summary:", error); } finally { setLoading(false); }
+  };
 
   const fetchSantrisInClass = async () => {
     if (activeKelas === null) return;
     setLoading(true);
     try {
-      // 3. LOGIKA FILTER PENGASUH
       let query = supabase.from('santri_2025_12_01_21_34')
         .select('*')
         .eq('kelas', activeKelas)
         .order('rombel', { ascending: true }) 
         .order('nama_lengkap', { ascending: true });
 
-      // Jika yang login adalah pengasuh, filter berdasarkan kelas dan gender asuhannya
+      // FILTER TAMBAHAN JIKA PENGASUH
       if (currentUser?.role === 'pengasuh') {
-        query = query
-          .eq('kelas', parseInt(currentUser.kelas_asuh))
-          .eq('gender', currentUser.gender_asuh);
+        query = query.eq('gender', currentUser.gender_asuh);
       }
         
       const { data: baseData, error } = await query;
       if (error) throw error;
 
-      // ... (Bagian fetch saldo tetap sama)
       const { data: saldoData } = await supabase.from('view_santri_saldo')
         .select('id, saldo')
         .eq('kelas', activeKelas);
@@ -108,7 +146,14 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); }, [activeKelas]);
+  useEffect(() => { 
+    // Pastikan currentUser sudah dimuat sebelum fetch data
+    if (activeKelas === null && currentUser) {
+      fetchSummaries();
+    } else if (activeKelas !== null) {
+      fetchSantrisInClass();
+    }
+  }, [activeKelas, currentUser]);
 
   const handleNaikKelasMassal = async () => {
     setLoading(true);
@@ -141,7 +186,8 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         const { error } = await supabase.from('santri_2025_12_01_21_34').insert([payload]);
         if (error) throw error; toast({ title: "Sukses", description: "Santri baru ditambahkan" });
       }
-      setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); setFormData({ gender: 'ikhwan', status: 'aktif', kelas: 7, rombel: 'A', rfid_card_id: '' });
+      setIsDialogOpen(false); activeKelas === null ? fetchSummaries() : fetchSantrisInClass(); 
+      setFormData({ gender: currentUser?.role === 'pengasuh' ? currentUser.gender_asuh : 'ikhwan', status: 'aktif', kelas: activeKelas || 7, rombel: 'A', rfid_card_id: '' });
     } catch (error: any) { toast({ title: "Gagal", description: "Cek kembali data (Mungkin NISN/Kartu sudah dipakai).", variant: "destructive" }); }
   };
 
@@ -193,6 +239,12 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     else if (values[index]) { santri[header] = values[index]; }
                 });
 
+                // Jika pengasuh yang import, pastikan gender dipaksa sesuai role asuhannya
+                if (currentUser?.role === 'pengasuh') {
+                    santri.gender = currentUser.gender_asuh;
+                    santri.kelas = parseInt(currentUser.kelas_asuh);
+                }
+
                 if (santri.nama_lengkap) dataToInsert.push(santri);
             }
 
@@ -209,15 +261,25 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     reader.readAsText(importFile);
   };
 
-  const openAdd = () => { setFormData({ gender: 'ikhwan', status: 'aktif', kelas: activeKelas || 7, rombel: 'A', rfid_card_id: '' }); setIsEditMode(false); setIsDialogOpen(true); };
+  const openAdd = () => { 
+    setFormData({ 
+        gender: currentUser?.role === 'pengasuh' ? currentUser.gender_asuh : 'ikhwan', 
+        status: 'aktif', 
+        kelas: activeKelas || 7, 
+        rombel: 'A', 
+        rfid_card_id: '' 
+    }); 
+    setIsEditMode(false); setIsDialogOpen(true); 
+  };
+  
   const openEdit = (e: React.MouseEvent, santri: SantriSaldo) => { e.stopPropagation(); setFormData(santri); setIsEditMode(true); setIsDialogOpen(true); };
   const onDeleteClick = (e: React.MouseEvent, id: string) => { e.stopPropagation(); handleDelete(id); }
 
   const filteredSantris = santris.filter(s => s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
   const currentTabSantris = filteredSantris.filter(s => s.gender === activeTab);
 
-  /* VIEW 1: DASHBOARD KARTU KELAS */
-  if (activeKelas === null) {
+  /* VIEW 1: DASHBOARD KARTU KELAS (Hanya Admin & Guru) */
+  if (activeKelas === null && currentUser?.role !== 'pengasuh') {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
@@ -245,11 +307,92 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                 </Card>
             ))}
         </div>
-        
-        {/* DIALOG FORM MANUAL (Global) */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent>
-                <DialogHeader><DialogTitle>Tambah Santri Baru</DialogTitle></DialogHeader>
+      </div>
+    );
+  }
+
+  /* VIEW 2: DETAIL TABLE */
+  return (
+    <div className="space-y-6">
+      <Card className={`shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 border-t-4 ${activeTab === 'ikhwan' ? 'border-t-green-600 border-green-100' : 'border-t-pink-500 border-pink-100'}`}>
+        <CardHeader className="bg-white border-b border-gray-100 pb-0">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+            <div className="flex items-center gap-3 w-full md:w-auto">
+               {/* Sembunyikan tombol back jika user adalah pengasuh */}
+               {currentUser?.role !== 'pengasuh' && (
+                  <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
+               )}
+               <div><CardTitle className="text-lg font-bold text-gray-800">Kelas {activeKelas}</CardTitle><p className="text-xs text-gray-500">{filteredSantris.length} Santri Total</p></div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 min-w-[200px] md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari santri..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              <Button onClick={() => setIsImportOpen(true)} size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 h-9">
+                  <FileSpreadsheet className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Import</span>
+              </Button>
+              <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
+                  <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Tab Filter: Jika pengasuh, kunci tampilannya di satu gender saja */}
+          {currentUser?.role !== 'pengasuh' ? (
+            <div className="flex w-full border-b border-gray-200">
+                <button onClick={() => setActiveTab('ikhwan')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'ikhwan' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-gray-400 hover:text-green-600'}`}><User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})</button>
+                <button onClick={() => setActiveTab('akhwat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'akhwat' ? 'border-pink-500 text-pink-700 bg-pink-50/50' : 'border-transparent text-gray-400 hover:text-pink-600'}`}><UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})</button>
+            </div>
+          ) : (
+            <div className={`flex w-full border-b border-gray-200 p-3 font-bold justify-center uppercase ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-700' : 'bg-pink-50 text-pink-700'}`}>
+                DATA SANTRI {activeTab}
+            </div>
+          )}
+        </CardHeader>
+
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
+                <tr>
+                  <th className="p-4 w-[80px]">NISN</th>
+                  <th className="p-4 min-w-[200px]">Nama Lengkap</th>
+                  <th className="p-4 text-center w-[120px]">Kls Sekolah</th>
+                  <th className="p-4 text-center w-[120px]">Kls Mengaji</th>
+                  <th className="p-4 text-right">Saldo</th>
+                  <th className="p-4 text-center w-[80px]">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {currentTabSantris.length === 0 ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">Tidak ada santri {activeTab} ditemukan di kelas ini.</td></tr>
+                ) : (
+                    currentTabSantris.map((santri) => (
+                      <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
+                        <td className="p-4 font-mono text-gray-500">{santri.nisn || "-"}</td>
+                        <td className="p-4">
+                            <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
+                                {santri.nama_lengkap}
+                                {santri.rfid_card_id && (<span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>)}
+                            </div>
+                        </td>
+                        <td className="p-4 text-center"><span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">{santri.kelas}-{santri.rombel || 'A'}</span></td>
+                        <td className="p-4 text-center"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">{santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}</span></td>
+                        <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
+                        <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={(e) => openEdit(e, santri)}><Pencil size={14} /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={(e) => onDeleteClick(e, santri.id)}><Trash2 size={14} /></Button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* DIALOG FORM */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogContent><DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2"><label className="text-sm font-medium">NISN</label><Input value={formData.nisn || ''} onChange={e => setFormData({...formData, nisn: e.target.value})} placeholder="12345678" /></div>
@@ -263,8 +406,9 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     <div className="grid grid-cols-3 gap-4">
                         <div className="col-span-2 space-y-2">
                             <label className="text-sm font-medium">Kelas Sekolah</label>
-                            <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
-                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+                            {/* Disable select jika yang login adalah pengasuh */}
+                            <Select disabled={isEditMode || currentUser?.role === 'pengasuh'} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
+                                <SelectTrigger disabled={isEditMode || currentUser?.role === 'pengasuh'} className={isEditMode || currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
                                 <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
@@ -278,7 +422,14 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     </div>
                     {isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
 
-                    <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Gender</label>
+                        {/* Disable select jika yang login adalah pengasuh */}
+                        <Select disabled={currentUser?.role === 'pengasuh'} value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}>
+                            <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
+                        </Select>
+                    </div>
                     <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
                     <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
                 </form>
@@ -316,147 +467,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                 </DialogFooter>
             </DialogContent>
         </Dialog>
-      </div>
-    );
-  }
-
-  /* VIEW 2: DETAIL TABLE */
-  return (
-    <Card className={`shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 border-t-4 ${activeTab === 'ikhwan' ? 'border-t-green-600 border-green-100' : 'border-t-pink-500 border-pink-100'}`}>
-      <CardHeader className="bg-white border-b border-gray-100 pb-0">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-          <div className="flex items-center gap-3 w-full md:w-auto">
-             <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
-             <div><CardTitle className="text-lg font-bold text-gray-800">Kelas {activeKelas}</CardTitle><p className="text-xs text-gray-500">{filteredSantris.length} Santri Total</p></div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            <div className="relative flex-1 min-w-[200px] md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari santri..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-            <Button onClick={() => setIsImportOpen(true)} size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 h-9">
-                <FileSpreadsheet className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Import</span>
-            </Button>
-            <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
-                <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex w-full border-b border-gray-200">
-             <button onClick={() => setActiveTab('ikhwan')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'ikhwan' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-gray-400 hover:text-green-600'}`}><User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})</button>
-             <button onClick={() => setActiveTab('akhwat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'akhwat' ? 'border-pink-500 text-pink-700 bg-pink-50/50' : 'border-transparent text-gray-400 hover:text-pink-600'}`}><UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})</button>
-        </div>
-      </CardHeader>
-
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
-              <tr>
-                <th className="p-4 w-[80px]">NISN</th>
-                <th className="p-4 min-w-[200px]">Nama Lengkap</th>
-                <th className="p-4 text-center w-[120px]">Kls Sekolah</th>
-                <th className="p-4 text-center w-[120px]">Kls Mengaji</th>
-                <th className="p-4 text-right">Saldo</th>
-                <th className="p-4 text-center w-[80px]">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {currentTabSantris.length === 0 ? (
-                <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic">Tidak ada santri {activeTab} ditemukan di kelas ini.</td></tr>
-              ) : (
-                  currentTabSantris.map((santri) => (
-                    <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
-                      <td className="p-4 font-mono text-gray-500">{santri.nisn || "-"}</td>
-                      <td className="p-4">
-                          <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
-                              {santri.nama_lengkap}
-                              {santri.rfid_card_id && (<span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>)}
-                          </div>
-                      </td>
-                      <td className="p-4 text-center"><span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">{santri.kelas}-{santri.rombel || 'A'}</span></td>
-                      <td className="p-4 text-center"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">{santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}</span></td>
-                      <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
-                      <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={(e) => openEdit(e, santri)}><Pencil size={14} /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={(e) => onDeleteClick(e, santri.id)}><Trash2 size={14} /></Button>
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-
-      {/* DIALOG FORM (Global untuk detail) */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent><DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle></DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><label className="text-sm font-medium">NISN</label><Input value={formData.nisn || ''} onChange={e => setFormData({...formData, nisn: e.target.value})} placeholder="12345678" /></div>
-                        <div className="space-y-2"><label className="text-sm font-medium">Nama</label><Input value={formData.nama_lengkap || ''} onChange={e => setFormData({...formData, nama_lengkap: e.target.value})} placeholder="Nama Santri" required /></div>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-sm font-bold text-blue-600 flex items-center gap-2"><ScanBarcode className="w-4 h-4"/> Kode Kartu RFID (Opsional)</label>
-                        <Input value={formData.rfid_card_id || ''} onChange={e => setFormData({...formData, rfid_card_id: e.target.value})} placeholder="Klik disini lalu tempel kartu..." className="border-blue-300 focus:border-blue-500 bg-blue-50/50 font-mono" />
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="col-span-2 space-y-2">
-                            <label className="text-sm font-medium">Kelas Sekolah</label>
-                            <Select disabled={isEditMode} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
-                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-                                <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="col-span-1 space-y-2">
-                            <label className="text-sm font-medium">Rombel</label>
-                            <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
-                                <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-                                <SelectContent>{['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    {isEditMode && <p className="text-[10px] text-orange-500 font-bold">*Ubah kelas & rombel melalui menu Manajemen Kelas.</p>}
-
-                    <div className="space-y-2"><label className="text-sm font-medium">Gender</label><Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                    <div className="space-y-2"><label className="text-sm font-medium">Wali</label><Input value={formData.nama_wali || ''} onChange={e => setFormData({...formData, nama_wali: e.target.value})} placeholder="Nama Orang Tua" /></div>
-                    <DialogFooter><Button type="submit" className="bg-green-600 hover:bg-green-700">Simpan Data</Button></DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-
-        {/* DIALOG IMPORT EXCEL (Copy buat halaman detail) */}
-        <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Santri</DialogTitle></DialogHeader>
-                <div className="space-y-6 py-2">
-                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col gap-3">
-                        <p className="text-sm text-blue-800 leading-relaxed">
-                            <span className="font-bold">Langkah-langkah:</span><br/>
-                            1. Unduh template Excel (CSV) di bawah ini.<br/>
-                            2. Buka file di Excel, lalu isi data santri (jangan ubah nama kolom paling atas).<br/>
-                            3. Simpan (Save) file tersebut, lalu unggah kembali ke sini.
-                        </p>
-                        <Button onClick={downloadTemplate} variant="outline" className="bg-white border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-800 w-full shadow-sm">
-                            <Download className="w-4 h-4 mr-2" /> Download Template Excel
-                        </Button>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-700">Upload File CSV yang sudah diisi</label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
-                            <Input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0" />
-                        </div>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="ghost" onClick={() => setIsImportOpen(false)}>Batal</Button>
-                    <Button onClick={handleImport} disabled={!importFile || loading} className="bg-blue-600 hover:bg-blue-700 shadow-md">
-                        {loading ? "Memproses..." : <><Upload className="w-4 h-4 mr-2"/> Mulai Import</>}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    </Card>
+    </div>
   );
 };
 
