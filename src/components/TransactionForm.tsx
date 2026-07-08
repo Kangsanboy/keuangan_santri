@@ -28,9 +28,6 @@ const TransactionForm = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // STATE UNTUK USER LOGIN (PROFIL)
-  const [currentUser, setCurrentUser] = useState<any>(null);
-
   const [type, setType] = useState<UIType>("pemasukan");
   const [kelas, setKelas] = useState<number | null>(null);
   const [gender, setGender] = useState<"ikhwan" | "akhwat" | null>(null);
@@ -40,51 +37,48 @@ const TransactionForm = () => {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // State untuk Tanggal & Saldo
+  // State untuk Tanggal, Saldo, dan User Profil
   const [trxDate, setTrxDate] = useState<string>(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date()));
   const [currentSaldo, setCurrentSaldo] = useState<number>(0);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  /* FETCH PROFIL USER UNTUK CEK ROLE PENGASUH */
+  /* FETCH DATA USER (CEK PENGASUH) */
   useEffect(() => {
-    const fetchUserProfile = async () => {
+    const fetchProfile = async () => {
       if (user?.id) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", user.id)
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.id)
           .single();
           
-        if (data) {
-          setCurrentUser(data);
-          // Jika role pengasuh, otomatis set dan kunci kelas & gender
-          if (data.role === 'pengasuh') {
-            setKelas(parseInt(data.kelas_asuh));
-            setGender(data.gender_asuh as "ikhwan" | "akhwat");
-          }
+        setCurrentUser(data);
+
+        // Jika role pengasuh, otomatis isi kelas dan gender, tidak perlu reset manual
+        if (data?.role === 'pengasuh') {
+          setKelas(parseInt(data.kelas_asuh));
+          setGender(data.gender_asuh);
         }
       }
     };
-    fetchUserProfile();
+    fetchProfile();
   }, [user]);
 
-  /* Reset saat kelas berubah (Kecuali untuk pengasuh) */
-  useEffect(() => {
-    if (currentUser?.role !== 'pengasuh') {
-      setGender(null);
-      setSantriId(null);
-      setSantriList([]);
-      setCurrentSaldo(0);
-    }
-  }, [kelas, currentUser]);
+  /* Handler Manual untuk Select Kelas & Gender agar tidak bentrok dengan auto-fill Pengasuh */
+  const handleKelasChange = (v: string) => {
+    setKelas(Number(v));
+    setGender(null);
+    setSantriId(null);
+    setSantriList([]);
+    setCurrentSaldo(0);
+  };
 
-  /* Reset saat gender berubah (Kecuali untuk pengasuh) */
-  useEffect(() => {
-    if (currentUser?.role !== 'pengasuh') {
-      setSantriId(null);
-      setSantriList([]);
-      setCurrentSaldo(0);
-    }
-  }, [gender, currentUser]);
+  const handleGenderChange = (v: "ikhwan" | "akhwat") => {
+    setGender(v);
+    setSantriId(null);
+    setSantriList([]);
+    setCurrentSaldo(0);
+  };
 
   /* AMBIL SALDO SAAT SANTRI DIPILIH */
   useEffect(() => {
@@ -105,7 +99,7 @@ const TransactionForm = () => {
     fetchSaldoSantri();
   }, [santriId]);
 
-  /* Ambil daftar santri */
+  /* Ambil daftar santri jika kelas dan gender sudah ada */
   useEffect(() => {
     const fetchSantri = async () => {
       if (!kelas || !gender) return;
@@ -222,9 +216,15 @@ const TransactionForm = () => {
             </div>
             <div className="space-y-2">
                 <Label>Kelas</Label>
-                <Select value={kelas ? kelas.toString() : undefined} onValueChange={(v) => setKelas(Number(v))} disabled={currentUser?.role === 'pengasuh'}>
-                <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-70" : "bg-white"}><SelectValue placeholder="Pilih..." /></SelectTrigger>
-                <SelectContent>{[7, 8, 9, 10, 11, 12].map((k) => (<SelectItem key={k} value={k.toString()}>Kelas {k}</SelectItem>))}</SelectContent>
+                <Select 
+                   value={kelas ? kelas.toString() : undefined} 
+                   onValueChange={handleKelasChange}
+                   disabled={currentUser?.role === 'pengasuh'}
+                >
+                  <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : "bg-white"}>
+                    <SelectValue placeholder="Pilih..." />
+                  </SelectTrigger>
+                  <SelectContent>{[7, 8, 9, 10, 11, 12].map((k) => (<SelectItem key={k} value={k.toString()}>Kelas {k}</SelectItem>))}</SelectContent>
                 </Select>
             </div>
           </div>
@@ -232,9 +232,15 @@ const TransactionForm = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
                 <Label>Gender</Label>
-                <Select value={gender ?? undefined} onValueChange={(v) => setGender(v as any)} disabled={!kelas || currentUser?.role === 'pengasuh'}>
-                <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-70" : "bg-white"}><SelectValue placeholder="Pilih..." /></SelectTrigger>
-                <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
+                <Select 
+                  value={gender ?? undefined} 
+                  onValueChange={(v) => handleGenderChange(v as "ikhwan" | "akhwat")} 
+                  disabled={!kelas || currentUser?.role === 'pengasuh'}
+                >
+                  <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : "bg-white"}>
+                    <SelectValue placeholder="Pilih..." />
+                  </SelectTrigger>
+                  <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
                 </Select>
             </div>
             <div className="space-y-2">
