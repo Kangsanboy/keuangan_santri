@@ -12,11 +12,14 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Shield, Users, Edit, Search, Rocket, Trash2, XCircle, Store, BookOpen } from "lucide-react";
 
+// 1. UPDATE INTERFACE: Tambahkan kelas_asuh dan gender_asuh, ubah 'admin' jadi 'pengasuh'
 interface AppUser {
   id: string;
   email: string;
-  role: "super_admin" | "admin" | "guru" | "pending" | "kantin";
+  role: "super_admin" | "pengasuh" | "guru" | "pending" | "kantin"; 
   full_name: string;
+  kelas_asuh?: string; 
+  gender_asuh?: string; 
 }
 
 const UserManagement = () => {
@@ -29,6 +32,10 @@ const UserManagement = () => {
   // State untuk Edit
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [newRole, setNewRole] = useState<string>("guru"); 
+  
+  // 2. STATE BARU: Untuk menyimpan data kelas dan gender saat edit
+  const [newKelasAsuh, setNewKelasAsuh] = useState<string>("");
+  const [newGenderAsuh, setNewGenderAsuh] = useState<string>("");
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -49,13 +56,25 @@ const UserManagement = () => {
   const handleUpdateRole = async () => {
     if (!editingUser) return;
     try {
+      // 3. LOGIC UPDATE: Masukkan kelas_asuh dan gender_asuh jika rolenya pengasuh
       const updates: any = { role: newRole };
       
-      // 1. Update role di tabel users
+      if (newRole === 'pengasuh') {
+        if (!newKelasAsuh || !newGenderAsuh) {
+          toast({ title: "Peringatan", description: "Kelas dan Gender asuh wajib diisi untuk Pengasuh!", variant: "destructive" });
+          return;
+        }
+        updates.kelas_asuh = newKelasAsuh;
+        updates.gender_asuh = newGenderAsuh;
+      } else {
+        // Kosongkan jika rolenya diubah menjadi selain pengasuh
+        updates.kelas_asuh = null;
+        updates.gender_asuh = null;
+      }
+      
       const { error } = await supabase.from('users').update(updates).eq('id', editingUser.id);
       if (error) throw error;
 
-      // 2. OTOMATISASI INSERT KE DATA GURU
       if (newRole === 'guru') {
           const { data: existingTeacher } = await supabase
               .from('teachers')
@@ -73,7 +92,7 @@ const UserManagement = () => {
           }
       }
 
-      toast({ title: "Berhasil", description: `Role diubah menjadi ${newRole}.` });
+      toast({ title: "Berhasil", description: `Data role berhasil diperbarui.` });
       setEditingUser(null); 
       fetchUsers();
     } catch (error: any) { 
@@ -97,9 +116,9 @@ const UserManagement = () => {
     return matchesSearch && matchesRole;
   });
 
-  // Statistik Role (Parent Dihapus)
+  // 4. STATISTIK: Ubah hitungan Admin jadi Pengasuh
   const superAdminCount = users.filter(u => u.role === 'super_admin').length;
-  const adminCount = users.filter(u => u.role === 'admin').length;
+  const pengasuhCount = users.filter(u => u.role === 'pengasuh').length; 
   const kantinCount = users.filter(u => u.role === 'kantin').length;
   const guruCount = users.filter(u => u.role === 'guru').length; 
   const pendingCount = users.filter(u => u.role === 'pending').length;
@@ -107,6 +126,9 @@ const UserManagement = () => {
   const handleEditClick = (user: AppUser) => {
     setEditingUser(user);
     setNewRole(user.role);
+    // Isi state form dengan data yang sudah ada (jika ada)
+    setNewKelasAsuh(user.kelas_asuh || "");
+    setNewGenderAsuh(user.gender_asuh || "");
   };
 
   return (
@@ -117,9 +139,9 @@ const UserManagement = () => {
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-purple-700">Super Admin</CardTitle><Rocket className="h-4 w-4 text-purple-600" /></CardHeader>
             <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-purple-900">{superAdminCount}</div></CardContent>
         </Card>
-        <Card onClick={() => toggleFilter('admin')} className={`cursor-pointer bg-green-50 border-green-200 ${filterRole === 'admin' ? 'ring-2 ring-green-500' : ''}`}>
-            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-green-700">Admin</CardTitle><Shield className="h-4 w-4 text-green-600" /></CardHeader>
-            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-green-900">{adminCount}</div></CardContent>
+        <Card onClick={() => toggleFilter('pengasuh')} className={`cursor-pointer bg-green-50 border-green-200 ${filterRole === 'pengasuh' ? 'ring-2 ring-green-500' : ''}`}>
+            <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-green-700">Pengasuh</CardTitle><Shield className="h-4 w-4 text-green-600" /></CardHeader>
+            <CardContent className="p-4 pt-0"><div className="text-2xl font-bold text-green-900">{pengasuhCount}</div></CardContent>
         </Card>
         <Card onClick={() => toggleFilter('kantin')} className={`cursor-pointer bg-teal-50 border-teal-200 ${filterRole === 'kantin' ? 'ring-2 ring-teal-500' : ''}`}>
             <CardHeader className="p-4 flex flex-row justify-between pb-2"><CardTitle className="text-sm font-medium text-teal-700">Warung/Kantin</CardTitle><Store className="h-4 w-4 text-teal-600" /></CardHeader>
@@ -139,17 +161,26 @@ const UserManagement = () => {
 
       <Card className="border-green-100 shadow-sm bg-white">
         <CardHeader className="flex flex-col md:flex-row justify-between gap-4 bg-gray-50/50 border-b pb-4"><div><CardTitle>Manajemen Pengguna</CardTitle></div><div className="relative w-full md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari user..." className="pl-9 h-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></CardHeader>
-        <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-700 font-semibold border-b"><tr><th className="p-4">Nama</th><th className="p-4">Email</th><th className="p-4">Role</th><th className="p-4 text-center">Aksi</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => (<tr key={user.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{user.full_name}</td><td className="p-4 text-gray-600">{user.email}</td><td className="p-4">
+        <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-700 font-semibold border-b"><tr><th className="p-4">Nama</th><th className="p-4">Email</th><th className="p-4">Role & Detail</th><th className="p-4 text-center">Aksi</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => (<tr key={user.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{user.full_name}</td><td className="p-4 text-gray-600">{user.email}</td><td className="p-4 flex flex-col items-start gap-1">
             <span className={`px-2 py-1 rounded-full text-xs font-bold border uppercase ${
                 user.role==='super_admin' ? 'bg-purple-100 text-purple-700 border-purple-200' :
-                user.role==='admin' ? 'bg-green-100 text-green-700 border-green-200' :
+                user.role==='pengasuh' ? 'bg-green-100 text-green-700 border-green-200' :
                 user.role==='guru' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                 user.role==='kantin' ? 'bg-teal-100 text-teal-700 border-teal-200' :
                 'bg-gray-100 text-gray-700 border-gray-200'
             }`}>{user.role.replace('_',' ')}</span>
-        </td><td className="p-4 text-center flex justify-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}><Edit className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user)}><Trash2 className="h-4 w-4 text-red-500" /></Button></td></tr>))}</tbody></table></div></CardContent>
+            {/* 5. UI TABLE: Tampilkan detail kelas dan gender jika rolenya pengasuh */}
+            {user.role === 'pengasuh' && user.kelas_asuh && (
+              <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded border">
+                Kelas {user.kelas_asuh} - {user.gender_asuh?.toUpperCase()}
+              </span>
+            )}
+        </td><td className="p-4 text-center">
+            <div className="flex justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}><Edit className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+            </div>
+            </td></tr>))}</tbody></table></div></CardContent>
       </Card>
 
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
@@ -164,11 +195,41 @@ const UserManagement = () => {
                             <SelectItem value="pending">Pending</SelectItem>
                             <SelectItem value="guru" className="text-blue-600 font-bold">Guru / Staf</SelectItem>
                             <SelectItem value="kantin" className="text-teal-600 font-bold">Warung / Kantin</SelectItem>
-                            <SelectItem value="admin" className="text-green-600 font-bold">Admin</SelectItem>
+                            <SelectItem value="pengasuh" className="text-green-600 font-bold">Pengasuh</SelectItem>
                             <SelectItem value="super_admin" className="text-purple-600 font-bold">🚀 Super Admin</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
+
+                {/* 6. FORM DINAMIS: Muncul otomatis jika role pengasuh dipilih */}
+                {newRole === 'pengasuh' && (
+                  <div className="space-y-4 pt-4 border-t border-gray-100">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Kelas Asuh</label>
+                      <Select value={newKelasAsuh} onValueChange={setNewKelasAsuh}>
+                        <SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7">Kelas 7</SelectItem>
+                          <SelectItem value="8">Kelas 8</SelectItem>
+                          <SelectItem value="9">Kelas 9</SelectItem>
+                          <SelectItem value="10">Kelas 10</SelectItem>
+                          <SelectItem value="11">Kelas 11</SelectItem>
+                          <SelectItem value="12">Kelas 12</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Gender Asuh (Ikhwan/Akhwat)</label>
+                      <Select value={newGenderAsuh} onValueChange={setNewGenderAsuh}>
+                        <SelectTrigger><SelectValue placeholder="Pilih Gender" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ikhwan">Ikhwan</SelectItem>
+                          <SelectItem value="akhwat">Akhwat</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setEditingUser(null)}>Batal</Button>
