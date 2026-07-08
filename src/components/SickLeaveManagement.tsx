@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 import { 
   Activity, Home, Plus, Save, User, CalendarDays, 
@@ -25,13 +26,14 @@ interface Santri {
 interface HealthLog {
   id: number;
   santri_id: string;
-  status: 'Sakit' | 'Pulang' | 'Sembuh'; // 🔥 KEMBALI JADI 'Pulang' BIAR DATABASE AMAN
+  status: 'Sakit' | 'Pulang' | 'Sembuh'; 
   start_date: string;
   end_date?: string;
   keterangan?: string;
   santri?: { 
     nama_lengkap: string; 
     kelas: number;
+    gender: string;
     rombel?: { nama: string };
   };
 }
@@ -42,8 +44,11 @@ const yearsList = [2024, 2025, 2026, 2027, 2028];
 
 const SickLeaveManagement = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
+  
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("active"); 
+  const [currentUser, setCurrentUser] = useState<any>(null);
   
   // Data State
   const [santriList, setSantriList] = useState<Santri[]>([]);
@@ -60,16 +65,32 @@ const SickLeaveManagement = () => {
   const [exportMonth, setExportMonth] = useState(new Date().getMonth());
   const [exportYear, setExportYear] = useState(new Date().getFullYear());
 
-  /* ================= FETCH DATA ================= */
+  /* ================= FETCH DATA & USER ================= */
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user?.id) {
+        const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
+        setCurrentUser(data);
+        if (data?.role === 'pengasuh') {
+          setFilterKelas(data.kelas_asuh);
+          setFilterGender(data.gender_asuh);
+        }
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
   const fetchData = async () => {
+    if (!currentUser) return;
     setLoading(true);
     try {
-      const { data: sData } = await supabase
-        .from('santri_2025_12_01_21_34')
-        .select('id, nama_lengkap, kelas, gender, rombel:rombels(nama)')
-        .eq('status', 'aktif')
-        .order('nama_lengkap');
+      let santriQuery = supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, gender, rombel:rombels(nama)').eq('status', 'aktif').order('nama_lengkap');
       
+      if (currentUser?.role === 'pengasuh') {
+          santriQuery = santriQuery.eq('kelas', parseInt(currentUser.kelas_asuh)).eq('gender', currentUser.gender_asuh);
+      }
+      
+      const { data: sData } = await santriQuery;
       if (sData) setSantriList(sData as any);
 
       const { data: lData, error } = await supabase
@@ -79,6 +100,7 @@ const SickLeaveManagement = () => {
           santri:santri_2025_12_01_21_34 (
             nama_lengkap, 
             kelas,
+            gender,
             rombel:rombels(nama)
           )
         `)
@@ -103,7 +125,7 @@ const SickLeaveManagement = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [currentUser]); // Fetch ulang jika profil user berubah
 
   /* ================= ACTIONS ================= */
   const handleSave = async () => {
@@ -143,12 +165,12 @@ const SickLeaveManagement = () => {
     try {
       const { error } = await supabase
         .from('student_health_logs')
-        .update({ status: 'Pulang' }) // 🔥 SIMPAN KE DATABASE SEBAGAI 'Pulang'
+        .update({ status: 'Pulang' }) 
         .eq('id', id);
 
       if (error) throw error;
       toast({ title: "Diperbarui", description: `${nama} telah ditandai Sakit Pulang.`, className: "bg-blue-600 text-white" });
-      fetchData(); // Refresh data
+      fetchData(); 
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -163,7 +185,7 @@ const SickLeaveManagement = () => {
 
       if (error) throw error;
       toast({ title: "Alhamdulillah", description: `${nama} telah sembuh.`, className: "bg-green-600 text-white" });
-      fetchData(); // Refresh data
+      fetchData(); 
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -175,7 +197,7 @@ const SickLeaveManagement = () => {
           const { error } = await supabase.from('student_health_logs').delete().eq('id', id);
           if (error) throw error;
           toast({ title: "Terhapus", description: "Data berhasil dihapus." });
-          fetchData(); // Refresh data
+          fetchData(); 
       } catch (err: any) {
           toast({ title: "Gagal", description: err.message, variant: "destructive" });
       }
@@ -187,7 +209,7 @@ const SickLeaveManagement = () => {
           "No": i + 1,
           "Nama Santri": l.santri?.nama_lengkap || "-",
           "Kelas": `${l.santri?.kelas} ${l.santri?.rombel?.nama || ''}`,
-          "Status": l.status === 'Pulang' ? 'Sakit Pulang' : l.status, // 🔥 Di Excel ubah jadi Sakit Pulang
+          "Status": l.status === 'Pulang' ? 'Sakit Pulang' : l.status, 
           "Tanggal Mulai": new Date(l.start_date).toLocaleDateString('id-ID'),
           "Keterangan": l.keterangan || "-"
       }));
@@ -224,11 +246,19 @@ const SickLeaveManagement = () => {
   };
 
   /* ================= FILTERS ================= */
-  const activeLogs = allLogs.filter(l => l.status !== 'Sembuh');
-  const historyLogs = allLogs.filter(l => l.status === 'Sembuh');
+  // Filter log untuk pengasuh
+  const filteredLogs = allLogs.filter(l => {
+      if (currentUser?.role === 'pengasuh') {
+          return l.santri?.kelas === parseInt(currentUser.kelas_asuh) && l.santri?.gender === currentUser.gender_asuh;
+      }
+      return true;
+  });
+
+  const activeLogs = filteredLogs.filter(l => l.status !== 'Sembuh');
+  const historyLogs = filteredLogs.filter(l => l.status === 'Sembuh');
 
   const totalSakit = activeLogs.filter(l => l.status === 'Sakit').length;
-  const totalPulang = activeLogs.filter(l => l.status === 'Pulang').length; // 🔥 Hitung dari 'Pulang'
+  const totalPulang = activeLogs.filter(l => l.status === 'Pulang').length; 
 
   const LogTable = ({ data, isHistory }: { data: HealthLog[], isHistory: boolean }) => (
     <div className="overflow-x-auto pb-4">
@@ -253,7 +283,6 @@ const SickLeaveManagement = () => {
                             <td className="px-4 py-3 font-bold text-gray-800">{log.santri?.nama_lengkap || "Tanpa Nama"}</td>
                             <td className="px-4 py-3 text-center"><Badge variant="secondary" className="text-[10px]">{log.santri?.kelas} {log.santri?.rombel?.nama}</Badge></td>
                             <td className="px-4 py-3">
-                                {/* 🔥 Render tulisan 'Sakit Pulang' di tabel meskipun di DB cuma 'Pulang' */}
                                 <Badge className={`${log.status === 'Sakit' ? 'bg-red-100 text-red-700 hover:bg-red-200' : (log.status === 'Pulang' ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-green-100 text-green-700')}`}>
                                     {log.status === 'Pulang' ? 'Sakit Pulang' : log.status} 
                                 </Badge>
@@ -309,9 +338,37 @@ const SickLeaveManagement = () => {
         <CardHeader className="pb-3 border-b bg-gray-50/50"><CardTitle className="text-sm font-bold flex items-center gap-2 text-red-800 uppercase"><Plus className="w-4 h-4"/> Catat Sakit Baru</CardTitle></CardHeader>
         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold text-gray-500 uppercase">Tanggal</label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="bg-white h-9"/></div>
-            <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold text-gray-500 uppercase">Kelas</label><Select value={filterKelas} onValueChange={(v) => { setFilterKelas(v); setSelectedSantri(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-            <div className="md:col-span-2 space-y-1"><label className="text-[10px] font-bold text-gray-500 uppercase">Kategori</label><Select value={filterGender} onValueChange={(v) => { setFilterGender(v); setSelectedSantri(""); }}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="-" /></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-            <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-bold text-gray-500 uppercase">Nama Santri</label><Select value={selectedSantri} onValueChange={setSelectedSantri} disabled={!filterKelas || !filterGender}><SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger><SelectContent className="max-h-[300px]">{santriList.filter(s => String(s.kelas) === filterKelas && (s.gender === filterGender || (filterGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} {s.rombel ? `(${s.rombel.nama})` : ''}</SelectItem>))}</SelectContent></Select></div>
+            
+            <div className="md:col-span-2 space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Kelas</label>
+                <Select value={filterKelas} onValueChange={(v) => { setFilterKelas(v); setSelectedSantri(""); }} disabled={currentUser?.role === 'pengasuh'}>
+                    <SelectTrigger className={`h-9 ${currentUser?.role === 'pengasuh' ? 'bg-gray-100 opacity-60 cursor-not-allowed' : 'bg-white'}`}>
+                        <SelectValue placeholder="-" />
+                    </SelectTrigger>
+                    <SelectContent>{CLASSES.map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+            
+            <div className="md:col-span-2 space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Kategori</label>
+                <Select value={filterGender} onValueChange={(v) => { setFilterGender(v); setSelectedSantri(""); }} disabled={currentUser?.role === 'pengasuh'}>
+                    <SelectTrigger className={`h-9 ${currentUser?.role === 'pengasuh' ? 'bg-gray-100 opacity-60 cursor-not-allowed' : 'bg-white'}`}>
+                        <SelectValue placeholder="-" />
+                    </SelectTrigger>
+                    <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
+                </Select>
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Nama Santri</label>
+                <Select value={selectedSantri} onValueChange={setSelectedSantri} disabled={!filterKelas || !filterGender}>
+                    <SelectTrigger className="bg-white h-9"><SelectValue placeholder="Pilih Nama..." /></SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                        {santriList.filter(s => String(s.kelas) === filterKelas && (s.gender === filterGender || (filterGender==='ikhwan' ? s.gender==='L':s.gender==='P'))).map(s => (<SelectItem key={s.id} value={s.id}>{s.nama_lengkap} {s.rombel ? `(${s.rombel.nama})` : ''}</SelectItem>))}
+                    </SelectContent>
+                </Select>
+            </div>
+            
             <div className="md:col-span-3 space-y-1"><label className="text-[10px] font-bold text-gray-500 uppercase">Keterangan Sakit</label><Input placeholder="Cth: Demam & Pusing..." value={keterangan} onChange={e => setKeterangan(e.target.value)} className="bg-white h-9"/></div>
             
             <div className="md:col-span-12 mt-2 pt-2 border-t flex justify-end">
@@ -328,23 +385,25 @@ const SickLeaveManagement = () => {
                   <TabsTrigger value="history" className="data-[state=active]:bg-green-600 data-[state=active]:text-white font-bold">Riwayat Sembuh</TabsTrigger>
               </TabsList>
 
-              {/* TOMBOL EXCEL DINAMIS */}
-              {activeTab === 'active' ? (
-                  <Button onClick={exportActiveData} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 shadow-sm w-full md:w-auto bg-white">
-                      <Download className="w-4 h-4 mr-2"/> Download Rekap Saat Ini
-                  </Button>
-              ) : (
-                  <div className="flex items-center gap-2 w-full md:w-auto p-1.5 bg-white border rounded-lg shadow-sm">
-                      <select value={exportMonth} onChange={(e) => setExportMonth(parseInt(e.target.value))} className="p-1.5 border-none outline-none text-sm font-medium bg-transparent cursor-pointer">
-                          {monthsList.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
-                      </select>
-                      <select value={exportYear} onChange={(e) => setExportYear(parseInt(e.target.value))} className="p-1.5 border-none outline-none text-sm font-medium bg-transparent cursor-pointer border-l">
-                          {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
-                      </select>
-                      <Button onClick={exportHistoryData} size="sm" className="bg-green-600 hover:bg-green-700 ml-1">
-                          <FileSpreadsheet className="w-4 h-4 mr-1"/> Excel
+              {/* TOMBOL EXCEL HANYA UNTUK SELAIN PENGASUH */}
+              {currentUser?.role !== 'pengasuh' && (
+                  activeTab === 'active' ? (
+                      <Button onClick={exportActiveData} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 shadow-sm w-full md:w-auto bg-white">
+                          <Download className="w-4 h-4 mr-2"/> Download Rekap Saat Ini
                       </Button>
-                  </div>
+                  ) : (
+                      <div className="flex items-center gap-2 w-full md:w-auto p-1.5 bg-white border rounded-lg shadow-sm">
+                          <select value={exportMonth} onChange={(e) => setExportMonth(parseInt(e.target.value))} className="p-1.5 border-none outline-none text-sm font-medium bg-transparent cursor-pointer">
+                              {monthsList.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
+                          </select>
+                          <select value={exportYear} onChange={(e) => setExportYear(parseInt(e.target.value))} className="p-1.5 border-none outline-none text-sm font-medium bg-transparent cursor-pointer border-l">
+                              {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                          <Button onClick={exportHistoryData} size="sm" className="bg-green-600 hover:bg-green-700 ml-1">
+                              <FileSpreadsheet className="w-4 h-4 mr-1"/> Excel
+                          </Button>
+                      </div>
+                  )
               )}
           </div>
           
