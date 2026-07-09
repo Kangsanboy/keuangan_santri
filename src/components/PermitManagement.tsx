@@ -8,12 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   DoorOpen, LogOut, LogIn, Clock, ShieldCheck, MapPin, 
   FileText, History, Plus, AlertTriangle, CheckCircle2, User, CreditCard, CalendarDays,
-  Download, FileSpreadsheet // 🔥 Import Icon Baru
+  Download, FileSpreadsheet 
 } from "lucide-react";
-import * as XLSX from "xlsx"; // 🔥 Import Library Excel
+import * as XLSX from "xlsx"; 
 
 interface Santri { id: string; nama_lengkap: string; kelas: number; gender: string; nisn?: string; rfid_card_id?: string; rombel?: any; }
 interface Permit {
@@ -29,8 +30,11 @@ const CLASSES = [7, 8, 9, 10, 11, 12];
 
 const PermitManagement = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
+  
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("perizinan");
+  const [currentUser, setCurrentUser] = useState<any>(null);
   
   const [permits, setPermits] = useState<Permit[]>([]);
   const [santris, setSantris] = useState<Santri[]>([]);
@@ -47,7 +51,7 @@ const PermitManagement = () => {
       waktu_mulai: '08:00', waktu_selesai: '12:00'
   });
 
-  // 🔥 STATE UNTUK EXCEL
+  // STATE UNTUK EXCEL
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportKelas, setExportKelas] = useState("all");
   const [exportGender, setExportGender] = useState("all");
@@ -59,7 +63,23 @@ const PermitManagement = () => {
       return 'A';
   };
 
+  /* FETCH USER PROFILE */
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user?.id) {
+        const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
+        setCurrentUser(data);
+        if (data?.role === 'pengasuh') {
+          setFormKelas(data.kelas_asuh);
+          setFormGender(data.gender_asuh);
+        }
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
   const fetchData = async () => {
+      if (!currentUser) return;
       setLoading(true);
       try {
           const { data: pData, error: pErr } = await supabase.from('student_permits').select(`
@@ -70,7 +90,13 @@ const PermitManagement = () => {
           if (pErr) throw pErr;
           if (pData) setPermits(pData as any);
 
-          const { data: sData } = await supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, gender, nisn, rfid_card_id, rombel').eq('status', 'aktif');
+          let santriQuery = supabase.from('santri_2025_12_01_21_34').select('id, nama_lengkap, kelas, gender, nisn, rfid_card_id, rombel').eq('status', 'aktif');
+          
+          if (currentUser?.role === 'pengasuh') {
+              santriQuery = santriQuery.eq('kelas', parseInt(currentUser.kelas_asuh)).eq('gender', currentUser.gender_asuh);
+          }
+          
+          const { data: sData } = await santriQuery;
           if (sData) setSantris(sData as any);
 
       } catch (err: any) { 
@@ -80,7 +106,7 @@ const PermitManagement = () => {
       }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [currentUser]);
 
   const triggerVibration = (type: 'success' | 'error') => {
       if (typeof window !== 'undefined' && navigator.vibrate) {
@@ -157,7 +183,12 @@ const PermitManagement = () => {
           tanggal_kembali: new Date().toISOString().split('T')[0],
           waktu_mulai: '08:00', waktu_selesai: '12:00'
       });
-      setFormKelas(""); setFormGender("");
+      
+      // Jika bukan pengasuh, kosongkan form kelas/gender
+      if (currentUser?.role !== 'pengasuh') {
+          setFormKelas(""); 
+          setFormGender("");
+      }
       setIsFormOpen(true);
   };
 
@@ -189,16 +220,14 @@ const PermitManagement = () => {
       } catch (err: any) { toast({title: "Gagal Menyimpan", description: err.message, variant: "destructive"}); }
   };
 
-  // 🔥 FUNGSI DOWNLOAD EXCEL
+  // FUNGSI DOWNLOAD EXCEL
   const handleExportPerpulangan = () => {
       let filteredData = historyPerpulangan;
 
-      // Filter Kelas
       if (exportKelas !== 'all') {
           filteredData = filteredData.filter(p => String(p.santri?.kelas) === exportKelas);
       }
       
-      // Filter Gender
       if (exportGender !== 'all') {
           filteredData = filteredData.filter(p => {
               const sGender = p.santri?.gender?.toLowerCase() || '';
@@ -231,7 +260,7 @@ const PermitManagement = () => {
 
       const fileName = `Rekap_Pulang_${exportKelas === 'all' ? 'SemuaKelas' : 'Kelas'+exportKelas}_${exportGender === 'all' ? 'Semua' : exportGender}.xlsx`;
       XLSX.writeFile(wb, fileName);
-      setIsExportOpen(false); // Tutup dialog setelah berhasil download
+      setIsExportOpen(false); 
   };
 
   const getStatusColor = (status: string) => {
@@ -269,14 +298,25 @@ const PermitManagement = () => {
       </div>
   );
 
-  const activePerizinan = permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
-  const historyPerizinan = permits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
+  // FILTER LOGIC FOR PENGASUH
+  const filteredPermits = permits.filter(p => {
+      if (currentUser?.role === 'pengasuh') {
+          return p.santri?.kelas === parseInt(currentUser.kelas_asuh) && p.santri?.gender === currentUser.gender_asuh;
+      }
+      return true;
+  });
+
+  const activePerizinan = filteredPermits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
+  const historyPerizinan = filteredPermits.filter(p => p.kategori === 'Perizinan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
   
-  const activePerpulangan = permits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
-  const historyPerpulangan = permits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
+  const activePerpulangan = filteredPermits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Menunggu Keluar' || p.status === 'Sedang Keluar'));
+  const historyPerpulangan = filteredPermits.filter(p => p.kategori === 'Perpulangan' && (p.status === 'Sudah Kembali' || p.status === 'Terlambat'));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 max-w-6xl mx-auto">
+      
+      {/* HEADER SCANNER HANYA UNTUK SELAIN PENGASUH (OPSIONAL) */}
+      {currentUser?.role !== 'pengasuh' && (
       <div className="bg-gradient-to-r from-blue-800 to-indigo-700 rounded-2xl p-6 shadow-lg text-white flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="w-full md:w-auto text-center md:text-left"><h1 className="text-2xl md:text-3xl font-black flex items-center justify-center md:justify-start gap-2 drop-shadow-md"><ShieldCheck className="w-8 h-8 text-blue-300" /> Portal Resepsionis</h1><p className="text-blue-100 mt-1 text-sm">Tap Kartu / RFID untuk keluar masuk pondok.</p></div>
           <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm border border-white/20 w-full md:w-96 flex flex-col items-center">
@@ -284,6 +324,17 @@ const PermitManagement = () => {
               <Input autoFocus placeholder="Kursor harus disini..." value={tapInput} onChange={(e) => setTapInput(e.target.value)} onKeyDown={handleTapping} className="bg-white text-gray-900 text-center font-mono font-bold border-2 border-blue-300 shadow-inner h-12 text-lg rounded-lg" />
           </div>
       </div>
+      )}
+
+      {currentUser?.role === 'pengasuh' && (
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100 flex items-center gap-3">
+              <DoorOpen className="text-blue-600 w-6 h-6"/>
+              <div>
+                  <h2 className="font-bold text-gray-800">Manajemen Perizinan Kelas</h2>
+                  <p className="text-xs text-gray-500">Buat dan pantau surat izin/pulang untuk santri asuhan Anda.</p>
+              </div>
+          </div>
+      )}
 
       <Tabs defaultValue="perizinan" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full md:w-[400px] grid-cols-2 mb-6 bg-white shadow-sm border border-gray-200">
@@ -314,12 +365,13 @@ const PermitManagement = () => {
               </Card>
 
               <Card className="border-t-4 border-t-gray-500 shadow-sm">
-                  {/* 🔥 TOMBOL EXPORT DITAMBAHKAN DI SINI */}
                   <CardHeader className="bg-gray-50/50 pb-3 border-b flex flex-row items-center justify-between">
                       <CardTitle className="text-gray-800 flex items-center gap-2 text-sm">
                           <History className="w-5 h-5"/> Riwayat Selesai & Terlambat <Badge className="bg-gray-600">{historyPerpulangan.length}</Badge>
                       </CardTitle>
-                      {historyPerpulangan.length > 0 && (
+                      
+                      {/* EXPORT BUTTON DISAEL UNTUK PENGASUH */}
+                      {historyPerpulangan.length > 0 && currentUser?.role !== 'pengasuh' && (
                           <Button variant="outline" size="sm" onClick={() => setIsExportOpen(true)} className="h-8 text-xs border-green-500 text-green-700 hover:bg-green-50">
                               <Download className="w-3 h-3 mr-1" /> Export
                           </Button>
@@ -336,9 +388,35 @@ const PermitManagement = () => {
               <DialogHeader><DialogTitle className={`flex items-center gap-2 ${activeTab === 'perizinan' ? 'text-blue-800' : 'text-indigo-800'}`}><FileText/> {activeTab === 'perizinan' ? 'Input Izin Keluar' : 'Input Pulang Kampung'}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Kelas</label><Select value={formKelas} onValueChange={(v)=>{setFormKelas(v); setFormData({...formData, santri_id:""});}}><SelectTrigger className="h-9 bg-white"><SelectValue placeholder="-"/></SelectTrigger><SelectContent>{CLASSES.map(k=><SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent></Select></div>
-                      <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500">Gender</label><Select value={formGender} onValueChange={(v)=>{setFormGender(v); setFormData({...formData, santri_id:""});}}><SelectTrigger className="h-9 bg-white"><SelectValue placeholder="-"/></SelectTrigger><SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent></Select></div>
-                      <div className="space-y-1"><label className={`text-[10px] font-bold uppercase ${activeTab === 'perizinan' ? 'text-blue-600' : 'text-indigo-600'}`}>Pilih Santri</label><Select value={formData.santri_id} onValueChange={v=>setFormData({...formData, santri_id:v})} disabled={!formKelas || !formGender}><SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Cari Nama..."/></SelectTrigger><SelectContent className="max-h-[150px]">{santris.filter(s=>String(s.kelas)===formKelas && (s.gender===formGender || (formGender==='ikhwan'?s.gender==='L':s.gender==='P'))).map(s=><SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-500">Kelas</label>
+                          <Select value={formKelas} onValueChange={(v)=>{setFormKelas(v); setFormData({...formData, santri_id:""});}} disabled={currentUser?.role === 'pengasuh'}>
+                              <SelectTrigger className={`h-9 ${currentUser?.role === 'pengasuh' ? 'bg-gray-100 opacity-60 cursor-not-allowed' : 'bg-white'}`}>
+                                  <SelectValue placeholder="-"/>
+                              </SelectTrigger>
+                              <SelectContent>{CLASSES.map(k=><SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
+                          </Select>
+                      </div>
+                      
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-500">Gender</label>
+                          <Select value={formGender} onValueChange={(v)=>{setFormGender(v); setFormData({...formData, santri_id:""});}} disabled={currentUser?.role === 'pengasuh'}>
+                              <SelectTrigger className={`h-9 ${currentUser?.role === 'pengasuh' ? 'bg-gray-100 opacity-60 cursor-not-allowed' : 'bg-white'}`}>
+                                  <SelectValue placeholder="-"/>
+                              </SelectTrigger>
+                              <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
+                          </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className={`text-[10px] font-bold uppercase ${activeTab === 'perizinan' ? 'text-blue-600' : 'text-indigo-600'}`}>Pilih Santri</label>
+                          <Select value={formData.santri_id} onValueChange={v=>setFormData({...formData, santri_id:v})} disabled={!formKelas || !formGender}>
+                              <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Cari Nama..."/></SelectTrigger>
+                              <SelectContent className="max-h-[150px]">
+                                  {santris.filter(s=>String(s.kelas)===formKelas && (s.gender===formGender || (formGender==='ikhwan'?s.gender==='L':s.gender==='P'))).map(s=><SelectItem key={s.id} value={s.id}>{s.nama_lengkap}</SelectItem>)}
+                              </SelectContent>
+                          </Select>
+                      </div>
                   </div>
                   {activeTab === 'perizinan' ? (
                       <div className="grid grid-cols-3 gap-3">
@@ -358,7 +436,7 @@ const PermitManagement = () => {
           </DialogContent>
       </Dialog>
 
-      {/* 🔥 DIALOG BARU KHUSUS UNTUK EXPORT EXCEL PERPULANGAN */}
+      {/* DIALOG BARU KHUSUS UNTUK EXPORT EXCEL PERPULANGAN */}
       <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
           <DialogContent className="max-w-sm border-t-4 border-t-green-500">
               <DialogHeader>
