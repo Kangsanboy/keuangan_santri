@@ -101,12 +101,10 @@ const TransactionForm = () => {
           `)
           .in('santri_id', santriIds)
           .order('created_at', { ascending: false })
-          .limit(100); // Ambil 100 terakhir untuk dipecah
+          .limit(100); 
           
         if (allHistory) {
-            // Filter Riwayat Kantin (Cashless) -> Biasanya ada merchant_id atau deskripsinya Jajan Kantin
             const kantin = allHistory.filter(trx => trx.merchant !== null || trx.description?.toLowerCase().includes('jajan'));
-            // Filter Riwayat Manual (Pengasuh) -> Yang diinput tanpa merchant kantin
             const manual = allHistory.filter(trx => trx.merchant === null && !trx.description?.toLowerCase().includes('jajan'));
             
             // @ts-ignore
@@ -119,9 +117,11 @@ const TransactionForm = () => {
 
   useEffect(() => { fetchData(); }, [kelas, gender]);
 
-  /* HANDLER INPUT MASSAL */
+  /* HANDLER INPUT MASSAL - DENGAN FIX BUG TITIK DESIMAL */
   const handleAmountChange = (id: string, val: string) => {
-    setFormData(prev => ({ ...prev, [id]: { ...prev[id], amount: val } }));
+    // 🔥 Bersihkan nilai dari semua karakter selain angka (menghapus titik yang diketik user)
+    const cleanVal = val.replace(/\D/g, '');
+    setFormData(prev => ({ ...prev, [id]: { ...prev[id], amount: cleanVal } }));
   };
 
   const handleModeChange = (id: string, mode: '10000' | 'custom' | 'batal') => {
@@ -143,18 +143,21 @@ const TransactionForm = () => {
         const rowData = formData[santri.id];
         let finalAmount = 0;
 
+        // 🔥 Proteksi Ganda: Jika masih ada titik terselip, bersihkan lagi saat mau masuk DB
+        const rawAmountString = String(rowData?.amount || "0").replace(/\D/g, "");
+
         if (type === 'pemasukan') {
-            finalAmount = Number(rowData?.amount || 0);
+            finalAmount = Number(rawAmountString);
         } else {
             if (rowData?.mode === '10000') finalAmount = 10000;
-            else if (rowData?.mode === 'custom') finalAmount = Number(rowData?.amount || 0);
+            else if (rowData?.mode === 'custom') finalAmount = Number(rawAmountString);
             else if (rowData?.mode === 'batal') finalAmount = 0;
         }
 
         if (finalAmount > 0) {
             // Proteksi Saldo Minus untuk Pengeluaran
             if (type === 'pengeluaran' && finalAmount > santri.saldo) {
-                toast({ title: `Saldo ${santri.nama_lengkap} Tidak Cukup!`, description: `Sisa Rp ${santri.saldo.toLocaleString()}`, variant: "destructive" });
+                toast({ title: `Saldo ${santri.nama_lengkap} Tidak Cukup!`, description: `Sisa Rp ${santri.saldo.toLocaleString("id-ID")}`, variant: "destructive" });
                 hasError = true; break; 
             }
 
@@ -255,11 +258,18 @@ const TransactionForm = () => {
                                     <tr key={santri.id} className="hover:bg-gray-50">
                                         <td className="p-3 font-bold text-gray-700">{santri.nama_lengkap}</td>
                                         <td className="p-3 text-right">
-                                            <span className={`font-medium ${santri.saldo < 10000 ? 'text-red-500' : 'text-gray-600'}`}>Rp {santri.saldo.toLocaleString()}</span>
+                                            <span className={`font-medium ${santri.saldo < 10000 ? 'text-red-500' : 'text-gray-600'}`}>Rp {santri.saldo.toLocaleString("id-ID")}</span>
                                         </td>
                                         <td className="p-3 flex justify-center gap-2">
                                             {type === 'pemasukan' ? (
-                                                <Input type="number" placeholder="Rp 0" value={formData[santri.id]?.amount || ""} onChange={(e) => handleAmountChange(santri.id, e.target.value)} className="w-full text-right font-bold focus:border-green-500" />
+                                                <Input 
+                                                    type="text" 
+                                                    inputMode="numeric"
+                                                    placeholder="Rp 0" 
+                                                    value={formData[santri.id]?.amount ? Number(formData[santri.id]?.amount).toLocaleString('id-ID') : ""} 
+                                                    onChange={(e) => handleAmountChange(santri.id, e.target.value)} 
+                                                    className="w-full text-right font-bold focus:border-green-500" 
+                                                />
                                             ) : (
                                                 <div className="flex gap-2 w-full">
                                                     <Select value={formData[santri.id]?.mode || '10000'} onValueChange={(v: any) => handleModeChange(santri.id, v)}>
@@ -274,7 +284,14 @@ const TransactionForm = () => {
                                                     </Select>
                                                     
                                                     {formData[santri.id]?.mode === 'custom' && (
-                                                        <Input type="number" placeholder="Rp..." value={formData[santri.id]?.amount || ""} onChange={(e) => handleAmountChange(santri.id, e.target.value)} className="w-full text-right font-bold focus:border-red-500" />
+                                                        <Input 
+                                                            type="text" 
+                                                            inputMode="numeric"
+                                                            placeholder="Rp..." 
+                                                            value={formData[santri.id]?.amount ? Number(formData[santri.id]?.amount).toLocaleString('id-ID') : ""} 
+                                                            onChange={(e) => handleAmountChange(santri.id, e.target.value)} 
+                                                            className="w-full text-right font-bold focus:border-red-500" 
+                                                        />
                                                     )}
                                                 </div>
                                             )}
@@ -325,7 +342,7 @@ const TransactionForm = () => {
                                                 </p>
                                             </td>
                                             <td className="p-3 text-right">
-                                                <span className="font-bold text-red-600">- Rp {hist.amount.toLocaleString()}</span>
+                                                <span className="font-bold text-red-600">- Rp {hist.amount.toLocaleString("id-ID")}</span>
                                             </td>
                                         </tr>
                                     ))
@@ -358,7 +375,7 @@ const TransactionForm = () => {
                                             </td>
                                             <td className="p-3 text-right">
                                                 <span className={`font-bold ${hist.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                                                    {hist.type === 'income' ? '+' : '-'} Rp {hist.amount.toLocaleString()}
+                                                    {hist.type === 'income' ? '+' : '-'} Rp {hist.amount.toLocaleString("id-ID")}
                                                 </span>
                                             </td>
                                         </tr>
