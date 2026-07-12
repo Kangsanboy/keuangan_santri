@@ -569,7 +569,8 @@ const Index = () => {
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
         
-        <header className="bg-gradient-to-r from-white via-green-50/50 to-green-100/60 backdrop-blur-md h-20 flex items-center justify-between px-4 md:px-6 shadow-sm z-10 border-b border-green-200 flex-shrink-0">
+        {/* 🔥 FIX Z-INDEX HEADER JADI z-50 DAN RELATIVE */}
+        <header className="bg-gradient-to-r from-white via-green-50/50 to-green-100/60 backdrop-blur-md h-20 flex items-center justify-between px-4 md:px-6 shadow-sm z-50 relative border-b border-green-200 flex-shrink-0">
           <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                   <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-green-800 p-2.5 bg-white border border-green-100 shadow-sm hover:bg-green-50 rounded-xl transition-all">{isSidebarOpen ? <PanelLeftClose size={20} className="hidden md:block" /> : <PanelLeftOpen size={20} className="hidden md:block" />}<Menu size={20} className="md:hidden" /></button>
@@ -578,7 +579,6 @@ const Index = () => {
           
           <div className="flex items-center gap-3 max-w-[70%]">
               
-              {/* 🔥 FITUR KOTAK PESAN (NOTIFIKASI SUPER ADMIN) */}
               {isSuperAdmin && (
                   <div className="relative">
                       <button 
@@ -595,8 +595,11 @@ const Index = () => {
 
                       {isNotifOpen && (
                           <>
-                              <div className="fixed inset-0 z-40" onClick={() => setIsNotifOpen(false)}></div>
-                              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-green-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                              {/* Overlay dengan z-[90] dan bg agak gelap sedikit biar kelihatan fokus */}
+                              <div className="fixed inset-0 z-[90] bg-black/5" onClick={() => setIsNotifOpen(false)}></div>
+                              
+                              {/* Notifikasi Menu dengan z-[100] paling tinggi */}
+                              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-green-100 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2">
                                   <div className="bg-green-50 p-3 border-b border-green-100 flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                           <Bell className="w-4 h-4 text-green-700" />
@@ -604,7 +607,7 @@ const Index = () => {
                                       </div>
                                       <span className="text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-bold">{pendingUsersCount} Baru</span>
                                   </div>
-                                  <div className="p-4">
+                                  <div className="p-4 bg-white">
                                       {pendingUsersCount > 0 ? (
                                           <div className="space-y-4">
                                               <div className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
