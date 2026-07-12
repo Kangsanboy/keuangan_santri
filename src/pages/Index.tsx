@@ -27,7 +27,7 @@ import {
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
-  Activity, Shield, Library, ShieldCheck
+  Activity, Shield, Library, ShieldCheck, UserCheck
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -55,14 +55,12 @@ const Index = () => {
   
   const [targetAbsensiTab, setTargetAbsensiTab] = useState<string>("kbm");
 
-  /* ================= STATE DATA & FILTER KEUANGAN ================= */
-  // Filter Export Excel
+  /* ================= STATE DATA & FILTER ================= */
   const [exportKelas, setExportKelas] = useState<string>("all");
   const [exportGender, setExportGender] = useState<string>("all");
   const [exportMonth, setExportMonth] = useState(new Date().getMonth());
   const [exportYear, setExportYear] = useState(new Date().getFullYear());
   
-  // Filter Tanggal Riwayat
   const [historyDate, setHistoryDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [riwayatTrx, setRiwayatTrx] = useState<TransaksiItem[]>([]);
 
@@ -74,6 +72,9 @@ const Index = () => {
   const [keluarHariIni, setKeluarHariIni] = useState(0);
   const [absensiLogs, setAbsensiLogs] = useState<any[]>([]); 
   
+  // 🔥 STATE BARU UNTUK RIWAYAT LOGIN
+  const [loginHistory, setLoginHistory] = useState<any[]>([]);
+
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
   const yearsList = [2024, 2025, 2026, 2027, 2028];
 
@@ -122,7 +123,7 @@ const Index = () => {
     checkUserRole();
   }, [user, navigate]);
 
-  /* ================= FETCH DATA KEUANGAN & RIWAYAT ================= */
+  /* ================= FETCH DATA KEUANGAN, RIWAYAT & LOGIN ================= */
   const fetchKeuangan = useCallback(async () => {
     if (userRole === 'pending') return; 
     
@@ -131,7 +132,6 @@ const Index = () => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(now.getDate() - 6);
 
-    // Hitung akumulasi masuk, keluar 7 hari dll
     const { data } = await supabase.from("transactions_2025_12_01_21_34")
         .select("amount, type, transaction_date")
         .order('transaction_date', { ascending: false }); 
@@ -148,7 +148,6 @@ const Index = () => {
         setTotalMasuk(m); setTotalKeluar(k); setMasuk7Hari(m7); setKeluar7Hari(k7);
     }
     
-    // Hitung pengeluaran khusus hari ini
     const { data: detailHariIni } = await supabase.from("transactions_2025_12_01_21_34")
       .select(`amount, type`)
       .eq("transaction_date", todayStr);
@@ -159,7 +158,6 @@ const Index = () => {
     }
   }, [userRole]);
 
-  // 🔥 FUNGSI KHUSUS RIWAYAT BERDASARKAN FILTER TANGGAL
   const fetchRiwayatTransaksi = useCallback(async () => {
       if (userRole === 'pending') return;
       const { data } = await supabase.from("transactions_2025_12_01_21_34")
@@ -200,13 +198,27 @@ const Index = () => {
     if (data) setAbsensiLogs(data);
   }, [userRole]);
 
+  // 🔥 FETCH RIWAYAT LOGIN / PENGGUNA TERAKHIR
+  const fetchLoginHistory = useCallback(async () => {
+      // Karena Supabase secara default tidak menyediakan log tabel 'login' di public,
+      // Kita fetch pengguna yang terakhir kali diupdate/dibuat sebagai simulasi aktivitas akun.
+      if (userRole === 'super_admin' || userRole === 'guru') {
+          const { data } = await supabase
+            .from('users')
+            .select('full_name, role, created_at')
+            .order('created_at', { ascending: false })
+            .limit(8); // Ambil 8 data terakhir
+            
+          if (data) setLoginHistory(data);
+      }
+  }, [userRole]);
+
   useEffect(() => { 
       if (user) { 
-          fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni(); fetchRiwayatTransaksi(); 
+          fetchKeuangan(); fetchRekapSaldo(); fetchAbsensiHariIni(); fetchRiwayatTransaksi(); fetchLoginHistory();
       } 
-  }, [user, userRole, historyDate, fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni, fetchRiwayatTransaksi]);
+  }, [user, userRole, historyDate, fetchKeuangan, fetchRekapSaldo, fetchAbsensiHariIni, fetchRiwayatTransaksi, fetchLoginHistory]);
   
-  /* 🔥 AUTO REFRESH FIX (Nangkep sinyal dari TransactionForm) */
   useEffect(() => {
     const handleRefreshEvent = () => { 
         fetchKeuangan(); 
@@ -405,7 +417,6 @@ const Index = () => {
            
            <button onClick={() => handleMenuClick("santri")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "santri" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Users className="mr-3 h-5 w-5 flex-shrink-0" />Data Santri</button>
 
-           {/* 🔥 Sembunyikan Manajemen Kelas & Data Guru dari Guru & Pengasuh */}
            {!isGuru && !isPengasuh && (
                <>
                    <button onClick={() => handleMenuClick("manajemen_kelas")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "manajemen_kelas" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Library className="mr-3 h-5 w-5 flex-shrink-0" />Manajemen Kelas</button>
@@ -416,7 +427,6 @@ const Index = () => {
            <button onClick={() => handleMenuClick("absensi")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "absensi" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Clock className="mr-3 h-5 w-5 flex-shrink-0" />Monitoring Absensi</button>
            <button onClick={() => handleMenuClick("kesehatan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "kesehatan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><Activity className="mr-3 h-5 w-5 flex-shrink-0" />Catatan Kesehatan</button>
            
-           {/* 🔥 TAMPILKAN PORTAL PERIZINAN UNTUK PENGASUH JUGA */}
            {(isSuperAdmin || isAdmin || isGuru || isPengasuh) && (
            <button onClick={() => handleMenuClick("perizinan")} className={`flex items-center w-full px-4 py-3 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${activeMenu === "perizinan" ? "bg-green-700 text-white shadow-lg border-l-4 border-yellow-400 pl-3" : "text-green-100 hover:bg-green-800"}`}><DoorOpen className="mr-3 h-5 w-5 flex-shrink-0" />Portal Perizinan</button>
           )}
@@ -437,7 +447,6 @@ const Index = () => {
                </>
            )}
 
-           {/* 🔥 Sembunyikan bagian Sistem & Operasional dari Pengasuh */}
            {(isAdmin || isSuperAdmin) && (
                <>
                   <div className="border-t border-green-800 my-4"></div>
@@ -541,7 +550,47 @@ const Index = () => {
                        ))}
                    </div>
 
-                   <div className="border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto"><h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3><div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div></div>
+                   {/* 🔥 GRAFIK & RIWAYAT LOGIN (GRID) */}
+                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                       
+                       {/* GRAFIK SALDO (Mengecil jadi 2 kolom jika ada riwayat login) */}
+                       <div className={`border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto ${(isSuperAdmin || isGuru) ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                           <h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3>
+                           <div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div>
+                       </div>
+
+                       {/* 🔥 CARD RIWAYAT LOGIN (KHUSUS SUPER ADMIN & GURU) */}
+                       {(isSuperAdmin || isGuru) && (
+                           <div className="border border-blue-200 rounded-xl bg-white shadow-sm p-4 flex flex-col h-full max-h-[420px]">
+                               <h3 className="text-center font-bold text-blue-900 mb-4 text-sm md:text-lg flex items-center justify-center gap-2 border-b border-blue-100 pb-3">
+                                   <UserCheck className="w-5 h-5 text-blue-600" /> Riwayat Akun Pengguna
+                               </h3>
+                               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                                   {loginHistory.length === 0 ? (
+                                       <div className="text-center text-gray-400 text-xs italic mt-4">Belum ada data aktivitas.</div>
+                                   ) : (
+                                       loginHistory.map((log, idx) => (
+                                           <div key={idx} className="flex items-center justify-between p-3 hover:bg-blue-50/50 rounded-lg border border-gray-100 transition-colors">
+                                               <div className="flex items-center gap-3 w-full">
+                                                   <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] shrink-0 border border-blue-200">
+                                                       {getInitials(log.full_name)}
+                                                   </div>
+                                                   <div className="flex-1 min-w-0">
+                                                       <p className="text-sm font-bold text-gray-800 truncate">{log.full_name}</p>
+                                                       <p className="text-[10px] text-gray-500 capitalize">{log.role.replace('_', ' ')}</p>
+                                                   </div>
+                                                   <div className="text-[10px] text-gray-400 font-mono text-right shrink-0">
+                                                       {new Date(log.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       ))
+                                   )}
+                               </div>
+                           </div>
+                       )}
+
+                   </div>
                 </div>
              )}
              
@@ -550,7 +599,6 @@ const Index = () => {
                  <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                     <div className="flex items-center justify-between mb-2"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Keuangan</h2></div>
                     
-                    {/* 🔥 EXCEL HANYA UNTUK SELAIN PENGASUH */}
                     {!isPengasuh && (
                     <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
                         <CardHeader className="bg-green-50/50 border-b border-green-100 pb-3 p-4">
@@ -597,7 +645,6 @@ const Index = () => {
 
                     <div className="bg-white rounded-xl shadow-sm border p-1 relative"><div className="absolute top-0 right-0 p-4 z-10 hidden md:block"><span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1"><CalendarDays size={12}/> Mode Input Cepat</span></div><TransactionForm /></div>
                     
-                    {/* Riwayat global disembunyikan untuk pengasuh karena sudah ada di TransactionForm */}
                     {!isPengasuh && (
                     <Card className="border-green-200 bg-white shadow-sm overflow-hidden">
                        <CardHeader className="bg-gray-50/50 border-b border-green-100 pb-3 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
