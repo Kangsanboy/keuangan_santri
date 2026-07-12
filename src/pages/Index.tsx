@@ -199,17 +199,26 @@ const Index = () => {
   }, [userRole]);
 
   // 🔥 FETCH RIWAYAT LOGIN / PENGGUNA TERAKHIR
-  const fetchLoginHistory = useCallback(async () => {
-      // Karena Supabase secara default tidak menyediakan log tabel 'login' di public,
-      // Kita fetch pengguna yang terakhir kali diupdate/dibuat sebagai simulasi aktivitas akun.
+const fetchLoginHistory = useCallback(async () => {
       if (userRole === 'super_admin' || userRole === 'guru') {
           const { data } = await supabase
-            .from('users')
-            .select('full_name, role, created_at')
+            .from('user_login_logs')
+            .select(`
+                created_at,
+                users (full_name, role)
+            `)
             .order('created_at', { ascending: false })
-            .limit(8); // Ambil 8 data terakhir
+            .limit(8); // Ambil 8 aktivitas login terakhir
             
-          if (data) setLoginHistory(data);
+          if (data) {
+              // Format datanya agar nge-pas dengan UI card kita
+              const formattedData = data.map((log: any) => ({
+                  full_name: log.users?.full_name || "Tanpa Nama",
+                  role: log.users?.role || "unknown",
+                  created_at: log.created_at
+              }));
+              setLoginHistory(formattedData);
+          }
       }
   }, [userRole]);
 
