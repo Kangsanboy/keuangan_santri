@@ -27,7 +27,7 @@ import {
   LayoutDashboard, Wallet, Users, User, UserCog, LogOut, PanelLeftClose, PanelLeftOpen,
   Banknote, FileSpreadsheet, CalendarDays, Menu, History, ArrowUpCircle, ArrowDownCircle,
   Clock, ShieldAlert, Trash2, ScanBarcode, Store, BarChart3, GraduationCap, CalendarClock, 
-  Activity, Shield, Library, ShieldCheck, UserCheck
+  Activity, Shield, Library, ShieldCheck, UserCheck, RefreshCcw, AlertTriangle
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 
@@ -61,6 +61,11 @@ const Index = () => {
   const [exportMonth, setExportMonth] = useState(new Date().getMonth());
   const [exportYear, setExportYear] = useState(new Date().getFullYear());
   
+  // 🔥 STATE RESET SALDO
+  const [resetKelas, setResetKelas] = useState<string>("");
+  const [resetGender, setResetGender] = useState<string>("");
+  const [isResetting, setIsResetting] = useState(false);
+
   const [historyDate, setHistoryDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [riwayatTrx, setRiwayatTrx] = useState<TransaksiItem[]>([]);
 
@@ -72,7 +77,6 @@ const Index = () => {
   const [keluarHariIni, setKeluarHariIni] = useState(0);
   const [absensiLogs, setAbsensiLogs] = useState<any[]>([]); 
   
-  // 🔥 STATE BARU UNTUK RIWAYAT LOGIN
   const [loginHistory, setLoginHistory] = useState<any[]>([]);
 
   const monthsList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -118,14 +122,9 @@ const Index = () => {
                 setUserRole(data.role);
                 if (data.role === 'kantin') { navigate('/kasir'); return; }
 
-                // 🔥 LOGIKA BARU: REKAM AKTIVITAS "MEMBUKA WEB"
-                // Cek apakah di sesi tab browser ini user sudah dicatat
                 const sessionKey = `has_opened_web_${user.id}`;
                 if (!sessionStorage.getItem(sessionKey)) {
-                    // Jika belum, masukkan data ke tabel user_login_logs
                     await supabase.from('user_login_logs').insert([{ user_id: user.id }]);
-                    
-                    // Tandai di memori browser supaya tidak nyatat berulang-ulang saat klik menu
                     sessionStorage.setItem(sessionKey, 'true');
                 }
             }
@@ -209,8 +208,7 @@ const Index = () => {
     if (data) setAbsensiLogs(data);
   }, [userRole]);
 
-  // 🔥 FETCH RIWAYAT LOGIN / PENGGUNA TERAKHIR
-const fetchLoginHistory = useCallback(async () => {
+  const fetchLoginHistory = useCallback(async () => {
       if (userRole === 'super_admin' || userRole === 'guru') {
           const { data } = await supabase
             .from('user_login_logs')
@@ -219,10 +217,9 @@ const fetchLoginHistory = useCallback(async () => {
                 users (full_name, role)
             `)
             .order('created_at', { ascending: false })
-            .limit(8); // Ambil 8 aktivitas login terakhir
+            .limit(8); 
             
           if (data) {
-              // Format datanya agar nge-pas dengan UI card kita
               const formattedData = data.map((log: any) => ({
                   full_name: log.users?.full_name || "Tanpa Nama",
                   role: log.users?.role || "unknown",
@@ -312,6 +309,76 @@ const fetchLoginHistory = useCallback(async () => {
     if (exportGender !== 'all') fileName += `_${exportGender}`;
     
     XLSX.writeFile(wb, `${fileName}.xlsx`);
+  };
+
+  // 🔥 FUNGSI RESET SALDO KHUSUS SUPER ADMIN
+  const handleResetSaldo = async () => {
+    if (!resetKelas || !resetGender) return toast({ title: "Perhatian", description: "Mohon pilih Kelas dan Gender terlebih dahulu.", variant: "destructive" });
+    if (!window.confirm(`PERINGATAN KERAS!\n\nAnda yakin ingin MENGOSONGKAN SALDO seluruh santri Kelas ${resetKelas} ${resetGender}?\n\nData yang direset tidak bisa dikembalikan.`)) return;
+
+    setIsResetting(true);
+    try {
+        const { data: santriData, error: sErr } = await supabase.from('santri_2025_12_01_21_34')
+            .select('id, nama_lengkap')
+            .eq('kelas', parseInt(resetKelas))
+            .eq('gender', resetGender)
+            .eq('status', 'aktif');
+            
+        if (sErr) throw sErr;
+        if (!santriData || santriData.length === 0) {
+            toast({ title: "Gagal", description: "Tidak ada data santri di kelas tersebut.", variant: "destructive" });
+            setIsResetting(false); return;
+        }
+
+        const santriIds = santriData.map(s => s.id);
+        const { data: saldoData, error: saldoErr } = await supabase.from('view_santri_saldo').select('id, saldo').in('id', santriIds);
+        
+        if (saldoErr) throw saldoErr;
+
+        const transactionsToInsert: any[] = [];
+        const now = new Date().toISOString().split('T')[0];
+
+        saldoData?.forEach(s => {
+            if (s.saldo > 0) {
+                transactionsToInsert.push({
+                    user_id: user!.id,
+                    santri_id: s.id,
+                    type: 'expense',
+                    amount: s.saldo,
+                    description: 'Reset Saldo Berkala',
+                    category: 'santri',
+                    transaction_date: now
+                });
+            } else if (s.saldo < 0) {
+                transactionsToInsert.push({
+                    user_id: user!.id,
+                    santri_id: s.id,
+                    type: 'income',
+                    amount: Math.abs(s.saldo),
+                    description: 'Penyesuaian Reset Saldo',
+                    category: 'santri',
+                    transaction_date: now
+                });
+            }
+        });
+
+        if (transactionsToInsert.length === 0) {
+            toast({ title: "Selesai", description: "Semua saldo di kelas ini sudah Rp 0." });
+            setIsResetting(false); return;
+        }
+
+        const { error: insertErr } = await supabase.from('transactions_2025_12_01_21_34').insert(transactionsToInsert);
+        if (insertErr) throw insertErr;
+
+        toast({ title: "Berhasil!", description: `${transactionsToInsert.length} data saldo santri berhasil direset menjadi Rp 0.`, className: "bg-green-600 text-white" });
+        fetchKeuangan(); fetchRekapSaldo(); fetchRiwayatTransaksi();
+        setResetKelas(""); setResetGender("");
+        
+    } catch (err: any) {
+        toast({ title: "Error Mereset", description: err.message, variant: "destructive" });
+    } finally {
+        setIsResetting(false);
+    }
   };
 
   const handleOpenKelas = (kelas: number) => { setSelectedKelasSantri(kelas); navigateTo("santri", null); };
@@ -570,16 +637,12 @@ const fetchLoginHistory = useCallback(async () => {
                        ))}
                    </div>
 
-                   {/* 🔥 GRAFIK & RIWAYAT LOGIN (GRID) */}
                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                       
-                       {/* GRAFIK SALDO (Mengecil jadi 2 kolom jika ada riwayat login) */}
                        <div className={`border border-green-500 rounded-xl bg-white shadow-sm p-4 overflow-x-auto ${(isSuperAdmin || isGuru) ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
                            <h3 className="text-center font-bold text-gray-800 mb-4 text-sm md:text-lg">Detail Saldo Per Kelas</h3>
                            <div className="min-w-[300px]"><FinanceChart data={rekapSaldo} /></div>
                        </div>
 
-                       {/* 🔥 CARD RIWAYAT LOGIN (KHUSUS SUPER ADMIN & GURU) */}
                        {(isSuperAdmin || isGuru) && (
                            <div className="border border-blue-200 rounded-xl bg-white shadow-sm p-4 flex flex-col h-full max-h-[420px]">
                                <h3 className="text-center font-bold text-blue-900 mb-4 text-sm md:text-lg flex items-center justify-center gap-2 border-b border-blue-100 pb-3">
@@ -661,6 +724,50 @@ const fetchLoginHistory = useCallback(async () => {
                             </div>
                         </CardContent>
                     </Card>
+                    )}
+
+                    {/* 🔥 FORM RESET SALDO KHUSUS SUPER ADMIN */}
+                    {isSuperAdmin && (
+                        <Card className="border-red-200 bg-white shadow-sm overflow-hidden mb-6">
+                            <CardHeader className="bg-red-50/50 border-b border-red-100 pb-3 p-4">
+                                <div className="flex items-center gap-2 text-red-800">
+                                    <RefreshCcw className="w-5 h-5" />
+                                    <CardTitle className="text-base md:text-lg">Reset Saldo Santri</CardTitle>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                                <div className="flex flex-col gap-3">
+                                    <div className="bg-red-50 p-3 rounded-md border border-red-100 text-xs text-red-700 flex items-start gap-2 mb-2">
+                                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        <p><strong>Peringatan:</strong> Fitur ini akan mengosongkan (menjadi Rp 0) seluruh saldo santri pada kelas dan gender yang dipilih. Gunakan di akhir semester atau saat tutup buku. Tindakan ini <strong>tidak bisa dibatalkan.</strong></p>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-600">Pilih Kelas</label>
+                                            <select value={resetKelas} onChange={(e) => setResetKelas(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md text-sm outline-none">
+                                                <option value="">-- Pilih Kelas --</option>
+                                                {[7, 8, 9, 10, 11, 12].map(k => <option key={k} value={String(k)}>Kelas {k}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-600">Pilih Gender</label>
+                                            <select value={resetGender} onChange={(e) => setResetGender(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md text-sm outline-none">
+                                                <option value="">-- Pilih Gender --</option>
+                                                <option value="ikhwan">Ikhwan</option>
+                                                <option value="akhwat">Akhwat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <Button 
+                                        onClick={handleResetSaldo} 
+                                        disabled={isResetting || !resetKelas || !resetGender} 
+                                        className="bg-red-600 hover:bg-red-700 shadow-md w-full mt-2"
+                                    >
+                                        {isResetting ? "Mereset Saldo..." : "Konfirmasi Reset Saldo"}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
                     )}
 
                     <div className="bg-white rounded-xl shadow-sm border p-1 relative"><div className="absolute top-0 right-0 p-4 z-10 hidden md:block"><span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1"><CalendarDays size={12}/> Mode Input Cepat</span></div><TransactionForm /></div>
