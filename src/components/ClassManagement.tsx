@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  Search, FileSpreadsheet, Download, Upload, Pencil, BookOpen, GraduationCap, Users
+  Search, FileSpreadsheet, Download, Upload, Pencil, BookOpen, GraduationCap, Users, CheckSquare
 } from 'lucide-react';
 
 interface SantriClass {
@@ -37,6 +37,14 @@ const ClassManagement = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState<SantriClass | null>(null);
 
+  // 🔥 STATE UNTUK FITUR MULTI-SELECT & AKSI MASSAL
+  const [selectedSantriIds, setSelectedSantriIds] = useState<string[]>([]);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [bulkData, setBulkData] = useState({
+      kelas: "7", rombel: "A",
+      kelas_mengaji: "7", rombel_mengaji: "A"
+  });
+
   const fetchSantris = async () => {
     setLoading(true);
     try {
@@ -49,6 +57,8 @@ const ClassManagement = () => {
       
       if (error) throw error;
       setSantris(data || []);
+      // Reset seleksi saat data direfresh
+      setSelectedSantriIds([]);
     } catch (err: any) {
       toast({ title: "Gagal memuat data", description: err.message, variant: "destructive" });
     } finally { setLoading(false); }
@@ -56,6 +66,55 @@ const ClassManagement = () => {
 
   useEffect(() => { fetchSantris(); }, []);
 
+  /* ================= HANDLER MULTI-SELECT ================= */
+  const handleSelectSantri = (id: string) => {
+      setSelectedSantriIds(prev => 
+          prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+      );
+  };
+
+  const handleSelectAllInTable = (santriList: SantriClass[]) => {
+      const ids = santriList.map(s => s.id);
+      const allSelected = ids.every(id => selectedSantriIds.includes(id));
+      
+      if (allSelected) {
+          // Deselect all
+          setSelectedSantriIds(prev => prev.filter(id => !ids.includes(id)));
+      } else {
+          // Select all
+          setSelectedSantriIds(prev => Array.from(new Set([...prev, ...ids])));
+      }
+  };
+
+  const handleBulkEditSave = async () => {
+      if (selectedSantriIds.length === 0) return;
+      setIsUploading(true);
+      try {
+          // Update massal pakai loop promise biar cepat
+          const updatePromises = selectedSantriIds.map(id => 
+              supabase.from('santri_2025_12_01_21_34')
+                .update({
+                    kelas: parseInt(bulkData.kelas),
+                    rombel: bulkData.rombel,
+                    kelas_mengaji: parseInt(bulkData.kelas_mengaji),
+                    rombel_mengaji: bulkData.rombel_mengaji
+                })
+                .eq('id', id)
+          );
+
+          await Promise.all(updatePromises);
+          
+          toast({ title: "Sukses!", description: `${selectedSantriIds.length} santri berhasil dipindahkan kelas/rombelnya.`, className: "bg-green-600 text-white" });
+          setIsBulkEditOpen(false);
+          fetchSantris();
+      } catch (err: any) {
+          toast({ title: "Gagal Update Massal", description: err.message, variant: "destructive" });
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
+  /* ================= EXPORT & IMPORT ================= */
   const downloadTemplate = () => {
     if (santris.length === 0) {
         return toast({ title: "Data kosong", description: "Belum ada data santri untuk didownload.", variant: "destructive" });
@@ -154,41 +213,52 @@ const ClassManagement = () => {
   const renderTabelGender = (dataList: SantriClass[], label: string, color: string) => {
     if (dataList.length === 0) return <div className="p-4 text-center text-xs text-gray-400 border rounded-lg border-dashed">Tidak ada data</div>;
     
+    // Cek apakah semua santri di tabel ini sudah dicentang
+    const allSelected = dataList.every(s => selectedSantriIds.includes(s.id));
+
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+      <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm relative">
         <div className={`p-2 font-bold text-xs ${color} flex justify-between items-center`}>
           <span className="flex items-center gap-1">{label}</span>
-          <span className="bg-white/50 px-2 py-0.5 rounded-full">{dataList.length} Santri</span>
+          <span className="bg-white/50 px-2 py-0.5 rounded-full text-black">{dataList.length} Santri</span>
         </div>
         <table className="w-full text-xs text-left bg-white">
           <thead className="bg-gray-50 border-b">
              <tr>
-               <th className="p-2 w-8 text-center">No</th>
+               {/* Checkbox Select All */}
+               <th className="p-2 w-10 text-center cursor-pointer hover:bg-gray-200" onClick={() => handleSelectAllInTable(dataList)} title="Pilih Semua / Batal Pilih">
+                   <input type="checkbox" checked={allSelected} readOnly className="w-4 h-4 cursor-pointer accent-blue-600" />
+               </th>
                <th className="p-2">Nama & NISN</th>
                <th className="p-2 text-center">Rombel</th>
                <th className="p-2 text-center w-12">Aksi</th>
              </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-             {dataList.map((s, idx) => (
-               <tr key={s.id} className="hover:bg-gray-50 group">
-                  <td className="p-2 text-center text-gray-400">{idx + 1}</td>
-                  <td className="p-2">
-                    <p className="font-bold text-gray-800">{s.nama_lengkap}</p>
-                    <p className="text-[10px] text-gray-500 font-mono">{s.nisn || '-'}</p>
-                  </td>
-                  <td className="p-2 text-center">
-                      <span className="bg-gray-100 px-2 py-1 rounded border font-bold text-gray-700">
-                          {activeTab === 'sekolah' ? s.rombel || 'A' : s.rombel_mengaji || 'A'}
-                      </span>
-                  </td>
-                  <td className="p-2 text-center">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-500 opacity-50 group-hover:opacity-100 bg-orange-50" onClick={() => { setEditData(s); setIsEditOpen(true); }}>
-                          <Pencil size={12} />
-                      </Button>
-                  </td>
-               </tr>
-             ))}
+             {dataList.map((s) => {
+                 const isSelected = selectedSantriIds.includes(s.id);
+                 return (
+                   <tr key={s.id} className={`group cursor-pointer transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`} onClick={() => handleSelectSantri(s.id)}>
+                      <td className="p-2 text-center text-gray-400" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={isSelected} onChange={() => handleSelectSantri(s.id)} className="w-4 h-4 cursor-pointer accent-blue-600" />
+                      </td>
+                      <td className="p-2">
+                        <p className={`font-bold ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>{s.nama_lengkap}</p>
+                        <p className="text-[10px] text-gray-500 font-mono">{s.nisn || '-'}</p>
+                      </td>
+                      <td className="p-2 text-center">
+                          <span className="bg-gray-100 px-2 py-1 rounded border font-bold text-gray-700">
+                              {activeTab === 'sekolah' ? s.rombel || 'A' : s.rombel_mengaji || 'A'}
+                          </span>
+                      </td>
+                      <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-500 opacity-50 group-hover:opacity-100 bg-orange-50" onClick={() => { setEditData(s); setIsEditOpen(true); }}>
+                              <Pencil size={12} />
+                          </Button>
+                      </td>
+                   </tr>
+                 )
+             })}
           </tbody>
         </table>
       </div>
@@ -196,7 +266,7 @@ const ClassManagement = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-32 relative">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
         <div>
             <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-green-600" /> Manajemen Kelas & Rombel</h1>
@@ -257,6 +327,52 @@ const ClassManagement = () => {
              </div>
           </CardContent>
       </Card>
+
+      {/* 🔥 FLOATING PANEL AKSI MASSAL */}
+      {selectedSantriIds.length > 0 && (
+          <div className="fixed bottom-0 left-0 md:left-72 right-0 bg-white border-t border-blue-200 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] p-4 flex flex-col md:flex-row justify-between items-center gap-4 z-50 animate-in slide-in-from-bottom-10 duration-300">
+              <div>
+                  <h3 className="font-bold text-blue-800 flex items-center gap-2">
+                      <CheckSquare className="w-5 h-5" /> {selectedSantriIds.length} Santri Dipilih
+                  </h3>
+                  <p className="text-xs text-gray-500">Anda dapat mengatur kelas & rombel santri secara massal.</p>
+              </div>
+              <div className="flex gap-2 w-full md:w-auto">
+                  <Button variant="outline" onClick={() => setSelectedSantriIds([])} className="border-red-200 text-red-600 hover:bg-red-50 flex-1 md:flex-none">Batal</Button>
+                  <Button onClick={() => setIsBulkEditOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md flex-1 md:flex-none">
+                      <Users className="w-4 h-4 mr-2"/> Atur Kelas/Rombel
+                  </Button>
+              </div>
+          </div>
+      )}
+
+      {/* DIALOG BULK EDIT */}
+      <Dialog open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen}>
+          <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                  <DialogTitle className="text-blue-800">Atur Kelas & Rombel Massal</DialogTitle>
+                  <p className="text-xs text-gray-500">Akan diterapkan ke {selectedSantriIds.length} santri yang dipilih.</p>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4 border p-3 rounded-lg bg-green-50/30">
+                      <div className="col-span-2 text-xs font-bold text-green-700 mb-1">Sekolah Formal</div>
+                      <div className="space-y-1"><label className="text-xs font-bold">Naik/Turun Kelas</label><Select value={bulkData.kelas} onValueChange={v => setBulkData({...bulkData, kelas: v})}> <SelectTrigger className="bg-white h-8"><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>{k}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1"><label className="text-xs font-bold">Atur Rombel</label><Select value={bulkData.rombel} onValueChange={v => setBulkData({...bulkData, rombel: v})}><SelectTrigger className="bg-white h-8"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Kosong" className="text-gray-400 italic">Belum Ditentukan (Kosong)</SelectItem>{['A','B','C','D','E','F','G'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 border p-3 rounded-lg bg-blue-50/30">
+                      <div className="col-span-2 text-xs font-bold text-blue-700 mb-1">Diniyah Mengaji</div>
+                      <div className="space-y-1"><label className="text-xs font-bold">Naik/Turun Kelas</label><Select value={bulkData.kelas_mengaji} onValueChange={v => setBulkData({...bulkData, kelas_mengaji: v})}> <SelectTrigger className="bg-white h-8"><SelectValue /></SelectTrigger><SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>{k}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1"><label className="text-xs font-bold">Atur Rombel</label><Select value={bulkData.rombel_mengaji} onValueChange={v => setBulkData({...bulkData, rombel_mengaji: v})}><SelectTrigger className="bg-white h-8"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Kosong" className="text-gray-400 italic">Belum Ditentukan (Kosong)</SelectItem>{['A','B','C','D','E','F','G'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
+                  </div>
+              </div>
+              <DialogFooter>
+                  <Button variant="ghost" onClick={() => setIsBulkEditOpen(false)}>Batal</Button>
+                  <Button onClick={handleBulkEditSave} disabled={isUploading} className="bg-blue-600 hover:bg-blue-700">
+                      {isUploading ? "Memproses..." : "Terapkan Massal"}
+                  </Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
 
       <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
           <DialogContent className="sm:max-w-md">
