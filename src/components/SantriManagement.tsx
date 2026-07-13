@@ -263,46 +263,77 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
       }
   };
 
+  // 🔥 FITUR BARU: Bikin Template File langsung format .xlsx (Excel asil)
   const downloadTemplate = () => {
-    const headers = "nisn,nama_lengkap,kelas,rombel,gender,nama_wali,rfid_card_id\n";
-    const sample1 = "11111,Ahmad Fulan,7,A,ikhwan,Bapak Ahmad,\n";
-    const sample2 = "22222,Siti Fulanah,7,B,akhwat,Ibu Siti,\n";
-    const csvContent = "data:text/csv;charset=utf-8," + headers + sample1 + sample2;
+    const templateData = [
+      {
+        nisn: "11111",
+        nama_lengkap: "Ahmad Fulan",
+        kelas: 7,
+        rombel: "A",
+        gender: "ikhwan",
+        nama_wali: "Bapak Ahmad",
+        rfid_card_id: ""
+      },
+      {
+        nisn: "22222",
+        nama_lengkap: "Siti Fulanah",
+        kelas: 7,
+        rombel: "B",
+        gender: "akhwat",
+        nama_wali: "Ibu Siti",
+        rfid_card_id: ""
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template Santri");
     
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "template_import_simatren.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download sebagai file Excel
+    XLSX.writeFile(wb, "Template_Import_Simatren.xlsx");
   };
 
+  // 🔥 FITUR BARU: Import baca dari file .xlsx langsung
   const handleImport = async () => {
-    if (!importFile) return toast({ title: "Pilih file dulu", description: "Anda belum memasukkan file CSV.", variant: "destructive" });
+    if (!importFile) return toast({ title: "Pilih file dulu", description: "Anda belum memasukkan file Excel.", variant: "destructive" });
 
     setLoading(true);
     const reader = new FileReader();
     
     reader.onload = async (e) => {
         try {
-            const text = e.target?.result as string;
-            const rows = text.split('\n').map(row => row.trim()).filter(row => row !== '');
-            if (rows.length < 2) throw new Error("File kosong atau tidak ada data santri.");
+            // Membaca file ArrayBuffer dengan XLSX
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Ambil sheet pertama
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Konversi jadi array object JSON (baris data)
+            const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-            const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+            if (rows.length === 0) throw new Error("File kosong atau tidak ada data santri.");
+
             const dataToInsert = [];
             
-            for (let i = 1; i < rows.length; i++) {
-                const values = rows[i].split(',').map(v => v.trim());
-                if (values.length < 2) continue; 
-
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
                 const santri: any = { status: 'aktif' };
-                headers.forEach((header, index) => {
-                    if (header === 'kelas') { santri[header] = parseInt(values[index]) || 7; } 
-                    else if (values[index]) { santri[header] = values[index]; }
-                });
 
+                // Membaca sesuai nama kolom (header) di Excel
+                const getVal = (key: string) => row[key] ? String(row[key]).trim() : null;
+
+                santri.nisn = getVal('nisn');
+                santri.nama_lengkap = getVal('nama_lengkap');
+                santri.kelas = parseInt(getVal('kelas') || '7');
+                santri.rombel = getVal('rombel') || 'A';
+                santri.gender = getVal('gender') || 'ikhwan';
+                santri.nama_wali = getVal('nama_wali');
+                santri.rfid_card_id = getVal('rfid_card_id');
+
+                // Jika pengasuh, kunci filter data asuhan
                 if (currentUser?.role === 'pengasuh') {
                     santri.gender = currentUser.gender_asuh;
                     santri.kelas = parseInt(currentUser.kelas_asuh);
@@ -319,9 +350,15 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
             toast({ title: "Sukses Import 🎉", description: `${dataToInsert.length} santri berhasil ditambahkan.`, className: "bg-green-600 text-white border-none" });
             setIsImportOpen(false); setImportFile(null); activeKelas === null ? fetchSummaries() : fetchSantrisInClass();
             
-        } catch (err: any) { toast({ title: "Gagal Import", description: err.message, variant: "destructive" }); } finally { setLoading(false); }
+        } catch (err: any) { 
+            toast({ title: "Gagal Import", description: err.message, variant: "destructive" }); 
+        } finally { 
+            setLoading(false); 
+        }
     };
-    reader.readAsText(importFile);
+
+    // Eksekusi baca file sebagai Array Buffer (untuk .xlsx)
+    reader.readAsArrayBuffer(importFile);
   };
 
   const openAdd = () => { 
@@ -511,12 +548,12 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         {/* DIALOG IMPORT EXCEL */}
         <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
             <DialogContent className="sm:max-w-md">
-                <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Santri</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="text-blue-600"/> Import Data Excel</DialogTitle></DialogHeader>
                 <div className="space-y-6 py-2">
                     <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col gap-3">
                         <p className="text-sm text-blue-800 leading-relaxed">
                             <span className="font-bold">Langkah-langkah:</span><br/>
-                            1. Unduh template Excel (CSV) di bawah ini.<br/>
+                            1. Unduh template Excel (.xlsx) di bawah ini.<br/>
                             2. Buka file di Excel, lalu isi data santri (jangan ubah nama kolom paling atas).<br/>
                             3. Simpan (Save) file tersebut, lalu unggah kembali ke sini.
                         </p>
@@ -525,9 +562,10 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                         </Button>
                     </div>
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-700">Upload File CSV yang sudah diisi</label>
+                        <label className="text-sm font-bold text-gray-700">Upload File Excel yang sudah diisi</label>
                         <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
-                            <Input type="file" accept=".csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0" />
+                            {/* 🔥 FITUR BARU: Menerima file Excel .xlsx langsung */}
+                            <Input type="file" accept=".xlsx, .xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-transparent border-0 p-0" />
                         </div>
                     </div>
                 </div>
