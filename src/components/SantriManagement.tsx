@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
+import * as XLSX from "xlsx";
 import { 
   UserPlus, Search, Pencil, Trash2, Users, ArrowUpCircle, 
   AlertTriangle, ArrowLeft, GraduationCap, User, UserCheck, ScanBarcode, CreditCard, Upload, Download, FileSpreadsheet
@@ -49,7 +50,6 @@ interface ClassSummary {
 const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagementProps) => {
   const { toast } = useToast();
   
-  // STATE USER LOGIN
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [activeKelas, setActiveKelas] = useState<number | null>(initialKelas ? parseInt(initialKelas) : null);
@@ -69,7 +69,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
-  // FETCH USER SAAT PERTAMA KALI LOAD
   useEffect(() => {
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -81,7 +80,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
           .single();
         setCurrentUser(user);
         
-        // OTOMATISASI PENGASUH
         if (user?.role === 'pengasuh') {
           setActiveKelas(parseInt(user.kelas_asuh));
           setActiveTab(user.gender_asuh as "ikhwan" | "akhwat");
@@ -92,7 +90,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   }, []);
 
   const fetchSummaries = async () => {
-    // Pengasuh tidak perlu load summary semua kelas
     if (currentUser?.role === 'pengasuh') return;
     
     setLoading(true);
@@ -122,7 +119,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         .order('rombel', { ascending: true }) 
         .order('nama_lengkap', { ascending: true });
 
-      // FILTER TAMBAHAN JIKA PENGASUH
       if (currentUser?.role === 'pengasuh') {
         query = query.eq('gender', currentUser.gender_asuh);
       }
@@ -147,7 +143,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   };
 
   useEffect(() => { 
-    // Pastikan currentUser sudah dimuat sebelum fetch data
     if (activeKelas === null && currentUser) {
       fetchSummaries();
     } else if (activeKelas !== null) {
@@ -199,6 +194,79 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
   };
 
+  /* ================= FITUR BARU: RESET SANTRI ================= */
+  const handleResetSemuaSantri = async () => {
+      const konfirmasi = window.prompt('⚠️ PERINGATAN FATAL!\n\nTindakan ini akan MENGHAPUS SELURUH DATA SANTRI dari database dan tidak dapat dikembalikan.\n\nKetik "HAPUS SEMUA" untuk melanjutkan:');
+      
+      if (konfirmasi !== 'HAPUS SEMUA') {
+          return toast({ title: "Dibatalkan", description: "Reset dibatalkan. Konfirmasi tidak sesuai." });
+      }
+
+      setLoading(true);
+      try {
+          // Menghapus semua baris data santri
+          const { error } = await supabase.from('santri_2025_12_01_21_34').delete().not('id', 'is', null);
+          if (error) throw error;
+          
+          toast({ title: "Reset Berhasil", description: "Seluruh data santri telah dikosongkan.", className: "bg-green-600 text-white" });
+          activeKelas === null ? fetchSummaries() : fetchSantrisInClass();
+      } catch (err: any) {
+          toast({ title: "Gagal Mereset", description: err.message, variant: "destructive" });
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  /* ================= FITUR BARU: EXPORT EXCEL ================= */
+  const handleExportData = async () => {
+      setLoading(true);
+      try {
+          let query = supabase.from('santri_2025_12_01_21_34').select('*').order('kelas').order('nama_lengkap');
+          
+          // Jika sedang melihat kelas tertentu, export hanya kelas itu
+          if (activeKelas !== null) {
+              query = query.eq('kelas', activeKelas);
+              if (currentUser?.role === 'pengasuh') {
+                  query = query.eq('gender', currentUser.gender_asuh);
+              }
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+          
+          if (!data || data.length === 0) {
+              return toast({ title: "Data Kosong", description: "Tidak ada data santri untuk diexport.", variant: "destructive" });
+          }
+
+          const rows = data.map((s, index) => ({
+              "No": index + 1,
+              "NISN": s.nisn || "-",
+              "Nama Lengkap": s.nama_lengkap,
+              "Gender": s.gender === 'ikhwan' ? 'Laki-laki (Ikhwan)' : 'Perempuan (Akhwat)',
+              "Kelas Sekolah": `${s.kelas}-${s.rombel || 'A'}`,
+              "Kelas Mengaji": `${s.kelas_mengaji || s.kelas}-${s.rombel_mengaji || s.rombel || 'A'}`,
+              "Nama Wali": s.nama_wali || "-",
+              "ID Kartu RFID": s.rfid_card_id || "-",
+              "Status": s.status
+          }));
+
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Data Santri");
+          
+          let fileName = activeKelas !== null ? `Data_Santri_Kelas_${activeKelas}` : "Data_Seluruh_Santri";
+          if (currentUser?.role === 'pengasuh') fileName += `_${currentUser.gender_asuh}`;
+          
+          XLSX.writeFile(wb, `${fileName}.xlsx`);
+          toast({ title: "Berhasil", description: "File Excel berhasil diunduh." });
+          
+      } catch (err: any) {
+          toast({ title: "Gagal Export", description: err.message, variant: "destructive" });
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const downloadTemplate = () => {
     const headers = "nisn,nama_lengkap,kelas,rombel,gender,nama_wali,rfid_card_id\n";
     const sample1 = "11111,Ahmad Fulan,7,A,ikhwan,Bapak Ahmad,\n";
@@ -239,7 +307,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     else if (values[index]) { santri[header] = values[index]; }
                 });
 
-                // Jika pengasuh yang import, pastikan gender dipaksa sesuai role asuhannya
                 if (currentUser?.role === 'pengasuh') {
                     santri.gender = currentUser.gender_asuh;
                     santri.kelas = parseInt(currentUser.kelas_asuh);
@@ -278,17 +345,30 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const filteredSantris = santris.filter(s => s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
   const currentTabSantris = filteredSantris.filter(s => s.gender === activeTab);
 
-  /* VIEW 1: DASHBOARD KARTU KELAS (Hanya Admin & Guru) */
+  /* VIEW 1: DASHBOARD KARTU KELAS */
   if (activeKelas === null && currentUser?.role !== 'pengasuh') {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
              <div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-green-600" /> Database Santri</h2><p className="text-sm text-gray-500">Pilih kelas untuk melihat detail.</p></div>
              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                 
+                 <Button onClick={handleExportData} disabled={loading} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 shadow-sm flex-1 md:flex-none">
+                    <Download className="mr-2 h-4 w-4" /> Export Data
+                 </Button>
+
                  <Button onClick={() => setIsImportOpen(true)} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-sm flex-1 md:flex-none">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel
                  </Button>
+                 
                  <Button onClick={openAdd} className="bg-green-600 hover:bg-green-700 shadow-md flex-1 md:flex-none"><UserPlus className="mr-2 h-4 w-4" /> Santri Baru</Button>
+                 
+                 {currentUser?.role === 'super_admin' && (
+                     <Button onClick={handleResetSemuaSantri} disabled={loading} variant="destructive" className="shadow-sm w-full md:w-auto">
+                        <Trash2 className="mr-2 h-4 w-4" /> Reset Data
+                     </Button>
+                 )}
+
                  <AlertDialog>
                     <AlertDialogTrigger asChild><Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 shadow-sm w-full md:w-auto mt-2 md:mt-0"><ArrowUpCircle className="mr-2 h-4 w-4" /> Naik Kelas</Button></AlertDialogTrigger>
                     <AlertDialogContent>
@@ -318,7 +398,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
         <CardHeader className="bg-white border-b border-gray-100 pb-0">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <div className="flex items-center gap-3 w-full md:w-auto">
-               {/* Sembunyikan tombol back jika user adalah pengasuh */}
                {currentUser?.role !== 'pengasuh' && (
                   <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
                )}
@@ -326,16 +405,21 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               <div className="relative flex-1 min-w-[200px] md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari santri..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              
+              <Button onClick={handleExportData} disabled={loading} size="sm" variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 h-9">
+                  <Download className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Export</span>
+              </Button>
+
               <Button onClick={() => setIsImportOpen(true)} size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 h-9">
                   <FileSpreadsheet className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Import</span>
               </Button>
+              
               <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
                   <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
               </Button>
             </div>
           </div>
 
-          {/* Tab Filter: Jika pengasuh, kunci tampilannya di satu gender saja */}
           {currentUser?.role !== 'pengasuh' ? (
             <div className="flex w-full border-b border-gray-200">
                 <button onClick={() => setActiveTab('ikhwan')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'ikhwan' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-gray-400 hover:text-green-600'}`}><User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})</button>
@@ -406,7 +490,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                     <div className="grid grid-cols-3 gap-4">
                         <div className="col-span-2 space-y-2">
                             <label className="text-sm font-medium">Kelas Sekolah</label>
-                            {/* Disable select jika yang login adalah pengasuh */}
                             <Select disabled={isEditMode || currentUser?.role === 'pengasuh'} value={String(formData.kelas)} onValueChange={v => setFormData({...formData, kelas: parseInt(v)})}> 
                                 <SelectTrigger disabled={isEditMode || currentUser?.role === 'pengasuh'} className={isEditMode || currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
                                 <SelectContent>{[7,8,9,10,11,12].map(k => <SelectItem key={k} value={String(k)}>Kelas {k}</SelectItem>)}</SelectContent>
@@ -416,7 +499,7 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
                             <label className="text-sm font-medium">Rombel</label>
                             <Select disabled={isEditMode} value={formData.rombel} onValueChange={v => setFormData({...formData, rombel: v})}>
                                 <SelectTrigger disabled={isEditMode} className={isEditMode ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
-                                <SelectContent>{['A','B','C','D','E'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                                <SelectContent>{['A','B','C','D','E','F','G'].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                     </div>
@@ -424,7 +507,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium">Gender</label>
-                        {/* Disable select jika yang login adalah pengasuh */}
                         <Select disabled={currentUser?.role === 'pengasuh'} value={formData.gender} onValueChange={v => setFormData({...formData, gender: v as any})}>
                             <SelectTrigger className={currentUser?.role === 'pengasuh' ? "bg-gray-100 opacity-60 cursor-not-allowed" : ""}><SelectValue /></SelectTrigger>
                             <SelectContent><SelectItem value="ikhwan">Ikhwan</SelectItem><SelectItem value="akhwat">Akhwat</SelectItem></SelectContent>
