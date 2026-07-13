@@ -194,7 +194,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
   };
 
-  /* ================= FITUR BARU: RESET SANTRI ================= */
   const handleResetSemuaSantri = async () => {
       const konfirmasi = window.prompt('⚠️ PERINGATAN FATAL!\n\nTindakan ini akan MENGHAPUS SELURUH DATA SANTRI dari database dan tidak dapat dikembalikan.\n\nKetik "HAPUS SEMUA" untuk melanjutkan:');
       
@@ -204,7 +203,6 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
 
       setLoading(true);
       try {
-          // Menghapus semua baris data santri
           const { error } = await supabase.from('santri_2025_12_01_21_34').delete().not('id', 'is', null);
           if (error) throw error;
           
@@ -217,13 +215,11 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
       }
   };
 
-  /* ================= FITUR BARU: EXPORT EXCEL ================= */
   const handleExportData = async () => {
       setLoading(true);
       try {
           let query = supabase.from('santri_2025_12_01_21_34').select('*').order('kelas').order('nama_lengkap');
           
-          // Jika sedang melihat kelas tertentu, export hanya kelas itu
           if (activeKelas !== null) {
               query = query.eq('kelas', activeKelas);
               if (currentUser?.role === 'pengasuh') {
@@ -345,136 +341,130 @@ const SantriManagement = ({ kelas: initialKelas, onSelectSantri }: SantriManagem
   const filteredSantris = santris.filter(s => s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()));
   const currentTabSantris = filteredSantris.filter(s => s.gender === activeTab);
 
-  /* VIEW 1: DASHBOARD KARTU KELAS */
-  if (activeKelas === null && currentUser?.role !== 'pengasuh') {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
-             <div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-green-600" /> Database Santri</h2><p className="text-sm text-gray-500">Pilih kelas untuk melihat detail.</p></div>
-             <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                 
-                 <Button onClick={handleExportData} disabled={loading} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 shadow-sm flex-1 md:flex-none">
-                    <Download className="mr-2 h-4 w-4" /> Export Data
-                 </Button>
-
-                 <Button onClick={() => setIsImportOpen(true)} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-sm flex-1 md:flex-none">
-                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel
-                 </Button>
-                 
-                 <Button onClick={openAdd} className="bg-green-600 hover:bg-green-700 shadow-md flex-1 md:flex-none"><UserPlus className="mr-2 h-4 w-4" /> Santri Baru</Button>
-                 
-                 {currentUser?.role === 'super_admin' && (
-                     <Button onClick={handleResetSemuaSantri} disabled={loading} variant="destructive" className="shadow-sm w-full md:w-auto">
-                        <Trash2 className="mr-2 h-4 w-4" /> Reset Data
-                     </Button>
-                 )}
-
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild><Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 shadow-sm w-full md:w-auto mt-2 md:mt-0"><ArrowUpCircle className="mr-2 h-4 w-4" /> Naik Kelas</Button></AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader><AlertDialogTitle className="text-orange-600 flex items-center gap-2"><AlertTriangle /> Peringatan Kenaikan Kelas</AlertDialogTitle><AlertDialogDescription><ul className="list-disc pl-5 space-y-1 text-sm text-gray-700"><li>Kls 7-11 naik tingkat.</li><li className="text-red-600 font-bold">Kls 12 DIHAPUS.</li></ul></AlertDialogDescription></AlertDialogHeader>
-                        <AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={handleNaikKelasMassal} className="bg-orange-600 hover:bg-orange-700">Ya, Proses</AlertDialogAction></AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-             </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {classSummaries.map((summary) => (
-                <Card key={summary.kelas} onClick={() => setActiveKelas(summary.kelas)} className="cursor-pointer hover:shadow-md hover:border-green-300 transition-all group relative overflow-hidden bg-white border-green-100">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-8 -mt-8 z-0 group-hover:bg-green-100 transition-colors"></div>
-                    <CardHeader className="pb-2 relative z-10"><CardTitle className="text-lg font-bold text-gray-700 flex justify-between items-center">Kelas {summary.kelas}<GraduationCap className="w-5 h-5 text-green-600 opacity-50" /></CardTitle><CardDescription>{summary.count} Santri</CardDescription></CardHeader>
-                    <CardContent className="relative z-10"><div className="text-2xl font-bold text-gray-800">Rp {summary.totalSaldo.toLocaleString("id-ID")}</div><p className="text-[10px] text-green-600 mt-1 font-medium bg-green-50 inline-block px-2 py-0.5 rounded-full">Total Tabungan</p></CardContent>
-                </Card>
-            ))}
-        </div>
-      </div>
-    );
-  }
-
-  /* VIEW 2: DETAIL TABLE */
   return (
-    <div className="space-y-6">
-      <Card className={`shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 border-t-4 ${activeTab === 'ikhwan' ? 'border-t-green-600 border-green-100' : 'border-t-pink-500 border-pink-100'}`}>
-        <CardHeader className="bg-white border-b border-gray-100 pb-0">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-            <div className="flex items-center gap-3 w-full md:w-auto">
-               {currentUser?.role !== 'pengasuh' && (
-                  <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
-               )}
-               <div><CardTitle className="text-lg font-bold text-gray-800">Kelas {activeKelas}</CardTitle><p className="text-xs text-gray-500">{filteredSantris.length} Santri Total</p></div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {/* KONDISIONAL RENDER VIEW 1 & VIEW 2 */}
+      {activeKelas === null && currentUser?.role !== 'pengasuh' ? (
+        <>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-green-100">
+                 <div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-green-600" /> Database Santri</h2><p className="text-sm text-gray-500">Pilih kelas untuk melihat detail.</p></div>
+                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                     <Button onClick={handleExportData} disabled={loading} variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 shadow-sm flex-1 md:flex-none">
+                        <Download className="mr-2 h-4 w-4" /> Export Data
+                     </Button>
+                     <Button onClick={() => setIsImportOpen(true)} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-sm flex-1 md:flex-none">
+                        <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel
+                     </Button>
+                     <Button onClick={openAdd} className="bg-green-600 hover:bg-green-700 shadow-md flex-1 md:flex-none">
+                        <UserPlus className="mr-2 h-4 w-4" /> Santri Baru
+                     </Button>
+                     {currentUser?.role === 'super_admin' && (
+                         <Button onClick={handleResetSemuaSantri} disabled={loading} variant="destructive" className="shadow-sm w-full md:w-auto">
+                            <Trash2 className="mr-2 h-4 w-4" /> Reset Data
+                         </Button>
+                     )}
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild><Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 shadow-sm w-full md:w-auto mt-2 md:mt-0"><ArrowUpCircle className="mr-2 h-4 w-4" /> Naik Kelas</Button></AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle className="text-orange-600 flex items-center gap-2"><AlertTriangle /> Peringatan Kenaikan Kelas</AlertDialogTitle><AlertDialogDescription><ul className="list-disc pl-5 space-y-1 text-sm text-gray-700"><li>Kls 7-11 naik tingkat.</li><li className="text-red-600 font-bold">Kls 12 DIHAPUS.</li></ul></AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={handleNaikKelasMassal} className="bg-orange-600 hover:bg-orange-700">Ya, Proses</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                 </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <div className="relative flex-1 min-w-[200px] md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari santri..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-              
-              <Button onClick={handleExportData} disabled={loading} size="sm" variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 h-9">
-                  <Download className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Export</span>
-              </Button>
-
-              <Button onClick={() => setIsImportOpen(true)} size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 h-9">
-                  <FileSpreadsheet className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Import</span>
-              </Button>
-              
-              <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
-                  <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
-              </Button>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {classSummaries.map((summary) => (
+                    <Card key={summary.kelas} onClick={() => setActiveKelas(summary.kelas)} className="cursor-pointer hover:shadow-md hover:border-green-300 transition-all group relative overflow-hidden bg-white border-green-100">
+                        <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-8 -mt-8 z-0 group-hover:bg-green-100 transition-colors"></div>
+                        <CardHeader className="pb-2 relative z-10"><CardTitle className="text-lg font-bold text-gray-700 flex justify-between items-center">Kelas {summary.kelas}<GraduationCap className="w-5 h-5 text-green-600 opacity-50" /></CardTitle><CardDescription>{summary.count} Santri</CardDescription></CardHeader>
+                        <CardContent className="relative z-10"><div className="text-2xl font-bold text-gray-800">Rp {summary.totalSaldo.toLocaleString("id-ID")}</div><p className="text-[10px] text-green-600 mt-1 font-medium bg-green-50 inline-block px-2 py-0.5 rounded-full">Total Tabungan</p></CardContent>
+                    </Card>
+                ))}
             </div>
-          </div>
-
-          {currentUser?.role !== 'pengasuh' ? (
-            <div className="flex w-full border-b border-gray-200">
-                <button onClick={() => setActiveTab('ikhwan')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'ikhwan' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-gray-400 hover:text-green-600'}`}><User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})</button>
-                <button onClick={() => setActiveTab('akhwat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'akhwat' ? 'border-pink-500 text-pink-700 bg-pink-50/50' : 'border-transparent text-gray-400 hover:text-pink-600'}`}><UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})</button>
+        </>
+      ) : (
+        <Card className={`shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 border-t-4 ${activeTab === 'ikhwan' ? 'border-t-green-600 border-green-100' : 'border-t-pink-500 border-pink-100'}`}>
+          <CardHeader className="bg-white border-b border-gray-100 pb-0">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                 {currentUser?.role !== 'pengasuh' && (
+                    <Button variant="ghost" size="icon" onClick={() => setActiveKelas(null)} className="hover:bg-green-50"><ArrowLeft className="h-5 w-5 text-gray-600" /></Button>
+                 )}
+                 <div><CardTitle className="text-lg font-bold text-gray-800">Kelas {activeKelas}</CardTitle><p className="text-xs text-gray-500">{filteredSantris.length} Santri Total</p></div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                <div className="relative flex-1 min-w-[200px] md:w-64"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" /><Input placeholder="Cari santri..." className="pl-9 h-9 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                <Button onClick={handleExportData} disabled={loading} size="sm" variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 h-9">
+                    <Download className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Export</span>
+                </Button>
+                <Button onClick={() => setIsImportOpen(true)} size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 h-9">
+                    <FileSpreadsheet className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Import</span>
+                </Button>
+                <Button onClick={openAdd} size="sm" className="bg-green-600 hover:bg-green-700 h-9">
+                    <UserPlus className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Baru</span>
+                </Button>
+              </div>
             </div>
-          ) : (
-            <div className={`flex w-full border-b border-gray-200 p-3 font-bold justify-center uppercase ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-700' : 'bg-pink-50 text-pink-700'}`}>
-                DATA SANTRI {activeTab}
+
+            {currentUser?.role !== 'pengasuh' ? (
+              <div className="flex w-full border-b border-gray-200">
+                  <button onClick={() => setActiveTab('ikhwan')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'ikhwan' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-gray-400 hover:text-green-600'}`}><User className="w-4 h-4" /> IKHWAN ({filteredSantris.filter(s => s.gender === 'ikhwan').length})</button>
+                  <button onClick={() => setActiveTab('akhwat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all border-b-2 ${activeTab === 'akhwat' ? 'border-pink-500 text-pink-700 bg-pink-50/50' : 'border-transparent text-gray-400 hover:text-pink-600'}`}><UserCheck className="w-4 h-4" /> AKHWAT ({filteredSantris.filter(s => s.gender === 'akhwat').length})</button>
+              </div>
+            ) : (
+              <div className={`flex w-full border-b border-gray-200 p-3 font-bold justify-center uppercase ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-700' : 'bg-pink-50 text-pink-700'}`}>
+                  DATA SANTRI {activeTab}
+              </div>
+            )}
+          </CardHeader>
+
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
+                  <tr>
+                    <th className="p-4 w-[80px]">NISN</th>
+                    <th className="p-4 min-w-[200px]">Nama Lengkap</th>
+                    <th className="p-4 text-center w-[120px]">Kls Sekolah</th>
+                    <th className="p-4 text-center w-[120px]">Kls Mengaji</th>
+                    <th className="p-4 text-right">Saldo</th>
+                    <th className="p-4 text-center w-[80px]">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {currentTabSantris.length === 0 ? (
+                    <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">Tidak ada santri {activeTab} ditemukan di kelas ini.</td></tr>
+                  ) : (
+                      currentTabSantris.map((santri) => (
+                        <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
+                          <td className="p-4 font-mono text-gray-500">{santri.nisn || "-"}</td>
+                          <td className="p-4">
+                              <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
+                                  {santri.nama_lengkap}
+                                  {santri.rfid_card_id && (<span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>)}
+                              </div>
+                          </td>
+                          <td className="p-4 text-center"><span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">{santri.kelas}-{santri.rombel || 'A'}</span></td>
+                          <td className="p-4 text-center"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">{santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}</span></td>
+                          <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
+                          <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={(e) => openEdit(e, santri)}><Pencil size={14} /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={(e) => onDeleteClick(e, santri.id)}><Trash2 size={14} /></Button>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </CardHeader>
+          </CardContent>
+        </Card>
+      )}
 
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className={`font-semibold border-b ${activeTab === 'ikhwan' ? 'bg-green-50 text-green-800 border-green-100' : 'bg-pink-50 text-pink-800 border-pink-100'}`}>
-                <tr>
-                  <th className="p-4 w-[80px]">NISN</th>
-                  <th className="p-4 min-w-[200px]">Nama Lengkap</th>
-                  <th className="p-4 text-center w-[120px]">Kls Sekolah</th>
-                  <th className="p-4 text-center w-[120px]">Kls Mengaji</th>
-                  <th className="p-4 text-right">Saldo</th>
-                  <th className="p-4 text-center w-[80px]">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {currentTabSantris.length === 0 ? (
-                  <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">Tidak ada santri {activeTab} ditemukan di kelas ini.</td></tr>
-                ) : (
-                    currentTabSantris.map((santri) => (
-                      <tr key={santri.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => onSelectSantri && onSelectSantri(santri.id)}>
-                        <td className="p-4 font-mono text-gray-500">{santri.nisn || "-"}</td>
-                        <td className="p-4">
-                            <div className="font-bold text-gray-800 group-hover:text-green-600 group-hover:underline flex items-center gap-2">
-                                {santri.nama_lengkap}
-                                {santri.rfid_card_id && (<span title="Kartu Terhubung" className="text-blue-500"><CreditCard className="w-3 h-3" /></span>)}
-                            </div>
-                        </td>
-                        <td className="p-4 text-center"><span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 shadow-sm">{santri.kelas}-{santri.rombel || 'A'}</span></td>
-                        <td className="p-4 text-center"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-200 shadow-sm">{santri.kelas_mengaji || santri.kelas}-{santri.rombel_mengaji || santri.rombel || 'A'}</span></td>
-                        <td className="p-4 font-bold text-gray-700 text-right">Rp {(santri.saldo || 0).toLocaleString('id-ID')}</td>
-                        <td className="p-4 text-center flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={(e) => openEdit(e, santri)}><Pencil size={14} /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={(e) => onDeleteClick(e, santri.id)}><Trash2 size={14} /></Button>
-                        </td>
-                      </tr>
-                    ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* ================= DIALOG / POPUP AREA (STANDBY DI LUAR) ================= */}
 
-      {/* DIALOG FORM */}
+      {/* DIALOG FORM TAMBAH / EDIT SANTRI */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent><DialogHeader><DialogTitle>{isEditMode ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle></DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
